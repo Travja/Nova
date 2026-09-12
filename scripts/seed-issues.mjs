@@ -1,6 +1,9 @@
 /**
  * Creates the milestones, labels and issues described in `docs/issues/`.
  *
+ * The issues already exist on Travja/Nova — this is for re-seeding a fork, or
+ * restoring them if they are ever lost.
+ *
  * Requires the GitHub CLI, authenticated with write access to the repository:
  *
  *   gh auth login
