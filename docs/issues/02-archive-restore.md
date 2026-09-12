@@ -16,6 +16,12 @@ back. An archived goal currently vanishes with no way to return it.
 
 `listGoals(userId, includeArchived)` already takes the flag.
 
+`goals.archivedAt` says whether a goal is archived now, which is not enough to
+keep a streak honest once it is restored — the periods it slept through would
+read as missed orbits. Each archive/restore cycle therefore records a span in
+`goal_archive_windows`, and the streak maths steps over any orbit that falls
+wholly inside one.
+
 **Done when**
 
 - Archiving, viewing and restoring all work end to end.

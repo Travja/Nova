@@ -22,6 +22,19 @@ export interface Orbit {
 	complete: boolean;
 	/** How much is still needed to close the orbit. Zero once complete. */
 	remaining: number;
+	/** The goal was archived for the whole of this period, so it never flew. */
+	dormant: boolean;
+}
+
+/**
+ * A span during which a goal was archived. Orbits that fall wholly inside one
+ * are skipped by the streak maths — archiving freezes a streak rather than
+ * breaking it, so restoring a goal picks up where it left off.
+ */
+export interface DormantWindow {
+	from: Date;
+	/** Null while the goal is still archived. */
+	until: Date | null;
 }
 
 export interface GoalSnapshot {
@@ -53,7 +66,7 @@ export function bucketByPeriod(
 	return totals;
 }
 
-export function buildOrbit(period: Period, logged: number, target: number): Orbit {
+export function buildOrbit(period: Period, logged: number, target: number, dormant = false): Orbit {
 	const safeTarget = target > 0 ? target : 1;
 	const ratio = logged / safeTarget;
 	const fraction = Math.max(0, Math.min(1, ratio));
@@ -65,14 +78,26 @@ export function buildOrbit(period: Period, logged: number, target: number): Orbi
 		fraction,
 		angle: fraction * 360,
 		complete: ratio >= 1,
-		remaining: Math.max(0, safeTarget - logged)
+		remaining: Math.max(0, safeTarget - logged),
+		dormant
 	};
+}
+
+/** True when a period sits entirely inside a span the goal spent archived. */
+export function isDormant(period: Period, windows: readonly DormantWindow[]): boolean {
+	return windows.some(
+		(window) =>
+			period.start.getTime() >= window.from.getTime() &&
+			(window.until === null || period.end.getTime() <= window.until.getTime())
+	);
 }
 
 export interface SnapshotOptions extends PeriodOptions {
 	/** How many orbits of history to include. */
 	historyLength?: number;
 	now?: Date;
+	/** Spans the goal spent archived, which the streak steps over. */
+	dormantWindows?: readonly DormantWindow[];
 }
 
 export function snapshotGoal(
@@ -80,12 +105,12 @@ export function snapshotGoal(
 	entries: readonly EntryLike[],
 	options: SnapshotOptions
 ): GoalSnapshot {
-	const { historyLength = 12, now = new Date(), ...periodOptions } = options;
+	const { historyLength = 12, now = new Date(), dormantWindows = [], ...periodOptions } = options;
 	const cadence = cadenceOf(goal.tier);
 	const totals = bucketByPeriod(entries, cadence, periodOptions);
 
 	const history = recentPeriods(now, cadence, historyLength, periodOptions).map((period) =>
-		buildOrbit(period, totals.get(period.key) ?? 0, goal.target)
+		buildOrbit(period, totals.get(period.key) ?? 0, goal.target, isDormant(period, dormantWindows))
 	);
 
 	let totalOrbits = 0;
@@ -109,16 +134,24 @@ export function snapshotGoal(
  * Consecutive closed orbits, newest first.
  *
  * The in-flight orbit counts once it closes but never breaks a streak while it
- * is still open — you have not missed this week until the week is over.
+ * is still open — you have not missed this week until the week is over. Orbits
+ * the goal spent archived are stepped over entirely, so the newest orbit the
+ * goal was actually flying gets that same benefit of the doubt.
  */
 export function streakFrom(history: readonly Orbit[]): number {
 	let streak = 0;
-	for (const [index, orbit] of history.entries()) {
+	let sawLiveOrbit = false;
+	for (const orbit of history) {
+		if (orbit.dormant) continue;
 		if (orbit.complete) {
 			streak += 1;
+			sawLiveOrbit = true;
 			continue;
 		}
-		if (index === 0) continue;
+		if (!sawLiveOrbit) {
+			sawLiveOrbit = true;
+			continue;
+		}
 		break;
 	}
 	return streak;

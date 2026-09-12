@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
+	import GoalOrderList from '$components/GoalOrderList.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
 	import { TIER_LIST } from '$domain/tiers';
@@ -21,6 +22,12 @@
 
 	const closedThisPeriod = $derived(
 		snapshots.filter((snapshot: GoalSnapshot) => snapshot.current.complete).length
+	);
+
+	/** Set by a drag; the move buttons are announced from the server's reply instead. */
+	let dragAnnouncement = $state('');
+	const announcement = $derived(
+		dragAnnouncement || (form?.moved ? `${form.moved} moved within its tier.` : '')
 	);
 </script>
 
@@ -79,11 +86,26 @@
 					{snapshots.length === 1 ? 'orbit' : 'orbits'} closed in their current period.
 				</p>
 			</div>
-			<a class="button" href={resolve('/goals/new')}>New goal</a>
+			<div class="dashboard__actions">
+				{#if data.reordering}
+					<a class="button button--ghost" href={resolve('/')}>Done reordering</a>
+				{:else}
+					<a class="button button--ghost" href="{resolve('/')}?reorder=1">Reorder</a>
+					<a class="button" href={resolve('/goals/new')}>New goal</a>
+				{/if}
+			</div>
 		</div>
 
 		{#if form?.errors?.form}
 			<p class="error">{form.errors.form}</p>
+		{/if}
+
+		{#if data.reordering}
+			<p class="muted reorder-hint">
+				Drag a goal, or use the arrows — they work from a keyboard and announce where the goal
+				landed. Order applies wherever the tier is listed.
+			</p>
+			<p class="live" role="status">{announcement}</p>
 		{/if}
 
 		{#each sections as section (section.tier.id)}
@@ -92,13 +114,26 @@
 					<h2 style="color: {section.tier.accent}">{section.tier.label}</h2>
 					<span class="muted">{section.tier.blurb}</span>
 				</header>
-				<div class="grid">
-					{#each section.goals as snapshot (snapshot.goal.id)}
-						<GoalCard {snapshot} />
-					{/each}
-				</div>
+				{#if data.reordering}
+					<GoalOrderList
+						tier={section.tier}
+						goals={section.goals}
+						onannounce={(message) => (dragAnnouncement = message)}
+					/>
+				{:else}
+					<div class="grid">
+						{#each section.goals as snapshot (snapshot.goal.id)}
+							<GoalCard {snapshot} />
+						{/each}
+					</div>
+				{/if}
 			</section>
 		{/each}
+
+		<p class="archive-link muted">
+			<a href={resolve('/goals/archived')}>Archived goals</a> keep their history without asking for an
+			orbit.
+		</p>
 	</section>
 {/if}
 
@@ -176,6 +211,32 @@
 		flex-wrap: wrap;
 		gap: 1rem;
 		justify-content: space-between;
+	}
+
+	.dashboard__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+	}
+
+	.reorder-hint {
+		font-size: 0.9rem;
+		margin: -1.25rem 0 0;
+		max-width: 60ch;
+	}
+
+	.live:empty {
+		display: none;
+	}
+
+	.live {
+		color: var(--success);
+		font-size: 0.9rem;
+		margin: -1.5rem 0 0;
+	}
+
+	.archive-link {
+		font-size: 0.88rem;
 	}
 
 	.tier {

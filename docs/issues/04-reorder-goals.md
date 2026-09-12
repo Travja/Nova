@@ -10,6 +10,10 @@ no way to change it.
 **Build** drag-to-reorder within a tier, persisted through a small form action
 that takes an ordered list of goal ids.
 
+Reordering is a mode rather than permanent chrome — a `?reorder=1` link swaps the
+cards for a compact sortable list — so the dashboard stays about progress and the
+mode survives a submit with no JavaScript.
+
 Keep it usable without a pointer: move-up and move-down controls that work from a
 keyboard and a screen reader, with the drag handle as an enhancement rather than
 the only route. `sortable`-style libraries are usually overkill — the HTML drag

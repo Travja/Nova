@@ -99,6 +99,50 @@ describe('snapshotGoal', () => {
 		expect(yearly.current.period.cadence).toBe('year');
 	});
 
+	it('steps over the periods a goal spent archived', () => {
+		// Archived on 22 August, restored on the morning of 12 September: the two
+		// whole weeks in between were never missed, they were parked.
+		const snapshot = snapshotGoal(
+			goal(),
+			[
+				entry('2026-08-20T10:00:00Z', 120), // week of 17 Aug, closed
+				entry('2026-08-13T10:00:00Z', 120) // week of 10 Aug, closed
+			],
+			{
+				...options,
+				dormantWindows: [
+					{ from: new Date('2026-08-22T00:00:00Z'), until: new Date('2026-09-12T09:00:00Z') }
+				]
+			}
+		);
+
+		expect(snapshot.history[1].dormant).toBe(true);
+		expect(snapshot.history[2].dormant).toBe(true);
+		expect(snapshot.streak).toBe(2);
+	});
+
+	it('freezes rather than breaks a streak while a goal is still archived', () => {
+		const archivedAt = new Date('2026-08-22T00:00:00Z');
+		const snapshot = snapshotGoal(
+			goal({ archivedAt }),
+			[entry('2026-08-20T10:00:00Z', 120), entry('2026-08-13T10:00:00Z', 120)],
+			{ ...options, dormantWindows: [{ from: archivedAt, until: null }] }
+		);
+		expect(snapshot.streak).toBe(2);
+	});
+
+	it('repairs a broken streak when a backdated entry closes the missed orbit', () => {
+		const logged = [
+			entry('2026-09-12T10:00:00Z', 120), // this week, closed
+			entry('2026-08-27T10:00:00Z', 120) // week of 24 Aug, closed
+		];
+		// The week of 31 August was missed, so the streak stops at this week.
+		expect(snapshotGoal(goal(), logged, options).streak).toBe(1);
+
+		const repaired = snapshotGoal(goal(), [...logged, entry('2026-09-02T10:00:00Z', 120)], options);
+		expect(repaired.streak).toBe(3);
+	});
+
 	it('lets negative entries correct an over-log', () => {
 		const snapshot = snapshotGoal(
 			goal(),
@@ -115,6 +159,16 @@ describe('streakFrom', () => {
 		const period = periodFor(options.now, 'week', options);
 		const history = [1, 1, 0, 1].map((ratio) => buildOrbit(period, ratio * 120, 120));
 		expect(streakFrom(history)).toBe(2);
+	});
+
+	it('gives the newest orbit the goal was awake for the benefit of the doubt', () => {
+		const period = periodFor(options.now, 'week', options);
+		const history = [
+			buildOrbit(period, 0, 120, true), // archived, no orbit expected
+			buildOrbit(period, 30, 120), // interrupted mid-week by archiving
+			buildOrbit(period, 120, 120)
+		];
+		expect(streakFrom(history)).toBe(1);
 	});
 
 	it('is zero when nothing has closed', () => {

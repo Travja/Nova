@@ -55,6 +55,28 @@ export const goals = sqliteTable(
 	(table) => [index('goals_user_id_idx').on(table.userId)]
 );
 
+/**
+ * One dormant span per archive/restore cycle.
+ *
+ * `goals.archivedAt` says whether a goal is archived right now; this says when
+ * it was asleep, which is what the streak maths needs. Orbits that fall wholly
+ * inside a window neither close nor break a streak, so restoring a goal picks
+ * up where archiving left off however many times it has been round the loop.
+ */
+export const goalArchiveWindows = sqliteTable(
+	'goal_archive_windows',
+	{
+		id: text('id').primaryKey(),
+		goalId: text('goal_id')
+			.notNull()
+			.references(() => goals.id, { onDelete: 'cascade' }),
+		archivedAt: timestamp('archived_at').notNull(),
+		/** Null while the goal is still archived. */
+		restoredAt: timestamp('restored_at')
+	},
+	(table) => [index('goal_archive_windows_goal_idx').on(table.goalId)]
+);
+
 export const entries = sqliteTable(
 	'entries',
 	{
@@ -74,4 +96,5 @@ export const entries = sqliteTable(
 export type UserRow = typeof users.$inferSelect;
 export type GoalRow = typeof goals.$inferSelect;
 export type EntryRow = typeof entries.$inferSelect;
+export type GoalArchiveWindowRow = typeof goalArchiveWindows.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;

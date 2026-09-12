@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { addPeriods, periodFor, previousPeriod, recentPeriods, zonedParts } from './period';
+import {
+	addPeriods,
+	parseLocalDateTime,
+	periodFor,
+	periodLabel,
+	previousPeriod,
+	recentPeriods,
+	toLocalDateTime,
+	zonedParts
+} from './period';
 
 const denver = { timeZone: 'America/Denver' };
 const utc = { timeZone: 'UTC' };
@@ -101,5 +110,60 @@ describe('recentPeriods', () => {
 	it('previousPeriod is the inverse of moving forward', () => {
 		const period = periodFor(new Date('2026-01-01T00:30:00Z'), 'quarter', utc);
 		expect(previousPeriod(period, utc).key).toBe('quarter:2025-Q4');
+	});
+});
+
+describe('parseLocalDateTime', () => {
+	it('reads a wall-clock value in the user zone rather than the server one', () => {
+		// Both sides of the 8 March transition: MST is UTC-7, MDT is UTC-6.
+		expect(parseLocalDateTime('2026-03-08T01:30', denver.timeZone)?.toISOString()).toBe(
+			'2026-03-08T08:30:00.000Z'
+		);
+		expect(parseLocalDateTime('2026-03-08T03:30', denver.timeZone)?.toISOString()).toBe(
+			'2026-03-08T09:30:00.000Z'
+		);
+	});
+
+	it('resolves a local time that daylight saving skipped', () => {
+		// 02:30 never happens in Denver on 8 March; it settles on the instant
+		// 01:30 named rather than refusing a date the browser was happy to send.
+		expect(parseLocalDateTime('2026-03-08T02:30', denver.timeZone)?.toISOString()).toBe(
+			'2026-03-08T08:30:00.000Z'
+		);
+	});
+
+	it('takes the first pass of an hour the clocks repeat', () => {
+		// 01:30 happens twice on 1 November; the daylight-time one comes first.
+		expect(parseLocalDateTime('2026-11-01T01:30', denver.timeZone)?.toISOString()).toBe(
+			'2026-11-01T07:30:00.000Z'
+		);
+	});
+
+	it('rejects anything that is not a datetime-local value', () => {
+		expect(parseLocalDateTime('2026-03-08', denver.timeZone)).toBeNull();
+		expect(parseLocalDateTime('yesterday', denver.timeZone)).toBeNull();
+		expect(parseLocalDateTime('', denver.timeZone)).toBeNull();
+	});
+
+	it('round-trips an instant through the form field and back', () => {
+		const instant = new Date('2026-11-01T12:34:00Z');
+		const field = toLocalDateTime(instant, denver.timeZone);
+		expect(field).toBe('2026-11-01T05:34');
+		expect(parseLocalDateTime(field, denver.timeZone)?.toISOString()).toBe(instant.toISOString());
+	});
+});
+
+describe('periodLabel', () => {
+	it('names the day an orbit belongs to across a spring-forward transition', () => {
+		const period = periodFor(new Date('2026-03-08T18:00:00Z'), 'day', denver);
+		expect(periodLabel(period, denver.timeZone)).toBe('Sun 8 Mar');
+	});
+
+	it('names longer periods by the window rather than the instant', () => {
+		const instant = new Date('2026-09-12T18:00:00Z');
+		expect(periodLabel(periodFor(instant, 'week', utc), utc.timeZone)).toBe('the week of 7 Sept');
+		expect(periodLabel(periodFor(instant, 'month', utc), utc.timeZone)).toBe('September 2026');
+		expect(periodLabel(periodFor(instant, 'quarter', utc), utc.timeZone)).toBe('Q3 2026');
+		expect(periodLabel(periodFor(instant, 'year', utc), utc.timeZone)).toBe('2026');
 	});
 });

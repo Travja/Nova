@@ -16,7 +16,14 @@ set it. Forgetting to log on Sunday should not cost the week.
   orbit it moved, since the current one will not change.
 
 Validation lives in `entrySchema`. Reject timestamps in the future beyond a small
-clock-skew allowance, and reject anything before the goal's `createdAt`.
+clock-skew allowance, and reject anything before the orbit the goal launched in —
+the start of the period containing its `createdAt`, not the instant itself, so a
+Planet goal added on Wednesday can still take Monday's work. Nothing may land in
+an orbit that predates the goal.
+
+The control sends wall-clock time with no zone attached, so parse it in the
+user's own zone rather than the server's; `new Date(value)` would quietly file a
+backdated entry under the wrong orbit.
 
 **Done when**
 
