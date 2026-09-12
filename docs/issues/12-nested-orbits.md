@@ -15,7 +15,7 @@ twice.
 
 **Decisions to make first**
 
-- Does the parent count *closed child orbits*, or does it sum the child's raw
+- Does the parent count _closed child orbits_, or does it sum the child's raw
   amounts? Both are defensible and they behave very differently when a child
   overshoots.
 - Can a parent also be logged against directly, or is it purely derived?
