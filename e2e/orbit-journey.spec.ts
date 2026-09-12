@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { hydrated } from './helpers';
 
 /**
  * The journey that has to keep working: sign up, launch a goal, log against it
@@ -11,6 +12,7 @@ test('a new pilot can register, launch a goal and close part of an orbit', async
 	await expect(page.getByRole('heading', { name: 'Your goals, in orbit.' })).toBeVisible();
 
 	await page.getByRole('link', { name: 'Start flying' }).first().click();
+	await hydrated(page);
 	await page.getByLabel('Name').fill('Test Pilot');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill('orbit-me-1234');
@@ -18,6 +20,7 @@ test('a new pilot can register, launch a goal and close part of an orbit', async
 
 	// Registration drops straight into goal creation.
 	await expect(page.getByRole('heading', { name: 'Launch a goal' })).toBeVisible();
+	await hydrated(page);
 
 	await page.getByLabel('What is the goal?').fill('Clean the house');
 	await page.getByRole('radio', { name: /Planet/ }).check();
@@ -45,11 +48,13 @@ test('an orbit closes once the target is reached', async ({ page }) => {
 	const email = `pilot-${Date.now()}-b@example.com`;
 
 	await page.goto('/register');
+	await hydrated(page);
 	await page.getByLabel('Name').fill('Streak Pilot');
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill('orbit-me-1234');
 	await page.getByRole('button', { name: 'Create account' }).click();
 
+	await hydrated(page);
 	await page.getByLabel('What is the goal?').fill('Daily reading');
 	await page.getByRole('radio', { name: /Satellite/ }).check();
 	await page.getByLabel('Measured in').selectOption('checkin');

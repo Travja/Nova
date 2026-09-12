@@ -28,7 +28,7 @@
 			<input
 				id="displayName"
 				name="displayName"
-				value={data.profile.displayName}
+				defaultValue={data.profile.displayName}
 				maxlength="64"
 				required
 			/>

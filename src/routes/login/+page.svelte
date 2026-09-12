@@ -25,7 +25,7 @@
 				type="email"
 				autocomplete="email"
 				required
-				value={form?.email ?? ''}
+				defaultValue={form?.email ?? ''}
 			/>
 			{#if form?.errors?.email}<p class="error">{form.errors.email}</p>{/if}
 		</div>

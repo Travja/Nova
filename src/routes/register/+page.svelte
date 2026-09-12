@@ -30,7 +30,7 @@
 				name="displayName"
 				required
 				maxlength="64"
-				value={form?.displayName ?? ''}
+				defaultValue={form?.displayName ?? ''}
 			/>
 			{#if form?.errors?.displayName}<p class="error">{form.errors.displayName}</p>{/if}
 		</div>
@@ -43,7 +43,7 @@
 				type="email"
 				autocomplete="email"
 				required
-				value={form?.email ?? ''}
+				defaultValue={form?.email ?? ''}
 			/>
 			{#if form?.errors?.email}<p class="error">{form.errors.email}</p>{/if}
 		</div>
