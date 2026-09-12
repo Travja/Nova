@@ -1,0 +1,9 @@
+build
+.svelte-kit
+drizzle
+node_modules
+data
+test-results
+playwright-report
+pnpm-lock.yaml
+static/icons

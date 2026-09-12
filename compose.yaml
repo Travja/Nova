@@ -1,0 +1,16 @@
+services:
+  nova:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      # Required by SvelteKit's CSRF check — set this to the URL you browse to.
+      ORIGIN: ${ORIGIN:-http://localhost:3000}
+      DATABASE_URL: file:/data/nova.db
+      BODY_SIZE_LIMIT: 512K
+    volumes:
+      - nova-data:/data
+
+volumes:
+  nova-data:

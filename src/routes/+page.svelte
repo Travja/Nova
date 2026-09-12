@@ -1,0 +1,219 @@
+<script lang="ts">
+	import { resolve } from '$app/paths';
+	import Astronaut from '$components/Astronaut.svelte';
+	import GoalCard from '$components/GoalCard.svelte';
+	import Rocket from '$components/Rocket.svelte';
+	import type { GoalSnapshot } from '$domain/progress';
+	import { TIER_LIST } from '$domain/tiers';
+	import type { PageProps } from './$types';
+
+	let { data, form }: PageProps = $props();
+
+	const snapshots = $derived(data.snapshots ?? []);
+
+	/** Tiers in orbital order, keeping only the ones that have goals. */
+	const sections = $derived(
+		TIER_LIST.map((tier) => ({
+			tier,
+			goals: snapshots.filter((snapshot: GoalSnapshot) => snapshot.goal.tier === tier.id)
+		})).filter((section) => section.goals.length > 0)
+	);
+
+	const closedThisPeriod = $derived(
+		snapshots.filter((snapshot: GoalSnapshot) => snapshot.current.complete).length
+	);
+</script>
+
+<svelte:head>
+	<title>Nova</title>
+	<meta
+		name="description"
+		content="Nova turns your goals into orbits — from daily satellites to yearly universes."
+	/>
+</svelte:head>
+
+{#if !data.user}
+	<section class="hero">
+		<div class="hero__copy">
+			<h1>Your goals, in orbit.</h1>
+			<p class="lede">
+				Nova measures progress the way space does — in revolutions. Log a little, watch the body
+				travel, and close the orbit before the period ends.
+			</p>
+			<div class="hero__actions">
+				<a class="button" href={resolve('/register')}>Start flying</a>
+				<a class="button button--ghost" href={resolve('/login')}>Sign in</a>
+			</div>
+			<ul class="tier-list">
+				{#each TIER_LIST as tier (tier.id)}
+					<li>
+						<span class="dot" style="background: {tier.accent}"></span>
+						<strong>{tier.label}</strong>
+						<span class="muted">{tier.blurb}</span>
+					</li>
+				{/each}
+			</ul>
+		</div>
+		<div class="hero__art">
+			<Rocket size={110} launching />
+			<Astronaut size={190} />
+		</div>
+	</section>
+{:else if snapshots.length === 0}
+	<section class="empty panel">
+		<Astronaut size={190} />
+		<h1>Nothing in orbit yet</h1>
+		<p class="lede">
+			Add your first goal and Nova will start tracking its revolutions. Something small is a good
+			start — a Satellite closes every day.
+		</p>
+		<a class="button" href={resolve('/goals/new')}>Launch a goal</a>
+	</section>
+{:else}
+	<section class="dashboard">
+		<div class="dashboard__head">
+			<div>
+				<h1>Good to see you, {data.user.displayName}.</h1>
+				<p class="muted">
+					{closedThisPeriod} of {snapshots.length}
+					{snapshots.length === 1 ? 'orbit' : 'orbits'} closed in their current period.
+				</p>
+			</div>
+			<a class="button" href={resolve('/goals/new')}>New goal</a>
+		</div>
+
+		{#if form?.errors?.form}
+			<p class="error">{form.errors.form}</p>
+		{/if}
+
+		{#each sections as section (section.tier.id)}
+			<section class="tier">
+				<header class="tier__head">
+					<h2 style="color: {section.tier.accent}">{section.tier.label}</h2>
+					<span class="muted">{section.tier.blurb}</span>
+				</header>
+				<div class="grid">
+					{#each section.goals as snapshot (snapshot.goal.id)}
+						<GoalCard {snapshot} />
+					{/each}
+				</div>
+			</section>
+		{/each}
+	</section>
+{/if}
+
+<style>
+	.lede {
+		color: var(--text);
+		font-size: 1.05rem;
+		max-width: 42ch;
+	}
+
+	.hero {
+		align-items: center;
+		display: grid;
+		gap: 2rem;
+		grid-template-columns: 1.2fr 0.8fr;
+		padding: 2rem 0 3rem;
+	}
+
+	.hero__copy {
+		display: grid;
+		gap: 1.25rem;
+	}
+
+	.hero__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+
+	.hero__art {
+		display: grid;
+		justify-items: center;
+		gap: 1rem;
+	}
+
+	.tier-list {
+		display: grid;
+		gap: 0.55rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.tier-list li {
+		align-items: baseline;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		font-size: 0.92rem;
+	}
+
+	.dot {
+		border-radius: 50%;
+		display: inline-block;
+		height: 0.55rem;
+		width: 0.55rem;
+	}
+
+	.empty {
+		display: grid;
+		gap: 1rem;
+		justify-items: center;
+		padding: 3rem 1.5rem;
+		text-align: center;
+	}
+
+	.dashboard {
+		display: grid;
+		gap: 2.25rem;
+	}
+
+	.dashboard__head {
+		align-items: end;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem;
+		justify-content: space-between;
+	}
+
+	.tier {
+		display: grid;
+		gap: 0.9rem;
+	}
+
+	.tier__head {
+		align-items: baseline;
+		border-bottom: 1px solid var(--space-border);
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		padding-bottom: 0.5rem;
+	}
+
+	.tier__head span {
+		font-size: 0.88rem;
+	}
+
+	.grid {
+		display: grid;
+		gap: 1rem;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
+	}
+
+	@media (max-width: 52rem) {
+		.hero {
+			grid-template-columns: 1fr;
+			text-align: center;
+		}
+
+		.hero__copy {
+			justify-items: center;
+		}
+
+		.tier-list li {
+			justify-content: center;
+		}
+	}
+</style>
