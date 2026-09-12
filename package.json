@@ -20,7 +20,8 @@
 		"db:migrate": "node scripts/migrate.mjs",
 		"db:studio": "drizzle-kit studio",
 		"e2e": "playwright test",
-		"db:reset:e2e": "node scripts/reset-e2e-db.mjs"
+		"db:reset:e2e": "node scripts/reset-e2e-db.mjs",
+		"seed:issues": "node scripts/seed-issues.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
