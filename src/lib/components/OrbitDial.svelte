@@ -189,9 +189,14 @@
 		display: grid;
 		gap: 0.1rem;
 		justify-items: center;
+		/* Keep long captions — `180 pages / 300 pages` — inside the ring rather
+		   than letting them run across the orbit they are describing. */
+		max-width: calc(var(--size) * 0.62);
+		overflow-wrap: anywhere;
 		pointer-events: none;
 		position: absolute;
 		text-align: center;
+		text-wrap: balance;
 	}
 
 	.caption__value {

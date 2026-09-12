@@ -56,7 +56,7 @@
 						orbit={snapshot.current}
 						tier={goal.tier}
 						color={goal.color}
-						size={128}
+						size={144}
 						caption="{formatAmount(snapshot.current.logged, goal.metric)} / {formatAmount(
 							goal.target,
 							goal.metric

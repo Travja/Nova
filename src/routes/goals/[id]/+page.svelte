@@ -142,9 +142,14 @@
 	{#if archived}
 		<p class="notice panel">
 			This goal is parked. It is off the dashboard and no orbit is expected of it, but every entry
-			is still here and the streak is frozen rather than broken — restore it and it carries on from
-			{data.snapshot.streak}
-			{data.snapshot.streak === 1 ? 'orbit' : 'orbits'}.
+			is still here.
+			{#if data.snapshot.streak > 0}
+				Its streak is frozen rather than broken — restore it and it carries on from {data.snapshot
+					.streak}
+				{data.snapshot.streak === 1 ? 'orbit' : 'orbits'}.
+			{:else}
+				Nothing it misses while parked counts against it.
+			{/if}
 		</p>
 	{:else if data.confirmingArchive}
 		<section class="notice panel confirm">
@@ -153,8 +158,13 @@
 				<li>Every entry stays exactly where it is.</li>
 				<li>The goal leaves the dashboard and stops asking for progress.</li>
 				<li>
-					The streak freezes at {data.snapshot.streak} rather than breaking — the periods it spends archived
-					are not counted as missed.
+					{#if data.snapshot.streak > 0}
+						The streak freezes at {data.snapshot.streak} rather than breaking — the periods it spends
+						archived are not counted as missed.
+					{:else}
+						Periods it spends archived are never counted as missed, so a streak picks up where it
+						left off.
+					{/if}
 				</li>
 			</ul>
 			<div class="hero__actions">
