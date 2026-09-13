@@ -75,6 +75,10 @@
 	 */
 	--tap-min: 2.75rem;
 
+	/* The floating quick-add, and what the shell leaves clear for it. Declared
+	   here so its size and that clearance cannot drift apart. */
+	--fab-size: 3.5rem;
+
 	--shadow-lift: 0 18px 40px -24px rgba(0, 0, 0, 0.9);
 	--ring-glow: 0 0 24px -4px currentColor;
 

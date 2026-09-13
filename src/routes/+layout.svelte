@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import QuickAdd from '$components/QuickAdd.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import Starfield from '$components/Starfield.svelte';
 	import '$lib/styles/app.css';
@@ -11,6 +12,8 @@
 	let { data, children }: LayoutProps = $props();
 
 	const onAuthPage = $derived(['/login', '/register'].includes(page.url.pathname));
+	/** Everywhere but the page it would navigate to. */
+	const showQuickAdd = $derived(Boolean(data.user) && page.url.pathname !== resolve('/goals/new'));
 
 	onMount(() => {
 		// Marks the point where the forms below become interactive: until Svelte
@@ -45,7 +48,7 @@
 		<nav>
 			{#if data.user}
 				<a class="nav-link tap" href={resolve('/today')}>Today</a>
-				<a class="nav-link tap" href={resolve('/goals/new')}>New goal</a>
+				<a class="nav-link nav-link--wide tap" href={resolve('/goals/new')}>New goal</a>
 				<a class="nav-link tap" href={resolve('/settings')}>{data.user.displayName}</a>
 				<form method="POST" action={resolve('/logout')}>
 					<button class="nav-link nav-link--button tap" type="submit">Sign out</button>
@@ -66,6 +69,10 @@
 	</footer>
 </div>
 
+{#if showQuickAdd}
+	<QuickAdd />
+{/if}
+
 <style>
 	.shell {
 		display: flex;
@@ -75,6 +82,26 @@
 		min-height: 100vh;
 		min-height: 100dvh;
 		padding: 1rem;
+	}
+
+	/*
+	 * Room for the floating button to sit over, so it never buries the last row
+	 * of whatever list is on screen — Today, the dashboard and the archive all
+	 * end in one. Taken on the shell rather than on each of those, so the footer
+	 * clears it too and the next list does not have to remember.
+	 *
+	 * Its footprint, not a guess: the control's own height plus the gap it keeps
+	 * from the bottom, twice over so the last row clears rather than just meets
+	 * it, plus the home indicator.
+	 */
+	@media (max-width: 40rem) {
+		.shell {
+			padding-bottom: calc(var(--fab-size) + 2rem + env(safe-area-inset-bottom));
+		}
+
+		.nav-link--wide {
+			display: none;
+		}
 	}
 
 	.masthead {
