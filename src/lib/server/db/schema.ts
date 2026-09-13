@@ -27,7 +27,15 @@ export const sessions = sqliteTable(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		expiresAt: timestamp('expires_at').notNull(),
-		createdAt: timestamp('created_at').notNull()
+		createdAt: timestamp('created_at').notNull(),
+		/**
+		 * What the browser called itself when the session was created, so the
+		 * session list can say which device a row belongs to. Null for sessions
+		 * that predate the column, and for clients that send no user agent.
+		 */
+		userAgent: text('user_agent'),
+		/** Refreshed lazily as the session is used; null until it is used again. */
+		lastSeenAt: timestamp('last_seen_at')
 	},
 	(table) => [index('sessions_user_id_idx').on(table.userId)]
 );

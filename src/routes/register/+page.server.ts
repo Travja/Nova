@@ -41,7 +41,10 @@ export const actions: Actions = {
 			});
 		}
 
-		const { token, expiresAt } = await createSession(result.user.id);
+		const { token, expiresAt } = await createSession(
+			result.user.id,
+			request.headers.get('user-agent')
+		);
 		setSessionCookie(cookies, token, expiresAt);
 		redirect(303, '/goals/new');
 	}
