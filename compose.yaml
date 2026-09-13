@@ -9,6 +9,7 @@ services:
       ORIGIN: ${ORIGIN:-http://localhost:3000}
       DATABASE_URL: file:/data/nova.db
       BODY_SIZE_LIMIT: 512K
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - nova-data:/data
 
