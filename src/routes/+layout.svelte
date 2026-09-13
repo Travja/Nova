@@ -44,6 +44,7 @@
 
 		<nav>
 			{#if data.user}
+				<a class="nav-link" href={resolve('/today')}>Today</a>
 				<a class="nav-link" href={resolve('/goals/new')}>New goal</a>
 				<a class="nav-link" href={resolve('/settings')}>{data.user.displayName}</a>
 				<form method="POST" action={resolve('/logout')}>

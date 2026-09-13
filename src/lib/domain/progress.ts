@@ -157,6 +157,169 @@ export function streakFrom(history: readonly Orbit[]): number {
 	return streak;
 }
 
+/**
+ * How far through its period an instant sits, clamped to 0-1.
+ *
+ * Periods are unequal by design — a day is 23 or 25 hours across a daylight
+ * saving transition, and a quarter is not three equal months — so this reads
+ * the span from the period itself rather than assuming a length.
+ *
+ * Pass `since` to start the clock later than the period does. A goal is not
+ * answerable for the part of a period that ran before it existed: a Universe
+ * goal launched in July is at the beginning of its first orbit, not half a year
+ * into it.
+ */
+export function periodElapsed(period: Period, now: Date = new Date(), since?: Date): number {
+	const start = since ? Math.max(period.start.getTime(), since.getTime()) : period.start.getTime();
+	const span = period.end.getTime() - start;
+	if (span <= 0) return 1;
+	return Math.max(0, Math.min(1, (now.getTime() - start) / span));
+}
+
+/**
+ * How pressing an orbit is, on a 0-1 scale.
+ *
+ * Two things make an orbit urgent: how much of the target is still missing, and
+ * how little of the period is left to cover it. Multiplying them is what makes
+ * a Universe goal at 10% unremarkable in January and alarming in November,
+ * without ever ranking one tier above another by fiat.
+ *
+ * A closed orbit has nothing left to do, and a dormant one was never expected
+ * to fly, so both score zero — a sleeping goal is not urgent.
+ */
+export function urgency(orbit: Orbit, now: Date = new Date()): number {
+	if (orbit.complete || orbit.dormant) return 0;
+	return (1 - orbit.fraction) * periodElapsed(orbit.period, now);
+}
+
+/** How close a period has to be to closing for its orbit to be running out of time. */
+export const CLOSING_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether an orbit is short of target with its period about to close.
+ *
+ * A satellite's period is never longer than the window, so every unclosed
+ * satellite qualifies; everything larger only surfaces as its deadline nears.
+ */
+export function isClosing(
+	orbit: Orbit,
+	now: Date = new Date(),
+	windowMs = CLOSING_WINDOW_MS
+): boolean {
+	if (orbit.complete || orbit.dormant) return false;
+	return orbit.period.end.getTime() - now.getTime() <= windowMs;
+}
+
+/**
+ * How far behind its period's own pace a goal is: the share of the target that
+ * pace calls for by now, minus the share actually logged. Negative when ahead.
+ */
+export function paceDeficit(orbit: Orbit, launchedAt: Date, now: Date = new Date()): number {
+	if (orbit.complete || orbit.dormant) return 0;
+	return periodElapsed(orbit.period, now, launchedAt) - orbit.fraction;
+}
+
+/** How much of a goal's share of a period must run before its pace says anything. */
+export const PACE_GRACE = 1 / 3;
+
+/** How far behind that pace a goal may drift before it needs attention. */
+export const PACE_TOLERANCE = 0.1;
+
+/**
+ * Whether a goal is far enough behind pace to need attention with its deadline
+ * still out of sight — a Universe goal at 35% half way through the year.
+ *
+ * Two guards keep this from crying wolf. Nothing is judged until a third of the
+ * goal's own share of the period has run, because Monday evening is not behind
+ * on a week and a goal launched yesterday is not behind on anything. Past that,
+ * a tenth of the period's worth of slack is allowed on top, since work arrives
+ * in bursts rather than at a constant rate.
+ */
+export function isBehindPace(
+	orbit: Orbit,
+	launchedAt: Date,
+	now: Date = new Date(),
+	tolerance = PACE_TOLERANCE
+): boolean {
+	if (orbit.complete || orbit.dormant) return false;
+	if (periodElapsed(orbit.period, now, launchedAt) < PACE_GRACE) return false;
+	return paceDeficit(orbit, launchedAt, now) > tolerance;
+}
+
+/** One row of the focused view, with what put it there. */
+export interface FocusRow {
+	snapshot: GoalSnapshot;
+	/** How pressing this orbit is, 0-1. */
+	urgency: number;
+	/** The period closes inside the window, so time is the problem. */
+	closing: boolean;
+	/** Behind the pace the period calls for, deadline or no deadline. */
+	behindPace: boolean;
+}
+
+export interface TodayFocus {
+	/** Needs attention now — running out of time, behind pace, or both. */
+	atRisk: FocusRow[];
+	/** Closed in their current period — kept for the reward, not for the work. */
+	closed: GoalSnapshot[];
+	/** In flight, on pace, with the deadline still out of sight. */
+	steady: FocusRow[];
+}
+
+/**
+ * Split goals into what today asks for, what it has already given, and what can
+ * wait. Pass the same `now` the snapshots were computed with.
+ *
+ * Both open groups are ranked by urgency, so the goal closest to becoming work
+ * sits at the top of the ones that can wait.
+ */
+export function focusForToday(
+	snapshots: readonly GoalSnapshot[],
+	now: Date = new Date(),
+	windowMs = CLOSING_WINDOW_MS
+): TodayFocus {
+	const atRisk: FocusRow[] = [];
+	const closed: GoalSnapshot[] = [];
+	const steady: FocusRow[] = [];
+
+	for (const snapshot of snapshots) {
+		if (snapshot.current.complete) {
+			closed.push(snapshot);
+			continue;
+		}
+		const row: FocusRow = {
+			snapshot,
+			urgency: urgency(snapshot.current, now),
+			closing: isClosing(snapshot.current, now, windowMs),
+			behindPace: isBehindPace(snapshot.current, snapshot.goal.createdAt, now)
+		};
+		(row.closing || row.behindPace ? atRisk : steady).push(row);
+	}
+
+	return { atRisk: byUrgency(atRisk), closed, steady: byUrgency(steady) };
+}
+
+/** Most urgent first, ties going to the nearer deadline and then the pilot's own order. */
+function byUrgency(rows: FocusRow[]): FocusRow[] {
+	return rows.sort(
+		(a, b) =>
+			b.urgency - a.urgency ||
+			a.snapshot.current.period.end.getTime() - b.snapshot.current.period.end.getTime() ||
+			a.snapshot.goal.sortOrder - b.snapshot.goal.sortOrder
+	);
+}
+
+/** How long a period has left, in the coarsest unit that still says something. */
+export function formatTimeLeft(period: Period, now: Date = new Date()): string {
+	const minutes = Math.floor((period.end.getTime() - now.getTime()) / 60_000);
+	if (minutes <= 0) return 'under a minute left';
+	if (minutes < 60) return `${minutes}m left`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h left`;
+	const days = Math.round(hours / 24);
+	return `${days} ${days === 1 ? 'day' : 'days'} left`;
+}
+
 /** Format an amount for display, e.g. `1h 30m` or `12 pages`. */
 export function formatAmount(value: number, metric: MetricDefinition): string {
 	if (metric.kind === 'duration') {
@@ -173,7 +336,26 @@ export function formatAmount(value: number, metric: MetricDefinition): string {
 		return `${rounded} ${rounded === 1 ? 'check-in' : 'check-ins'}`;
 	}
 	const rounded = Math.round(value * 100) / 100;
-	return metric.unit ? `${rounded} ${metric.unit}` : String(rounded);
+	if (!metric.unit) return String(rounded);
+	return `${rounded} ${Math.abs(rounded) === 1 ? singularize(metric.unit) : metric.unit}`;
+}
+
+/**
+ * The singular of a counted unit, for the one case where "1 pages" would read
+ * wrong.
+ *
+ * The unit is whatever the pilot typed, and the field asks for a plural
+ * (`pages, workouts, chapters…`), so this undoes the regular English endings
+ * and leaves anything it cannot reduce safely alone — a unit that is already
+ * singular, a mass noun like `water`, or a word ending in `ss`, `us` or `is`
+ * that only looks plural.
+ */
+export function singularize(unit: string): string {
+	if (/(?:ss|us|is)$/i.test(unit)) return unit;
+	if (/[^aeiou]ies$/i.test(unit)) return `${unit.slice(0, -3)}y`;
+	if (/(?:ss|sh|ch|x|z)es$/i.test(unit)) return unit.slice(0, -2);
+	if (/[^s]s$/i.test(unit)) return unit.slice(0, -1);
+	return unit;
 }
 
 /** Quick-log buttons offered for a metric, in its own units. */
