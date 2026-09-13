@@ -106,6 +106,11 @@ function backupNow(config: BackupConfig): void {
 /**
  * Starts the interval. Idempotent, and the timer is unref'd so it never holds
  * the process open on shutdown.
+ *
+ * The interval starts from launch, so a container that restarts more often than
+ * the interval may never take one. Catching up on boot — snapshot immediately
+ * when the newest one is older than the interval — is noted under **Later** in
+ * `docs/issues/23-backups.md`.
  */
 export function startBackupSchedule(config: BackupConfig = readBackupConfig()): boolean {
 	if (!config.enabled || timer) return false;
