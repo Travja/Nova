@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
+	import GoalRow from '$components/GoalRow.svelte';
 	import Mascot from '$components/Mascot.svelte';
 	import { celebration, noteOrbits } from '$lib/celebration.svelte';
 	import type { FocusRow, GoalSnapshot } from '$domain/progress';
@@ -15,6 +16,13 @@
 	/** Ranked on the same clock the orbits were measured against. */
 	const focus = $derived(focusForToday(snapshots, data.now));
 	const logAction = $derived(`${resolve('/today')}?/log`);
+	/**
+	 * Density is CSS everywhere else, but compact is a different shape here, not
+	 * the same one with less padding round it — so this one has to be a branch
+	 * rather than a token. It is server-rendered either way, so there is nothing
+	 * for hydration to disagree about.
+	 */
+	const compact = $derived(data.user?.preferences.density === 'compact');
 
 	/**
 	 * A goal that closes leaves the at-risk list, taking its dial with it, so the
@@ -109,16 +117,27 @@
 		<ul class="risk">
 			{#each focus.atRisk as row (row.snapshot.goal.id)}
 				<li>
-					<p class="deadline">
-						<span class="pill" style="color: {TIER_DEFINITIONS[row.snapshot.goal.tier].accent}">
-							{TIER_DEFINITIONS[row.snapshot.goal.tier].label}
-						</span>
-						{#if row.behindPace && !row.closing}
-							<span class="flag">Behind pace</span>
-						{/if}
-						<span class="muted">{reason(row)}</span>
-					</p>
-					<GoalCard snapshot={row.snapshot} {logAction} />
+					{#if compact}
+						<!-- The tier and the reason are what the row gives up to be a row.
+						     The tier is in the dial it still draws, and the order of the
+						     list is the urgency the reason was spelling out. -->
+						<GoalRow
+							snapshot={row.snapshot}
+							{logAction}
+							flag={row.behindPace && !row.closing ? 'Behind pace' : undefined}
+						/>
+					{:else}
+						<p class="deadline">
+							<span class="pill" style="color: {TIER_DEFINITIONS[row.snapshot.goal.tier].accent}">
+								{TIER_DEFINITIONS[row.snapshot.goal.tier].label}
+							</span>
+							{#if row.behindPace && !row.closing}
+								<span class="flag">Behind pace</span>
+							{/if}
+							<span class="muted">{reason(row)}</span>
+						</p>
+						<GoalCard snapshot={row.snapshot} {logAction} />
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -211,6 +230,11 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
+	}
+
+	/* Rows are a list, not a stack of cards, and read better close together. */
+	:global(html[data-density='compact']) .risk {
+		gap: 0.35rem;
 	}
 
 	.deadline {

@@ -71,6 +71,15 @@
 		transform: translateY(1px);
 	}
 
+	/*
+	 * A `<dialog>` puts itself in the top layer, so a fixed element does not
+	 * float above it — it shows through the backdrop instead, dimmed and dead.
+	 * While a sheet is up, this is not the action on offer.
+	 */
+	:global(body:has(dialog[open])) .quick-add {
+		display: none;
+	}
+
 	/* Above this the masthead carries the action instead; see `+layout.svelte`,
 	   which hides its own nav item below the same width. */
 	@media (min-width: 40.0625rem) {

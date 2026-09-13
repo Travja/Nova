@@ -139,8 +139,18 @@
 		/* The sprite gives up width before the copy does, so the panel works on a
 		   phone without a second layout. */
 		grid-template-columns: clamp(112px, 38%, var(--size, 160px)) 1fr;
-		padding: 1rem 1.1rem;
+		padding: var(--pad-panel);
 		position: relative;
+	}
+
+	/*
+	 * Compact asked for more goals on screen, and the pilot was taking a fifth
+	 * of it. Narrowing its column is enough on its own: the astronaut is drawn
+	 * to fit the space it is given, so it comes down with it.
+	 */
+	:global(html[data-density='compact']) .mascot {
+		gap: 0.75rem;
+		grid-template-columns: clamp(68px, 22%, 96px) 1fr;
 	}
 
 	.copy {
@@ -180,7 +190,7 @@
 		color: var(--text-dim);
 		cursor: pointer;
 		font: inherit;
-		font-size: 0.78rem;
+		font-size: var(--text-secondary);
 		padding: 0.25rem;
 	}
 

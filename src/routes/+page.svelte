@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
+	import GoalRow from '$components/GoalRow.svelte';
 	import GoalOrderList from '$components/GoalOrderList.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import { noteOrbits } from '$lib/celebration.svelte';
@@ -13,6 +14,8 @@
 	let { data, form }: PageProps = $props();
 
 	const snapshots = $derived(data.snapshots ?? []);
+	/** See the note in `/today`: compact is a different shape, not a token. */
+	const compact = $derived(data.user?.preferences.density === 'compact');
 
 	/** Tiers in orbital order, keeping only the ones that have goals. */
 	const sections = $derived(
@@ -165,9 +168,13 @@
 						onannounce={(message) => (dragAnnouncement = message)}
 					/>
 				{:else}
-					<div class="grid">
+					<div class="grid" class:grid--rows={compact}>
 						{#each section.goals as snapshot (snapshot.goal.id)}
-							<GoalCard {snapshot} />
+							{#if compact}
+								<GoalRow {snapshot} />
+							{:else}
+								<GoalCard {snapshot} />
+							{/if}
 						{/each}
 					</div>
 				{/if}
@@ -305,6 +312,12 @@
 		display: grid;
 		gap: var(--gap-list);
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
+	}
+
+	/* Rows want the full width and each other's company, not a card grid. */
+	.grid--rows {
+		gap: 0.35rem;
+		grid-template-columns: 1fr;
 	}
 
 	@media (max-width: 52rem) {

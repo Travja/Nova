@@ -74,19 +74,16 @@
 			aria-label="{goal.title} progress"
 		></div>
 
-		<!-- Compact keeps the streak and drops the rest: the tier is named around
-		     the card either way, and total orbits is a number you look up rather
-		     than one you scan a list for. -->
 		<dl class="stats">
 			<div>
 				<dt>Streak</dt>
 				<dd class:dd--ticked={closing}>{snapshot.streak}</dd>
 			</div>
-			<div class="stat--secondary">
+			<div>
 				<dt>Orbits</dt>
 				<dd>{snapshot.totalOrbits}</dd>
 			</div>
-			<div class="stat--secondary stat--tier">
+			<div class="stat--tier">
 				<dt>Tier</dt>
 				<dd style="color: {tierDef.accent}">{tierDef.label}</dd>
 			</div>
@@ -175,10 +172,6 @@
 		flex-wrap: wrap;
 		gap: 0.25rem 0.9rem;
 		margin: 0;
-	}
-
-	:global(html[data-density='compact']) .stats .stat--secondary {
-		display: none;
 	}
 
 	.stats div {

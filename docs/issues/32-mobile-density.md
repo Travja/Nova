@@ -75,6 +75,31 @@ against each other. `More…` goes too on a phone, where three chips carrying a
 unit fill the row and it wrapped onto a second 44px row of its own — for a
 third link to the page the title and the dial both already open.
 
+## Compact is a different shape, not the same one squeezed
+
+The first pass at compact was the card with less padding round it, and it bought
+about thirty pixels a goal — nowhere near enough to change what you can take in
+at a glance, because the card's _shape_ was the floor, not its spacing.
+
+Compact now draws a goal as a row: the ring, the title, and what is left, at
+roughly a quarter of the height. The quick-log the card carried moves into a
+sheet the row opens, which is the same `GoalCard` the default density draws —
+one card in the app, and this is a second way of getting at it. Logging from the
+sheet posts to the same action and never leaves the list.
+
+Measured on Today at 390px with seven goals: **246px per goal down to 66px**, and
+one goal fully on screen up to six.
+
+`<dialog>` carries the sheet, so the focus trap, the escape key and the
+inertness of the page behind it are the platform's rather than ours. The row is
+an ordinary link to the goal underneath the enhancement, so no JavaScript and no
+`<dialog>` still lands somewhere sensible. The pilot's column narrows in compact
+too — it was taking a fifth of the screen the rows were trying to fill.
+
+This is the one place density is a branch in JavaScript rather than a token. A
+shape change cannot be a custom property, and the preference is already on the
+page data that renders it, so the server and the client never disagree about it.
+
 ## What the floor cost
 
 Measured, not eyeballed — 178 targets at 390px in both densities, and five kinds
