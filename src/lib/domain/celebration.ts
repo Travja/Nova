@@ -32,6 +32,21 @@ export function isFreshClosing(previous: OrbitMark | undefined, next: OrbitMark)
 	return !previous.complete;
 }
 
+/**
+ * How long a dial takes to sweep to a new reading.
+ *
+ * The arc fills and the body travels round to meet it over this, together,
+ * because position and fill are the same fact and a dial that animates one and
+ * jumps the other contradicts itself for the length of the sweep.
+ *
+ * It is also how long a closing waits before it is raised. A burst that fires
+ * where the body is *going* to be, while the body is still on its way there,
+ * reads as two things happening rather than one — so the celebration lands when
+ * the body arrives. `OrbitDial` spends this and the store waits it out, both
+ * from here, so the two cannot drift apart.
+ */
+export const SWEEP_MS = 700;
+
 /** How big a closing should feel, given the tier that closed. */
 export interface CelebrationShape {
 	/** How long the whole thing lasts. Always under a second. */

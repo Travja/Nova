@@ -3,7 +3,7 @@
 	import { celebrationFor } from '$lib/celebration.svelte';
 	import { bodyVariant } from '$domain/bodies';
 	import { MIN_DIAL_SCALE } from '$domain/preferences';
-	import { rayAngles } from '$domain/celebration';
+	import { SWEEP_MS, rayAngles } from '$domain/celebration';
 	import type { Orbit } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
@@ -77,7 +77,7 @@
 	class="dial"
 	class:dial--complete={orbit.complete && !orbit.dormant}
 	class:dial--dormant={orbit.dormant}
-	style="--size: calc({size}px * var(--dial-scale)); --color: {color}; --accent: {tierDef.accent}; --orbit-seconds: {orbitSeconds}s"
+	style="--size: calc({size}px * var(--dial-scale)); --color: {color}; --accent: {tierDef.accent}; --orbit-seconds: {orbitSeconds}s; --sweep-ms: {SWEEP_MS}ms"
 >
 	<svg viewBox="0 0 100 100" role="presentation">
 		<defs>
@@ -116,7 +116,10 @@
 
 		<!-- The body itself, parked at the point the arc reached -->
 		<g class="body-spin">
-			<g style="transform: rotate({bodyAngle}deg); transform-origin: {CENTER}px {CENTER}px">
+			<g
+				class="travel"
+				style="transform: rotate({bodyAngle}deg); transform-origin: {CENTER}px {CENTER}px"
+			>
 				{#if !orbit.dormant}
 					<circle
 						class="body-glow"
@@ -165,6 +168,7 @@
 					{/key}
 				{/if}
 				<g
+					class="travel"
 					style="transform: rotate({-bodyAngle}deg); transform-origin: {CENTER}px {CENTER -
 						RADIUS}px"
 				>
@@ -229,7 +233,24 @@
 		filter: drop-shadow(0 0 3px var(--color));
 		transform: rotate(-90deg);
 		transform-origin: 50px 50px;
-		transition: stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1);
+		transition: stroke-dashoffset var(--sweep-ms) cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	/*
+	 * The body travels round to the arc rather than jumping to it. Position and
+	 * fill are the same fact told twice, so they have to move as one — an arc
+	 * that sweeps while the body is already waiting at the end of it is the dial
+	 * disagreeing with itself for two thirds of a second.
+	 *
+	 * Both rotations carry this: the outer one walks the body round the ring,
+	 * the inner one cancels that rotation so a planet's bands stay level, and
+	 * they are only level at every frame if they share a duration and an easing.
+	 *
+	 * Reduced motion flattens both through the global rule in `app.css`, which
+	 * leaves the body where the arc says it is, instantly.
+	 */
+	.travel {
+		transition: transform var(--sweep-ms) cubic-bezier(0.22, 1, 0.36, 1);
 	}
 
 	.core {
