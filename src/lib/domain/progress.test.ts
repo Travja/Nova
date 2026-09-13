@@ -6,13 +6,17 @@ import {
 	focusForToday,
 	formatAmount,
 	formatTimeLeft,
-	isAtRisk,
+	isBehindPace,
+	isClosing,
+	PACE_TOLERANCE,
+	paceDeficit,
 	periodElapsed,
 	singularize,
 	snapshotGoal,
 	streakFrom,
 	urgency
 } from './progress';
+import type { FocusRow } from './progress';
 import type { Goal } from './types';
 
 const options = { timeZone: 'UTC', now: new Date('2026-09-12T18:00:00Z') };
@@ -234,24 +238,75 @@ describe('urgency', () => {
 	});
 });
 
-describe('isAtRisk', () => {
+describe('isClosing', () => {
 	const day = periodFor(new Date('2026-09-12T06:00:00Z'), 'day', options);
 	const year = periodFor(new Date('2026-09-12T06:00:00Z'), 'year', options);
 
 	it('flags an unclosed satellite at any hour, since its period is short', () => {
-		expect(isAtRisk(buildOrbit(day, 0, 1), new Date('2026-09-12T00:00:00Z'))).toBe(true);
-		expect(isAtRisk(buildOrbit(day, 0, 1), new Date('2026-09-12T23:00:00Z'))).toBe(true);
+		expect(isClosing(buildOrbit(day, 0, 1), new Date('2026-09-12T00:00:00Z'))).toBe(true);
+		expect(isClosing(buildOrbit(day, 0, 1), new Date('2026-09-12T23:00:00Z'))).toBe(true);
 	});
 
 	it('leaves a long period alone until its last day', () => {
-		expect(isAtRisk(buildOrbit(year, 1, 12), new Date('2026-09-12T06:00:00Z'))).toBe(false);
-		expect(isAtRisk(buildOrbit(year, 1, 12), new Date('2026-12-31T06:00:00Z'))).toBe(true);
+		expect(isClosing(buildOrbit(year, 1, 12), new Date('2026-09-12T06:00:00Z'))).toBe(false);
+		expect(isClosing(buildOrbit(year, 1, 12), new Date('2026-12-31T06:00:00Z'))).toBe(true);
 	});
 
 	it('never flags a closed or dormant orbit', () => {
 		const now = new Date('2026-09-12T18:00:00Z');
-		expect(isAtRisk(buildOrbit(day, 1, 1), now)).toBe(false);
-		expect(isAtRisk(buildOrbit(day, 0, 1, true), now)).toBe(false);
+		expect(isClosing(buildOrbit(day, 1, 1), now)).toBe(false);
+		expect(isClosing(buildOrbit(day, 0, 1, true), now)).toBe(false);
+	});
+});
+
+describe('paceDeficit and isBehindPace', () => {
+	const year = periodFor(new Date('2026-06-01T00:00:00Z'), 'year', options);
+	const week = periodFor(new Date('2026-09-12T06:00:00Z'), 'week', options);
+	/** Half way through 2026, give or take a few hours. */
+	const midYear = new Date('2026-07-02T12:00:00Z');
+	const launched = new Date('2026-01-01T00:00:00Z');
+
+	it('measures the gap between the pace and the standing', () => {
+		// 35% of a 12-unit target, half way through the year.
+		expect(paceDeficit(buildOrbit(year, 4.2, 12), launched, midYear)).toBeCloseTo(0.15, 2);
+		expect(isBehindPace(buildOrbit(year, 4.2, 12), launched, midYear)).toBe(true);
+	});
+
+	it('allows a tenth of the period as slack, since work comes in bursts', () => {
+		// 44% logged against 50% elapsed is behind, but not by enough to nag.
+		expect(isBehindPace(buildOrbit(year, 5.3, 12), launched, midYear)).toBe(false);
+		expect(isBehindPace(buildOrbit(year, 4.7, 12), launched, midYear)).toBe(true);
+	});
+
+	it('is negative and quiet for a goal running ahead', () => {
+		expect(paceDeficit(buildOrbit(year, 10, 12), launched, midYear)).toBeLessThan(0);
+		expect(isBehindPace(buildOrbit(year, 10, 12), launched, midYear)).toBe(false);
+	});
+
+	it('says nothing until a third of the period has run', () => {
+		// Monday evening is not behind on a week, however little is logged.
+		const mondayEvening = new Date('2026-09-07T18:00:00Z');
+		expect(isBehindPace(buildOrbit(week, 0, 120), launched, mondayEvening)).toBe(false);
+		// By Thursday morning the week is a third gone and nothing is logged.
+		expect(isBehindPace(buildOrbit(week, 0, 120), launched, new Date('2026-09-10T12:00:00Z'))).toBe(
+			true
+		);
+	});
+
+	it('does not hold a goal to the part of the period it missed', () => {
+		// Launched three days ago, on a yearly orbit: at the start of its first
+		// orbit, not half a year into it.
+		const justLaunched = new Date('2026-06-29T12:00:00Z');
+		expect(paceDeficit(buildOrbit(year, 0, 12), justLaunched, midYear)).toBeLessThan(
+			PACE_TOLERANCE
+		);
+		expect(isBehindPace(buildOrbit(year, 0, 12), justLaunched, midYear)).toBe(false);
+	});
+
+	it('never nags about a closed or dormant orbit', () => {
+		expect(isBehindPace(buildOrbit(year, 12, 12), launched, midYear)).toBe(false);
+		expect(isBehindPace(buildOrbit(year, 0, 12, true), launched, midYear)).toBe(false);
+		expect(paceDeficit(buildOrbit(year, 0, 12, true), launched, midYear)).toBe(0);
 	});
 });
 
@@ -261,6 +316,12 @@ describe('focusForToday', () => {
 	const now = new Date('2026-12-31T18:00:00Z');
 	/** Mid-quarter, so nothing longer than a day is anywhere near its deadline. */
 	const november = new Date('2026-11-01T12:00:00Z');
+	/** Half way through the year: far from every deadline, and past the pace grace. */
+	const july = new Date('2026-07-02T12:00:00Z');
+
+	function ids(rows: FocusRow[]): string[] {
+		return rows.map((row) => row.snapshot.goal.id);
+	}
 
 	function snapshotFor(overrides: Partial<Goal>, logged: number, dormant = false, at: Date = now) {
 		const subject = goal(overrides);
@@ -282,7 +343,27 @@ describe('focusForToday', () => {
 		const lateYear = snapshotFor({ id: 'year', tier: 'universe', target: 12 }, 1.2);
 		const focus = focusForToday([satellite, lateYear], now);
 
-		expect(focus.atRisk.map((snapshot) => snapshot.goal.id)).toEqual(['year', 'sat']);
+		expect(ids(focus.atRisk)).toEqual(['year', 'sat']);
+	});
+
+	it('calls out a goal behind pace with its deadline still far off', () => {
+		// Half way through the year at 35%: nothing is closing, but this needs
+		// attention all the same.
+		const behind = snapshotFor({ id: 'novel', tier: 'universe', target: 12 }, 4.2, false, july);
+		const focus = focusForToday([behind], july);
+
+		expect(ids(focus.atRisk)).toEqual(['novel']);
+		expect(focus.atRisk[0].behindPace).toBe(true);
+		expect(focus.atRisk[0].closing).toBe(false);
+		expect(focus.steady).toEqual([]);
+	});
+
+	it('leaves a goal on pace out of it entirely', () => {
+		const onPace = snapshotFor({ id: 'novel', tier: 'universe', target: 12 }, 6, false, july);
+		const focus = focusForToday([onPace], july);
+
+		expect(focus.atRisk).toEqual([]);
+		expect(ids(focus.steady)).toEqual(['novel']);
 	});
 
 	it('collapses the closed ones out of the list rather than dropping them', () => {
@@ -291,23 +372,25 @@ describe('focusForToday', () => {
 		const focus = focusForToday([closed, open], now);
 
 		expect(focus.closed.map((snapshot) => snapshot.goal.id)).toEqual(['done']);
-		expect(focus.atRisk.map((snapshot) => snapshot.goal.id)).toEqual(['todo']);
+		expect(ids(focus.atRisk)).toEqual(['todo']);
 	});
 
 	it('parks a goal with room left as steady rather than actionable', () => {
-		const quarter = snapshotFor({ id: 'galaxy', tier: 'galaxy', target: 30 }, 4, false, november);
+		// A month into the quarter with over a quarter of the target logged: short
+		// of the pace, but inside the slack the pace rule allows.
+		const quarter = snapshotFor({ id: 'galaxy', tier: 'galaxy', target: 30 }, 8, false, november);
 		const focus = focusForToday([quarter], november);
 
 		expect(focus.atRisk).toEqual([]);
-		expect(focus.steady.map((snapshot) => snapshot.goal.id)).toEqual(['galaxy']);
+		expect(ids(focus.steady)).toEqual(['galaxy']);
 	});
 
 	it('ranks the ones that can wait by urgency as well', () => {
-		// Two goals on the same quarter, one barely started: it is not work today,
-		// but it is the first thing that becomes work.
+		// Two goals on the same quarter, both still on pace. The one with further to
+		// go is not work today, but it is the first thing that becomes work.
 		const behind = snapshotFor(
 			{ id: 'behind', tier: 'galaxy', target: 30, sortOrder: 1 },
-			2,
+			9,
 			false,
 			november
 		);
@@ -319,7 +402,7 @@ describe('focusForToday', () => {
 		);
 		const focus = focusForToday([ahead, behind], november);
 
-		expect(focus.steady.map((snapshot) => snapshot.goal.id)).toEqual(['behind', 'ahead']);
+		expect(ids(focus.steady)).toEqual(['behind', 'ahead']);
 	});
 
 	it('keeps a dormant orbit out of the at-risk list', () => {
@@ -327,7 +410,7 @@ describe('focusForToday', () => {
 		const focus = focusForToday([dormant], now);
 
 		expect(focus.atRisk).toEqual([]);
-		expect(focus.steady.map((snapshot) => snapshot.goal.id)).toEqual(['asleep']);
+		expect(ids(focus.steady)).toEqual(['asleep']);
 	});
 
 	it("breaks a tie on the nearer deadline, then the pilot's own order", () => {
@@ -335,7 +418,7 @@ describe('focusForToday', () => {
 		const second = snapshotFor({ id: 'b', tier: 'satellite', target: 10, sortOrder: 1 }, 0);
 		const focus = focusForToday([second, first], now);
 
-		expect(focus.atRisk.map((snapshot) => snapshot.goal.id)).toEqual(['a', 'b']);
+		expect(ids(focus.atRisk)).toEqual(['a', 'b']);
 	});
 });
 

@@ -163,11 +163,17 @@ export function streakFrom(history: readonly Orbit[]): number {
  * Periods are unequal by design — a day is 23 or 25 hours across a daylight
  * saving transition, and a quarter is not three equal months — so this reads
  * the span from the period itself rather than assuming a length.
+ *
+ * Pass `since` to start the clock later than the period does. A goal is not
+ * answerable for the part of a period that ran before it existed: a Universe
+ * goal launched in July is at the beginning of its first orbit, not half a year
+ * into it.
  */
-export function periodElapsed(period: Period, now: Date = new Date()): number {
-	const span = period.end.getTime() - period.start.getTime();
+export function periodElapsed(period: Period, now: Date = new Date(), since?: Date): number {
+	const start = since ? Math.max(period.start.getTime(), since.getTime()) : period.start.getTime();
+	const span = period.end.getTime() - start;
 	if (span <= 0) return 1;
-	return Math.max(0, Math.min(1, (now.getTime() - period.start.getTime()) / span));
+	return Math.max(0, Math.min(1, (now.getTime() - start) / span));
 }
 
 /**
@@ -186,67 +192,121 @@ export function urgency(orbit: Orbit, now: Date = new Date()): number {
 	return (1 - orbit.fraction) * periodElapsed(orbit.period, now);
 }
 
-/** How close a period has to be to closing for its orbit to count as at risk. */
-export const RISK_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** How close a period has to be to closing for its orbit to be running out of time. */
+export const CLOSING_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Whether an orbit needs attention now: short of target, with the period about
- * to close.
+ * Whether an orbit is short of target with its period about to close.
  *
  * A satellite's period is never longer than the window, so every unclosed
  * satellite qualifies; everything larger only surfaces as its deadline nears.
  */
-export function isAtRisk(orbit: Orbit, now: Date = new Date(), windowMs = RISK_WINDOW_MS): boolean {
+export function isClosing(
+	orbit: Orbit,
+	now: Date = new Date(),
+	windowMs = CLOSING_WINDOW_MS
+): boolean {
 	if (orbit.complete || orbit.dormant) return false;
 	return orbit.period.end.getTime() - now.getTime() <= windowMs;
 }
 
+/**
+ * How far behind its period's own pace a goal is: the share of the target that
+ * pace calls for by now, minus the share actually logged. Negative when ahead.
+ */
+export function paceDeficit(orbit: Orbit, launchedAt: Date, now: Date = new Date()): number {
+	if (orbit.complete || orbit.dormant) return 0;
+	return periodElapsed(orbit.period, now, launchedAt) - orbit.fraction;
+}
+
+/** How much of a goal's share of a period must run before its pace says anything. */
+export const PACE_GRACE = 1 / 3;
+
+/** How far behind that pace a goal may drift before it needs attention. */
+export const PACE_TOLERANCE = 0.1;
+
+/**
+ * Whether a goal is far enough behind pace to need attention with its deadline
+ * still out of sight — a Universe goal at 35% half way through the year.
+ *
+ * Two guards keep this from crying wolf. Nothing is judged until a third of the
+ * goal's own share of the period has run, because Monday evening is not behind
+ * on a week and a goal launched yesterday is not behind on anything. Past that,
+ * a tenth of the period's worth of slack is allowed on top, since work arrives
+ * in bursts rather than at a constant rate.
+ */
+export function isBehindPace(
+	orbit: Orbit,
+	launchedAt: Date,
+	now: Date = new Date(),
+	tolerance = PACE_TOLERANCE
+): boolean {
+	if (orbit.complete || orbit.dormant) return false;
+	if (periodElapsed(orbit.period, now, launchedAt) < PACE_GRACE) return false;
+	return paceDeficit(orbit, launchedAt, now) > tolerance;
+}
+
+/** One row of the focused view, with what put it there. */
+export interface FocusRow {
+	snapshot: GoalSnapshot;
+	/** How pressing this orbit is, 0-1. */
+	urgency: number;
+	/** The period closes inside the window, so time is the problem. */
+	closing: boolean;
+	/** Behind the pace the period calls for, deadline or no deadline. */
+	behindPace: boolean;
+}
+
 export interface TodayFocus {
-	/** Short of target with the period closing, most urgent first. */
-	atRisk: GoalSnapshot[];
+	/** Needs attention now — running out of time, behind pace, or both. */
+	atRisk: FocusRow[];
 	/** Closed in their current period — kept for the reward, not for the work. */
 	closed: GoalSnapshot[];
-	/** In flight with room left, most behind first. Nothing here is owed today. */
-	steady: GoalSnapshot[];
+	/** In flight, on pace, with the deadline still out of sight. */
+	steady: FocusRow[];
 }
 
 /**
  * Split goals into what today asks for, what it has already given, and what can
  * wait. Pass the same `now` the snapshots were computed with.
  *
- * Both open groups are ranked by urgency, so the long-range goal drifting behind
- * sits at the top of the ones that can wait — the first thing to become work
- * once its own deadline comes into view.
+ * Both open groups are ranked by urgency, so the goal closest to becoming work
+ * sits at the top of the ones that can wait.
  */
 export function focusForToday(
 	snapshots: readonly GoalSnapshot[],
 	now: Date = new Date(),
-	windowMs = RISK_WINDOW_MS
+	windowMs = CLOSING_WINDOW_MS
 ): TodayFocus {
-	const atRisk: GoalSnapshot[] = [];
+	const atRisk: FocusRow[] = [];
 	const closed: GoalSnapshot[] = [];
-	const steady: GoalSnapshot[] = [];
+	const steady: FocusRow[] = [];
 
 	for (const snapshot of snapshots) {
-		if (snapshot.current.complete) closed.push(snapshot);
-		else if (isAtRisk(snapshot.current, now, windowMs)) atRisk.push(snapshot);
-		else steady.push(snapshot);
+		if (snapshot.current.complete) {
+			closed.push(snapshot);
+			continue;
+		}
+		const row: FocusRow = {
+			snapshot,
+			urgency: urgency(snapshot.current, now),
+			closing: isClosing(snapshot.current, now, windowMs),
+			behindPace: isBehindPace(snapshot.current, snapshot.goal.createdAt, now)
+		};
+		(row.closing || row.behindPace ? atRisk : steady).push(row);
 	}
 
-	return { atRisk: byUrgency(atRisk, now), closed, steady: byUrgency(steady, now) };
+	return { atRisk: byUrgency(atRisk), closed, steady: byUrgency(steady) };
 }
 
 /** Most urgent first, ties going to the nearer deadline and then the pilot's own order. */
-function byUrgency(snapshots: GoalSnapshot[], now: Date): GoalSnapshot[] {
-	return snapshots
-		.map((snapshot) => ({ snapshot, score: urgency(snapshot.current, now) }))
-		.sort(
-			(a, b) =>
-				b.score - a.score ||
-				a.snapshot.current.period.end.getTime() - b.snapshot.current.period.end.getTime() ||
-				a.snapshot.goal.sortOrder - b.snapshot.goal.sortOrder
-		)
-		.map((ranked) => ranked.snapshot);
+function byUrgency(rows: FocusRow[]): FocusRow[] {
+	return rows.sort(
+		(a, b) =>
+			b.urgency - a.urgency ||
+			a.snapshot.current.period.end.getTime() - b.snapshot.current.period.end.getTime() ||
+			a.snapshot.goal.sortOrder - b.snapshot.goal.sortOrder
+	);
 }
 
 /** How long a period has left, in the coarsest unit that still says something. */
