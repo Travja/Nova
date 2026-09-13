@@ -21,16 +21,18 @@ of truth and link to it from the issue when the two drift.
 
 The gaps that stand between "it works" and "I use it every day".
 
-| #                                             | Issue                                                           | Why it matters                                            |
-| --------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------- |
-| [#1](https://github.com/Travja/Nova/issues/1) | [Today view](issues/01-today-view.md)                           | The tiered dashboard is the wrong first screen on a phone |
-| [#2](https://github.com/Travja/Nova/issues/2) | [Archive and restore](issues/02-archive-restore.md)             | Archiving works; nothing can see or undo it               |
-| [#3](https://github.com/Travja/Nova/issues/3) | [Edit and backdate entries](issues/03-edit-backdate-entries.md) | Forgetting to log on Sunday should not cost the week      |
-| [#4](https://github.com/Travja/Nova/issues/4) | [Reorder goals](issues/04-reorder-goals.md)                     | `sortOrder` exists with no UI                             |
-| [#5](https://github.com/Travja/Nova/issues/5) | [Offline logging](issues/05-offline-logging.md)                 | You log where the signal is worst                         |
-| [#6](https://github.com/Travja/Nova/issues/6) | [Update prompt](issues/06-update-prompt.md)                     | Versions currently swap silently                          |
-| [#7](https://github.com/Travja/Nova/issues/7) | [Accessibility pass](issues/07-accessibility-pass.md)           | The dial carries the meaning and does not expose it       |
-| [#8](https://github.com/Travja/Nova/issues/8) | [Harden sign-in](issues/08-harden-signin.md)                    | No rate limiting, no password reset                       |
+| #                                               | Issue                                                           | Why it matters                                            |
+| ----------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------- |
+| [#1](https://github.com/Travja/Nova/issues/1)   | [Today view](issues/01-today-view.md)                           | The tiered dashboard is the wrong first screen on a phone |
+| [#2](https://github.com/Travja/Nova/issues/2)   | [Archive and restore](issues/02-archive-restore.md)             | Archiving works; nothing can see or undo it               |
+| [#3](https://github.com/Travja/Nova/issues/3)   | [Edit and backdate entries](issues/03-edit-backdate-entries.md) | Forgetting to log on Sunday should not cost the week      |
+| [#4](https://github.com/Travja/Nova/issues/4)   | [Reorder goals](issues/04-reorder-goals.md)                     | `sortOrder` exists with no UI                             |
+| [#5](https://github.com/Travja/Nova/issues/5)   | [Offline logging](issues/05-offline-logging.md)                 | You log where the signal is worst                         |
+| [#6](https://github.com/Travja/Nova/issues/6)   | [Update prompt](issues/06-update-prompt.md)                     | Versions currently swap silently                          |
+| [#7](https://github.com/Travja/Nova/issues/7)   | [Accessibility pass](issues/07-accessibility-pass.md)           | The dial carries the meaning and does not expose it       |
+| [#32](https://github.com/Travja/Nova/issues/32) | [Mobile density](issues/32-mobile-density.md)                   | A 390px screen shows about two goal cards                 |
+| [#33](https://github.com/Travja/Nova/issues/33) | [Floating quick-add](issues/33-floating-quick-add.md)           | The primary action sits where a thumb reaches last        |
+| [#8](https://github.com/Travja/Nova/issues/8)   | [Harden sign-in](issues/08-harden-signin.md)                    | No rate limiting, no password reset                       |
 
 ## M2 — The fun part
 
