@@ -1,15 +1,21 @@
 <script lang="ts">
+	import TierBody from '$components/TierBody.svelte';
 	import type { Orbit } from '$domain/progress';
+	import type { Tier } from '$domain/tiers';
 
 	/** The last handful of orbits as small rings — a streak you can read at a glance. */
 	interface Props {
 		history: readonly Orbit[];
+		tier: Tier;
 		color: string;
 	}
 
-	let { history, color }: Props = $props();
+	let { history, tier, color }: Props = $props();
 
+	const CENTER = 12;
 	const RADIUS = 9;
+	/** Small enough to sit on the ring, large enough to still have a silhouette. */
+	const BODY = 3.6;
 	const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 	/** Oldest first reads like a timeline. */
@@ -31,16 +37,26 @@
 					? `${shortLabel(orbit)}: archived, no orbit expected`
 					: `${shortLabel(orbit)}: ${Math.round(orbit.fraction * 100)}%`}
 			>
-				<circle class="track" class:dashed={orbit.dormant} cx="12" cy="12" r={RADIUS} />
+				<circle class="track" class:dashed={orbit.dormant} cx={CENTER} cy={CENTER} r={RADIUS} />
 				<circle
 					class="fill"
 					class:complete={orbit.complete}
-					cx="12"
-					cy="12"
+					cx={CENTER}
+					cy={CENTER}
 					r={RADIUS}
 					stroke-dasharray={CIRCUMFERENCE}
 					stroke-dashoffset={CIRCUMFERENCE * (1 - orbit.fraction)}
 				/>
+				<g style="transform: rotate({orbit.angle}deg); transform-origin: {CENTER}px {CENTER}px">
+					<TierBody
+						{tier}
+						cx={CENTER}
+						cy={CENTER - RADIUS}
+						r={BODY}
+						compact
+						dormant={orbit.dormant}
+					/>
+				</g>
 			</svg>
 			<span class="label muted">{shortLabel(orbit)}</span>
 		</li>
@@ -74,8 +90,9 @@
 	}
 
 	svg {
-		height: 2rem;
-		width: 2rem;
+		height: 2.3rem;
+		overflow: visible;
+		width: 2.3rem;
 	}
 
 	.track {

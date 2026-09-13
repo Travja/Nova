@@ -1,4 +1,5 @@
 <script lang="ts">
+	import TierBody from '$components/TierBody.svelte';
 	import type { Orbit } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
@@ -31,20 +32,29 @@
 	const dashOffset = $derived(CIRCUMFERENCE * (1 - orbit.fraction));
 	/** Degrees clockwise from the top of the ring. */
 	const bodyAngle = $derived(orbit.angle);
-	const bodyRadius = $derived(3.2 + tierDef.scale * 2.2);
+	const bodyRadius = $derived(4.4 + tierDef.scale * 2.6);
 	/** Satellites are small and fast; universes are vast and slow. */
 	const orbitSeconds = $derived(14 + tierDef.scale * 26);
+	/**
+	 * Below roughly ten pixels across, the detail on a body stops being detail and
+	 * starts being noise, so the body drops to its silhouette instead.
+	 */
+	const compact = $derived((2 * bodyRadius * size) / 100 < 11);
 	/**
 	 * Keep the divider attached to the amount it follows. A caption long enough
 	 * to wrap — `180 pages / 300 pages` — should break after the slash, never
 	 * start its second line with one.
 	 */
 	const captionText = $derived(caption.replace(' / ', '\u00a0/ '));
+
+	/** Gradient ids have to be unique per dial and stable across hydration. */
+	const uid = $props.id();
 </script>
 
 <div
 	class="dial"
-	class:dial--complete={orbit.complete}
+	class:dial--complete={orbit.complete && !orbit.dormant}
+	class:dial--dormant={orbit.dormant}
 	style="--size: {size}px; --color: {color}; --accent: {tierDef.accent}; --orbit-seconds: {orbitSeconds}s"
 >
 	<svg viewBox="0 0 100 100" role="presentation">
@@ -53,6 +63,13 @@
 				<stop offset="0%" stop-color="#fffbe8" />
 				<stop offset="55%" stop-color={tierDef.accent} />
 				<stop offset="100%" stop-color="transparent" />
+			</radialGradient>
+			<!-- The halo a body casts. A flat circle at low opacity reads as a disc
+			     the body is sitting on, which flattens whatever is drawn on it. -->
+			<radialGradient id="glow-{uid}">
+				<stop offset="0%" stop-color="var(--color)" stop-opacity="0.45" />
+				<stop offset="45%" stop-color="var(--color)" stop-opacity="0.18" />
+				<stop offset="100%" stop-color="var(--color)" stop-opacity="0" />
 			</radialGradient>
 		</defs>
 
@@ -78,17 +95,31 @@
 		<!-- The body itself, parked at the point the arc reached -->
 		<g class="body-spin">
 			<g style="transform: rotate({bodyAngle}deg); transform-origin: {CENTER}px {CENTER}px">
-				<circle class="body-glow" cx={CENTER} cy={CENTER - RADIUS} r={bodyRadius * 2.1} />
-				<circle class="body" cx={CENTER} cy={CENTER - RADIUS} r={bodyRadius} />
-				{#if tier === 'starSystem' || tier === 'galaxy' || tier === 'universe'}
-					<ellipse
-						class="body-ring"
+				{#if !orbit.dormant}
+					<circle
+						class="body-glow"
 						cx={CENTER}
 						cy={CENTER - RADIUS}
-						rx={bodyRadius * 1.9}
-						ry={bodyRadius * 0.6}
+						r={bodyRadius * 2.3}
+						fill="url(#glow-{uid})"
 					/>
 				{/if}
+				<!-- Travelling round the ring must not tip the body over with it: a
+				     planet's bands stay level however far along the arc it is. -->
+				<g
+					style="transform: rotate({-bodyAngle}deg); transform-origin: {CENTER}px {CENTER -
+						RADIUS}px"
+				>
+					<TierBody
+						{tier}
+						cx={CENTER}
+						cy={CENTER - RADIUS}
+						r={bodyRadius}
+						{compact}
+						dormant={orbit.dormant}
+						spinSeconds={orbitSeconds}
+					/>
+				</g>
 			</g>
 		</g>
 	</svg>
@@ -147,26 +178,28 @@
 		transform-origin: 50px 50px;
 	}
 
-	.body {
-		fill: var(--color);
-	}
-
 	.body-glow {
-		fill: var(--color);
-		opacity: 0.22;
 		animation: pulse 3.5s ease-in-out infinite;
 		transform-box: fill-box;
 		transform-origin: center;
 	}
 
-	.body-ring {
-		fill: none;
-		stroke: var(--color);
-		stroke-width: 0.7;
-		opacity: 0.75;
-		transform-box: fill-box;
-		transform-origin: center;
-		transform: rotate(-22deg);
+	/* A period spent archived was never flown, so the whole dial goes cold: the
+	   ring is drawn but nothing about it is lit. */
+	.dial--dormant .arc {
+		filter: none;
+		opacity: 0.35;
+		stroke: #7c87b4;
+	}
+
+	.dial--dormant .core {
+		animation: none;
+		opacity: 0.3;
+	}
+
+	.dial--dormant .dust {
+		animation: none;
+		opacity: 0.4;
 	}
 
 	/* A closed orbit keeps moving as its own small reward. */

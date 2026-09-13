@@ -240,7 +240,7 @@
 
 	<section class="panel block">
 		<h2>Recent orbits</h2>
-		<OrbitHistory history={data.snapshot.history} color={goal.color} />
+		<OrbitHistory history={data.snapshot.history} tier={goal.tier} color={goal.color} />
 	</section>
 
 	<section class="panel block" id="entries">
