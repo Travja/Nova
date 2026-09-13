@@ -27,9 +27,41 @@ export const sessions = sqliteTable(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		expiresAt: timestamp('expires_at').notNull(),
-		createdAt: timestamp('created_at').notNull()
+		createdAt: timestamp('created_at').notNull(),
+		/**
+		 * What the browser called itself when the session was created, so the
+		 * session list can say which device a row belongs to. Null for sessions
+		 * that predate the column, and for clients that send no user agent.
+		 */
+		userAgent: text('user_agent'),
+		/** Refreshed lazily as the session is used; null until it is used again. */
+		lastSeenAt: timestamp('last_seen_at')
 	},
 	(table) => [index('sessions_user_id_idx').on(table.userId)]
+);
+
+/**
+ * One row per password reset in flight.
+ *
+ * The same shape as `sessions`, and for the same reason: the mailbox holds a
+ * random token, the database holds only its SHA-256, so a leaked database
+ * cannot be used to reset anybody's password. Single use — `usedAt` is stamped
+ * the moment a token is spent, and a spent or expired row is as good as gone.
+ */
+export const passwordResetTokens = sqliteTable(
+	'password_reset_tokens',
+	{
+		/** SHA-256 of the token that went out in the email. */
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		expiresAt: timestamp('expires_at').notNull(),
+		createdAt: timestamp('created_at').notNull(),
+		/** Null until the token is spent; set once, never cleared. */
+		usedAt: timestamp('used_at')
+	},
+	(table) => [index('password_reset_tokens_user_idx').on(table.userId)]
 );
 
 export const goals = sqliteTable(
@@ -98,3 +130,4 @@ export type GoalRow = typeof goals.$inferSelect;
 export type EntryRow = typeof entries.$inferSelect;
 export type GoalArchiveWindowRow = typeof goalArchiveWindows.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
+export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;

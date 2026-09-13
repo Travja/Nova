@@ -1,7 +1,7 @@
 import { db } from '$lib/server/db';
 import { users } from '$lib/server/db/schema';
 import { hashPassword, verifyPassword } from '$lib/server/auth/password';
-import { newId, type SessionUser } from '$lib/server/auth/session';
+import { newId, revokeOtherSessions, type SessionUser } from '$lib/server/auth/session';
 import type { RegisterInput } from '$domain/validation';
 import { eq } from 'drizzle-orm';
 
@@ -63,4 +63,38 @@ export async function updateProfile(
 	patch: { displayName?: string; timeZone?: string; weekStartsOn?: number }
 ): Promise<void> {
 	await db.update(users).set(patch).where(eq(users.id, userId));
+}
+
+/**
+ * Change a password, then evict every other session.
+ *
+ * The current password is verified here rather than in the route, so no caller
+ * can change a password without it. Revoking the other sessions is part of the
+ * same operation for the same reason: a password is changed when someone else
+ * may know the old one, and leaving their thirty-day cookie working would make
+ * the change worth very little.
+ */
+export async function changePassword(
+	userId: string,
+	currentPassword: string,
+	newPassword: string,
+	keepToken: string | null
+): Promise<{ ok: true; revoked: number } | { ok: false; reason: 'wrong-password' }> {
+	const [row] = await db
+		.select({ passwordHash: users.passwordHash })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+
+	if (!row || !(await verifyPassword(row.passwordHash, currentPassword))) {
+		return { ok: false, reason: 'wrong-password' };
+	}
+
+	await db
+		.update(users)
+		.set({ passwordHash: await hashPassword(newPassword) })
+		.where(eq(users.id, userId));
+
+	const revoked = await revokeOtherSessions(userId, keepToken);
+	return { ok: true, revoked };
 }

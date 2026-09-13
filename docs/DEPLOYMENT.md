@@ -139,6 +139,12 @@ Only set `ADDRESS_HEADER` when a proxy you control overwrites that header on
 every request. A client can send `X-Forwarded-For` itself, and an app that
 trusts it blindly is trusting the client.
 
+This is also what the sign-in rate limiter counts by. Without `ADDRESS_HEADER`
+every request looks like it came from the proxy, so the per-address half of the
+limit lumps the whole internet into one bucket; with it trusted wrongly, a
+client can pick a fresh address per attempt and dodge that half entirely. The
+per-account half works either way.
+
 ## 4. `ORIGIN` must match the URL you browse to
 
 This is the most common deployment failure, and it does not look like a
@@ -288,14 +294,67 @@ docker compose ps          # healthy, not just running
 docker compose logs -f nova
 ```
 
+## 8. Email, if you want password resets
+
+Nova sends exactly one kind of message — a password reset link — and only if you
+configure a mail server. Leave `SMTP_HOST` unset and nothing changes: no mail,
+no outbound connection, and the "forgotten password" page says so plainly rather
+than pretending to have sent something. The way back in is then the shell:
+
+```bash
+docker compose exec nova node scripts/reset-password.mjs pilot@example.com
+# Reset link for Test Pilot <pilot@example.com> — works once, expires in 30 minutes:
+# https://nova.example.com/reset?token=...
+```
+
+For a one-person instance that is arguably the better answer: nothing to
+configure, nothing to deliver, no credentials on disk.
+
+To send mail instead, point Nova at any SMTP server:
+
+```yaml
+SMTP_HOST: smtp.example.com
+SMTP_PORT: 587
+SMTP_USER: nova@example.com
+SMTP_PASS: an-app-password
+MAIL_FROM: Nova <nova@example.com>
+```
+
+Port 465 is treated as implicit TLS; every other port must support STARTTLS,
+which Nova requires rather than merely attempts — a relay that cannot upgrade
+would otherwise carry the reset link in clear text across the network.
+
+**Deliverability is the hard part, not the configuration.** Two things decide
+whether your reset mail arrives:
+
+- **Most hosts block outbound port 25**, so a mail server on the same box
+  usually cannot deliver directly. Relaying through a mailbox provider you
+  already have (its SMTP host, your address, an app password) is the path of
+  least resistance.
+- **Mail from a domain with no SPF, DKIM or DMARC records is treated as
+  suspicious**, and silently binned by the larger receivers. If you send as
+  `you@yourdomain`, publish at least SPF and DKIM for whatever relays it.
+
+Test it before you need it — ask for a reset on your own account and watch the
+logs. A failed send is logged at `error` with `mail send failed`; the reset link
+never appears in the logs, whether the send worked or not.
+
+`ORIGIN` matters more than usual here: the link in the email is built from it.
+Nova will not fall back to the request's `Host` header, because that header is
+written by whoever sent the request and a reset link built from it would point
+wherever they liked. If `ORIGIN` is unset in production the send is refused and
+logged.
+
 ## Troubleshooting
 
-| Symptom                                                                                               | Cause                                                             | Fix                                                                   |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Pages load, every form returns `Cross-site POST form submissions are forbidden` and nothing is logged | `ORIGIN` ≠ the URL in the address bar                             | Set `ORIGIN` to the exact browsed origin, then `docker compose up -d` |
-| Signed out immediately after signing in                                                               | Cookie is `secure` in production and the connection is plain HTTP | Serve over HTTPS and set `PROTOCOL_HEADER`                            |
-| Browser will not offer "Install"                                                                      | PWA requires HTTPS and a reachable manifest                       | Finish the TLS step; check `/manifest.webmanifest` loads              |
-| Every log line shows the proxy's IP                                                                   | `ADDRESS_HEADER` unset                                            | Set `ADDRESS_HEADER`/`XFF_DEPTH` as above                             |
-| 502 from the proxy                                                                                    | Container down, or the proxy points at the wrong port             | `docker compose ps`, `curl localhost:3000/health`                     |
-| `docker compose ps` shows `unhealthy`                                                                 | The database is not reachable                                     | `curl localhost:3000/health`, check the `nova-data` volume is mounted |
-| Uploads or long forms rejected with 413                                                               | `BODY_SIZE_LIMIT` or the proxy's body limit                       | Raise both; they have to agree                                        |
+| Symptom                                                                                               | Cause                                                             | Fix                                                                                        |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Pages load, every form returns `Cross-site POST form submissions are forbidden` and nothing is logged | `ORIGIN` ≠ the URL in the address bar                             | Set `ORIGIN` to the exact browsed origin, then `docker compose up -d`                      |
+| Signed out immediately after signing in                                                               | Cookie is `secure` in production and the connection is plain HTTP | Serve over HTTPS and set `PROTOCOL_HEADER`                                                 |
+| Browser will not offer "Install"                                                                      | PWA requires HTTPS and a reachable manifest                       | Finish the TLS step; check `/manifest.webmanifest` loads                                   |
+| Every log line shows the proxy's IP                                                                   | `ADDRESS_HEADER` unset                                            | Set `ADDRESS_HEADER`/`XFF_DEPTH` as above                                                  |
+| 502 from the proxy                                                                                    | Container down, or the proxy points at the wrong port             | `docker compose ps`, `curl localhost:3000/health`                                          |
+| `docker compose ps` shows `unhealthy`                                                                 | The database is not reachable                                     | `curl localhost:3000/health`, check the `nova-data` volume is mounted                      |
+| Uploads or long forms rejected with 413                                                               | `BODY_SIZE_LIMIT` or the proxy's body limit                       | Raise both; they have to agree                                                             |
+| Reset mail never arrives                                                                              | No `SMTP_HOST`, or the relay rejected it                          | `docker compose logs nova \| grep 'mail send failed'`; or use `scripts/reset-password.mjs` |
+| Reset links point at `localhost`                                                                      | `ORIGIN` unset or wrong                                           | Set `ORIGIN` to the browsed origin, as in step 4                                           |

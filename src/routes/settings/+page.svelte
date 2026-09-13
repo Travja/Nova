@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -56,6 +57,11 @@
 
 		<button class="button" type="submit">Save</button>
 	</form>
+
+	<p class="muted">
+		Looking for your password or the devices you are signed in on?
+		<a href={resolve('/settings/security')}>Security settings</a>.
+	</p>
 </section>
 
 <style>

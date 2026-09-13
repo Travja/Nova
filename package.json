@@ -22,6 +22,7 @@
 		"db:studio": "drizzle-kit studio",
 		"e2e": "playwright test",
 		"db:reset:e2e": "node scripts/reset-e2e-db.mjs",
+		"reset:password": "node scripts/reset-password.mjs",
 		"seed:issues": "node scripts/seed-issues.mjs"
 	},
 	"devDependencies": {
@@ -32,6 +33,7 @@
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@types/better-sqlite3": "^9.6.0",
+		"@types/nodemailer": "^8.0.1",
 		"@vite-pwa/sveltekit": "^1.1.0",
 		"@vitest/coverage-v8": "^5.0.0",
 		"drizzle-kit": "^0.31.10",
@@ -53,7 +55,8 @@
 		"@node-rs/argon2": "^2.2.1",
 		"better-sqlite3": "^13.0.3",
 		"drizzle-orm": "^0.45.2",
+		"nodemailer": "^10.0.9",
 		"zod": "^4.6.2"
 	},
-	"description": "Track your goals as orbits \u2014 a space-themed, installable goal tracker."
+	"description": "Track your goals as orbits — a space-themed, installable goal tracker."
 }
