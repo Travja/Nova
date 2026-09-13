@@ -1,6 +1,7 @@
 <script lang="ts">
 	import TierBody from '$components/TierBody.svelte';
 	import { celebrationFor } from '$lib/celebration.svelte';
+	import { bodyVariant } from '$domain/bodies';
 	import { rayAngles } from '$domain/celebration';
 	import type { Orbit } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
@@ -23,14 +24,15 @@
 		/** Text shown at the centre, e.g. `45m / 2h`. */
 		caption?: string;
 		/**
-		 * The goal this dial is drawing, so it can catch the moment that goal
-		 * closes an orbit. Left out — by the form preview, which has no goal —
-		 * the dial never celebrates.
+		 * The goal this dial is drawing. It pins which body of the tier is flown,
+		 * and it is how the dial catches the moment that goal closes an orbit.
+		 * Left out — by the form preview, which has no goal yet — the dial draws
+		 * the tier's first body and never celebrates.
 		 */
-		celebrationKey?: string;
+		goalId?: string;
 	}
 
-	let { orbit, tier, color, size = 180, caption = '', celebrationKey = '' }: Props = $props();
+	let { orbit, tier, color, size = 180, caption = '', goalId = '' }: Props = $props();
 
 	const CENTER = 50;
 	const RADIUS = 36;
@@ -58,8 +60,10 @@
 	/** Gradient ids have to be unique per dial and stable across hydration. */
 	const uid = $props.id();
 
+	/** The body this goal flies, which never changes under it. */
+	const variant = $derived(bodyVariant(tier, goalId));
 	/** Set for as long as this goal's closing is being celebrated. */
-	const closing = $derived(celebrationKey ? celebrationFor(celebrationKey) : null);
+	const closing = $derived(goalId ? celebrationFor(goalId) : null);
 	const rays = $derived(closing ? rayAngles(closing.shape.rays) : []);
 </script>
 
@@ -160,6 +164,7 @@
 				>
 					<TierBody
 						{tier}
+						{variant}
 						cx={CENTER}
 						cy={CENTER - RADIUS}
 						r={bodyRadius}

@@ -104,10 +104,16 @@ The space theme is not decoration bolted on afterwards; the orbit is the
 progress bar. `OrbitDial.svelte` maps a goal's fraction to an arc and puts the
 body at the matching angle, so position and fill say the same thing two ways.
 
-`TierBody.svelte` draws the body itself, one silhouette per tier, inside a unit
-circle that the caller scales into place — which is why the same component works
-on a 230px hero dial and on a 24px ring in the history strip. Anything finer
-than a pixel is dropped rather than drawn small.
+`TierBody.svelte` draws the body itself, inside a unit circle that the caller
+scales into place — which is why the same component works on a 230px hero dial
+and on a 24px ring in the history strip. Anything finer than a pixel is dropped
+rather than drawn small.
+
+Each tier is a family rather than a stamp: `src/lib/components/bodies/` holds a
+few bodies per tier, and `bodyVariant()` in the domain picks one by hashing the
+goal's id. Pinning it to the id rather than storing it on the row means there is
+no column to migrate and no way for a body to change under a goal that has been
+flying for a year — ids never change, and titles, colours and tiers do.
 
 Rules for anything animated:
 

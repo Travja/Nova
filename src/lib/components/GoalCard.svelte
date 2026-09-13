@@ -40,7 +40,7 @@
 			color={goal.color}
 			size={168}
 			{caption}
-			celebrationKey={goal.id}
+			goalId={goal.id}
 		/>
 	</a>
 

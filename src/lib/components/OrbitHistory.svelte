@@ -1,5 +1,6 @@
 <script lang="ts">
 	import TierBody from '$components/TierBody.svelte';
+	import { bodyVariant } from '$domain/bodies';
 	import type { Orbit } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
 
@@ -7,10 +8,14 @@
 	interface Props {
 		history: readonly Orbit[];
 		tier: Tier;
+		/** Pins the body, so the strip flies the same one the dial above it does. */
+		goalId: string;
 		color: string;
 	}
 
-	let { history, tier, color }: Props = $props();
+	let { history, tier, goalId, color }: Props = $props();
+
+	const variant = $derived(bodyVariant(tier, goalId));
 
 	const CENTER = 12;
 	const RADIUS = 9;
@@ -50,6 +55,7 @@
 				<g style="transform: rotate({orbit.angle}deg); transform-origin: {CENTER}px {CENTER}px">
 					<TierBody
 						{tier}
+						{variant}
 						cx={CENTER}
 						cy={CENTER - RADIUS}
 						r={BODY}

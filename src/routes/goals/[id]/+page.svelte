@@ -92,7 +92,7 @@
 				goal.target,
 				goal.metric
 			)}"
-			celebrationKey={goal.id}
+			goalId={goal.id}
 		/>
 
 		<div class="hero__copy">
@@ -250,7 +250,12 @@
 
 	<section class="panel block">
 		<h2>Recent orbits</h2>
-		<OrbitHistory history={data.snapshot.history} tier={goal.tier} color={goal.color} />
+		<OrbitHistory
+			history={data.snapshot.history}
+			tier={goal.tier}
+			goalId={goal.id}
+			color={goal.color}
+		/>
 	</section>
 
 	<section class="panel block" id="entries">
