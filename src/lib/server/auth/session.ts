@@ -2,6 +2,7 @@ import { db } from '$lib/server/db';
 import { sessions, users, type UserRow } from '$lib/server/db/schema';
 import { describeDevice } from '$lib/server/auth/user-agent';
 import { hashToken, newToken } from '$lib/server/auth/token';
+import { readPreferences, type Preferences } from '$domain/preferences';
 import type { Cookies } from '@sveltejs/kit';
 import { and, desc, eq, gt, ne } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
@@ -26,6 +27,8 @@ export interface SessionUser {
 	displayName: string;
 	timeZone: string;
 	weekStartsOn: number;
+	/** How this account wants the app drawn; defaults until it says otherwise. */
+	preferences: Preferences;
 }
 
 function toSessionUser(row: UserRow): SessionUser {
@@ -34,7 +37,8 @@ function toSessionUser(row: UserRow): SessionUser {
 		email: row.email,
 		displayName: row.displayName,
 		timeZone: row.timeZone,
-		weekStartsOn: row.weekStartsOn
+		weekStartsOn: row.weekStartsOn,
+		preferences: readPreferences(row.preferences)
 	};
 }
 

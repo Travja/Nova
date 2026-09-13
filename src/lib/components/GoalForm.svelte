@@ -144,7 +144,7 @@
 			orbit={previewOrbit}
 			tier={tierDef.id}
 			{color}
-			size={190}
+			size={170}
 			caption={formatAmount(Number(target) || 0, { kind: metricKind, unit: metricUnit })}
 		/>
 		<p class="muted preview__copy">
@@ -241,11 +241,18 @@
 		gap: 0.5rem;
 	}
 
+	/*
+	 * The dot stays 1.6rem; the target around it goes to the floor. Picking a
+	 * colour is a one-off, but it is still a control, and seven of them in a row
+	 * at 34px is the definition of having to aim.
+	 */
 	.swatch {
 		border: 2px solid transparent;
 		border-radius: 50%;
 		cursor: pointer;
 		display: grid;
+		min-height: var(--tap-min);
+		min-width: var(--tap-min);
 		padding: 2px;
 		place-items: center;
 	}

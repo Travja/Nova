@@ -2,6 +2,7 @@
 	import TierBody from '$components/TierBody.svelte';
 	import { celebrationFor } from '$lib/celebration.svelte';
 	import { bodyVariant } from '$domain/bodies';
+	import { MIN_DIAL_SCALE } from '$domain/preferences';
 	import { rayAngles } from '$domain/celebration';
 	import type { Orbit } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
@@ -48,8 +49,13 @@
 	/**
 	 * Below roughly ten pixels across, the detail on a body stops being detail and
 	 * starts being noise, so the body drops to its silhouette instead.
+	 *
+	 * Measured at the smallest this dial can be drawn rather than at `size`,
+	 * because the density that scales it lives in CSS and is not readable from
+	 * here. Erring that way is the safe direction: a silhouette drawn slightly
+	 * larger than it had to be still reads, whereas detail at 9px does not.
 	 */
-	const compact = $derived((2 * bodyRadius * size) / 100 < 11);
+	const compact = $derived((2 * bodyRadius * size * MIN_DIAL_SCALE) / 100 < 11);
 	/**
 	 * Keep the divider attached to the amount it follows. A caption long enough
 	 * to wrap — `180 pages / 300 pages` — should break after the slash, never
@@ -71,7 +77,7 @@
 	class="dial"
 	class:dial--complete={orbit.complete && !orbit.dormant}
 	class:dial--dormant={orbit.dormant}
-	style="--size: {size}px; --color: {color}; --accent: {tierDef.accent}; --orbit-seconds: {orbitSeconds}s"
+	style="--size: calc({size}px * var(--dial-scale)); --color: {color}; --accent: {tierDef.accent}; --orbit-seconds: {orbitSeconds}s"
 >
 	<svg viewBox="0 0 100 100" role="presentation">
 		<defs>

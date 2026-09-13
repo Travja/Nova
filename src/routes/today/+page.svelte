@@ -132,7 +132,9 @@
 			<ul class="compact">
 				{#each focus.closed as snapshot (snapshot.goal.id)}
 					<li>
-						<a href={resolve('/goals/[id]', { id: snapshot.goal.id })}>{snapshot.goal.title}</a>
+						<a class="tap" href={resolve('/goals/[id]', { id: snapshot.goal.id })}
+							>{snapshot.goal.title}</a
+						>
 						<span class="muted">{standing(snapshot)}</span>
 						<span class="done">closed {CADENCE_LABEL[snapshot.current.period.cadence]}</span>
 					</li>
@@ -152,7 +154,7 @@
 			<ul class="compact">
 				{#each focus.steady as row (row.snapshot.goal.id)}
 					<li>
-						<a href={resolve('/goals/[id]', { id: row.snapshot.goal.id })}
+						<a class="tap" href={resolve('/goals/[id]', { id: row.snapshot.goal.id })}
 							>{row.snapshot.goal.title}</a
 						>
 						<span class="muted">{standing(row.snapshot)}</span>
@@ -167,7 +169,7 @@
 <style>
 	.today {
 		display: grid;
-		gap: 1.5rem;
+		gap: var(--gap-view);
 	}
 
 	.head {
@@ -184,28 +186,28 @@
 
 	.live {
 		color: var(--success);
-		font-size: 0.9rem;
-		margin: -1.25rem 0 0;
+		font-size: var(--text-secondary);
+		margin: -0.9rem 0 0;
 	}
 
 	.empty {
 		display: grid;
-		gap: 1rem;
+		gap: var(--gap-block);
 		justify-items: center;
-		padding: 2.5rem 1.5rem;
+		padding: 2rem 1.25rem;
 		text-align: center;
 	}
 
 	/* The pilot above says it is a clear sky; this says what that means. */
 	.clear {
-		font-size: 0.9rem;
-		margin: -0.75rem 0 0;
+		font-size: var(--text-secondary);
+		margin: -0.5rem 0 0;
 		max-width: 60ch;
 	}
 
 	.risk {
 		display: grid;
-		gap: 1.25rem;
+		gap: var(--gap-list);
 		list-style: none;
 		margin: 0;
 		padding: 0;
@@ -215,14 +217,14 @@
 		align-items: baseline;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.6rem;
-		margin: 0 0 0.4rem;
+		gap: 0.4rem 0.6rem;
+		margin: 0 0 0.3rem;
 	}
 
 	.pill {
 		border: 1px solid currentColor;
 		border-radius: 999px;
-		font-size: 0.7rem;
+		font-size: var(--text-label);
 		font-weight: 640;
 		letter-spacing: 0.08em;
 		padding: 0.15rem 0.55rem;
@@ -233,7 +235,7 @@
 		border: 1px solid currentColor;
 		border-radius: 999px;
 		color: var(--accent-warm);
-		font-size: 0.7rem;
+		font-size: var(--text-label);
 		font-weight: 640;
 		letter-spacing: 0.08em;
 		padding: 0.15rem 0.55rem;
@@ -241,40 +243,48 @@
 	}
 
 	.deadline .muted {
-		font-size: 0.85rem;
+		font-size: var(--text-secondary);
 	}
 
 	.fold {
 		border: 1px solid var(--space-border);
 		border-radius: var(--radius);
-		padding: 0.75rem 1rem;
+		padding: 0.35rem 0.9rem;
 	}
 
+	/*
+	 * A disclosure is a control, so it carries the floor like any other — by
+	 * padding rather than by `.tap`, because any `display` other than
+	 * `list-item` takes the triangle away with it. The fold's own padding comes
+	 * down to pay for the taller summary.
+	 */
 	summary {
 		color: var(--text-bright);
 		cursor: pointer;
 		font-weight: 600;
+		min-height: var(--tap-min);
+		padding: 0.68rem 0;
 	}
 
 	.fold__note {
-		font-size: 0.85rem;
-		margin: 0.6rem 0 0;
+		font-size: var(--text-secondary);
+		margin: 0.4rem 0 0;
 		max-width: 60ch;
 	}
 
 	.compact {
 		display: grid;
-		gap: 0.5rem;
+		gap: 0.15rem;
 		list-style: none;
-		margin: 0.75rem 0 0;
+		margin: 0.35rem 0 0;
 		padding: 0;
 	}
 
 	.compact li {
-		align-items: baseline;
+		align-items: center;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.6rem;
+		gap: 0 0.6rem;
 		justify-content: space-between;
 	}
 
@@ -283,11 +293,11 @@
 	}
 
 	.compact span {
-		font-size: 0.85rem;
+		font-size: var(--text-secondary);
 	}
 
 	.done {
 		color: var(--success);
-		font-size: 0.85rem;
+		font-size: var(--text-secondary);
 	}
 </style>

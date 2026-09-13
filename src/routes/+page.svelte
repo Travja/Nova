@@ -238,15 +238,15 @@
 
 	.empty {
 		display: grid;
-		gap: 1rem;
+		gap: var(--gap-block);
 		justify-items: center;
-		padding: 3rem 1.5rem;
+		padding: 2.5rem 1.25rem;
 		text-align: center;
 	}
 
 	.dashboard {
 		display: grid;
-		gap: 2.25rem;
+		gap: 1.5rem;
 	}
 
 	.dashboard__head {
@@ -264,8 +264,8 @@
 	}
 
 	.reorder-hint {
-		font-size: 0.9rem;
-		margin: -1.25rem 0 0;
+		font-size: var(--text-secondary);
+		margin: -0.9rem 0 0;
 		max-width: 60ch;
 	}
 
@@ -275,17 +275,17 @@
 
 	.live {
 		color: var(--success);
-		font-size: 0.9rem;
-		margin: -1.5rem 0 0;
+		font-size: var(--text-secondary);
+		margin: -1rem 0 0;
 	}
 
 	.archive-link {
-		font-size: 0.88rem;
+		font-size: var(--text-secondary);
 	}
 
 	.tier {
 		display: grid;
-		gap: 0.9rem;
+		gap: var(--gap-list);
 	}
 
 	.tier__head {
@@ -294,16 +294,16 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
-		padding-bottom: 0.5rem;
+		padding-bottom: 0.35rem;
 	}
 
 	.tier__head span {
-		font-size: 0.88rem;
+		font-size: var(--text-secondary);
 	}
 
 	.grid {
 		display: grid;
-		gap: 1rem;
+		gap: var(--gap-list);
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
 	}
 

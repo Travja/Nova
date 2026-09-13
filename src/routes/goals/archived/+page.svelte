@@ -57,7 +57,7 @@
 						tier={goal.tier}
 						color={goal.color}
 						goalId={goal.id}
-						size={144}
+						size={120}
 						caption="{formatAmount(snapshot.current.logged, goal.metric)} / {formatAmount(
 							goal.target,
 							goal.metric
@@ -107,7 +107,7 @@
 <style>
 	.archive {
 		display: grid;
-		gap: 1.25rem;
+		gap: var(--gap-view);
 	}
 
 	.head {
@@ -128,14 +128,14 @@
 
 	.live {
 		color: var(--success);
-		font-size: 0.9rem;
+		font-size: var(--text-secondary);
 	}
 
 	.empty {
 		display: grid;
-		gap: 0.75rem;
+		gap: var(--gap-block);
 		justify-items: center;
-		padding: 2.5rem 1.5rem;
+		padding: 2rem 1.25rem;
 		text-align: center;
 	}
 
@@ -145,7 +145,7 @@
 
 	.list {
 		display: grid;
-		gap: 1rem;
+		gap: var(--gap-list);
 		list-style: none;
 		margin: 0;
 		padding: 0;
@@ -154,14 +154,14 @@
 	.card {
 		align-items: center;
 		display: grid;
-		gap: 1.25rem;
+		gap: var(--gap-card);
 		grid-template-columns: auto 1fr auto;
-		padding: 1.1rem;
+		padding: var(--pad-card);
 	}
 
 	.body {
 		display: grid;
-		gap: 0.75rem;
+		gap: var(--gap-block);
 		min-width: 0;
 	}
 
@@ -174,13 +174,13 @@
 	}
 
 	.heading p {
-		font-size: 0.85rem;
+		font-size: var(--text-secondary);
 	}
 
 	.stats {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 1.25rem;
+		gap: 0.25rem 0.9rem;
 		margin: 0;
 	}
 
@@ -191,7 +191,7 @@
 
 	dt {
 		color: var(--text-dim);
-		font-size: 0.7rem;
+		font-size: var(--text-label);
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 	}

@@ -87,7 +87,7 @@
 			orbit={current}
 			tier={goal.tier}
 			color={goal.color}
-			size={230}
+			size={200}
 			caption="{formatAmount(current.logged, goal.metric)} / {formatAmount(
 				goal.target,
 				goal.metric
@@ -199,7 +199,7 @@
 
 			<form class="quick" method="POST" action="?/log" use:enhance>
 				{#each steps as step (step)}
-					<button class="chip" type="submit" name="amount" value={step}>
+					<button class="chip tap" type="submit" name="amount" value={step}>
 						+{formatAmount(step, goal.metric)}
 					</button>
 				{/each}
@@ -312,10 +312,10 @@
 							{#if entry.note}<span class="entry__note muted">{entry.note}</span>{/if}
 							{#if !archived}
 								<span class="entry__actions">
-									<a class="link-button" href="{goalHref}?edit={entry.id}#entries">Edit</a>
+									<a class="link-button tap" href="{goalHref}?edit={entry.id}#entries">Edit</a>
 									<form method="POST" action="?/deleteEntry" use:enhance>
 										<input type="hidden" name="entryId" value={entry.id} />
-										<button class="link-button" type="submit" aria-label="Delete entry">
+										<button class="link-button tap" type="submit" aria-label="Delete entry">
 											Remove
 										</button>
 									</form>
@@ -355,24 +355,24 @@
 <style>
 	.detail {
 		display: grid;
-		gap: 1.25rem;
+		gap: var(--gap-view);
 	}
 
 	.hero {
 		align-items: center;
 		display: grid;
-		gap: 1.5rem;
+		gap: var(--gap-card);
 		grid-template-columns: auto 1fr;
-		padding: 1.75rem;
+		padding: var(--pad-hero);
 	}
 
 	.hero__copy {
 		display: grid;
-		gap: 0.7rem;
+		gap: var(--gap-block);
 	}
 
 	.tier-tag {
-		font-size: 0.8rem;
+		font-size: var(--text-secondary);
 		font-weight: 640;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
@@ -384,8 +384,8 @@
 
 	.notice {
 		display: grid;
-		gap: 0.75rem;
-		padding: 1.25rem;
+		gap: var(--gap-block);
+		padding: var(--pad-panel);
 	}
 
 	.notice ul {
@@ -405,13 +405,13 @@
 
 	.live {
 		color: var(--success);
-		font-size: 0.9rem;
+		font-size: var(--text-secondary);
 	}
 
 	.stats {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 1.5rem;
+		gap: 0.25rem 1.15rem;
 		margin: 0;
 	}
 
@@ -422,7 +422,7 @@
 
 	dt {
 		color: var(--text-dim);
-		font-size: 0.7rem;
+		font-size: var(--text-label);
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 	}
@@ -462,8 +462,8 @@
 
 	.block {
 		display: grid;
-		gap: 0.9rem;
-		padding: 1.35rem;
+		gap: var(--gap-block);
+		padding: var(--pad-panel);
 	}
 
 	.quick {
@@ -472,6 +472,7 @@
 		gap: 0.45rem;
 	}
 
+	/* Sized by `.tap`, like the chips on a card — this is the same control. */
 	.chip {
 		background: rgba(10, 14, 36, 0.8);
 		border: 1px solid var(--space-border);
@@ -479,7 +480,6 @@
 		color: var(--text-bright);
 		cursor: pointer;
 		font: inherit;
-		min-height: 2.5rem;
 		padding: 0.35rem 1rem;
 	}
 
@@ -495,7 +495,7 @@
 	}
 
 	.hint {
-		font-size: 0.82rem;
+		font-size: var(--text-secondary);
 	}
 
 	.entries {
@@ -510,9 +510,9 @@
 		align-items: center;
 		border-bottom: 1px solid var(--space-border);
 		display: grid;
-		gap: 0.75rem;
+		gap: 0.6rem;
 		grid-template-columns: auto auto 1fr auto;
-		padding: 0.55rem 0;
+		padding: 0.1rem 0;
 	}
 
 	.entries li:last-child {
@@ -530,7 +530,7 @@
 
 	.entry__when,
 	.entry__note {
-		font-size: 0.88rem;
+		font-size: var(--text-secondary);
 	}
 
 	.entry__actions {
@@ -554,13 +554,18 @@
 		gap: 0.5rem;
 	}
 
+	/*
+	 * Edit and Remove sit in a row rather than in a sentence, so they are
+	 * controls and take the floor — which is most of why an entry row is the
+	 * height it is. Shrinking the row is not worth a target you miss.
+	 */
 	.link-button {
 		background: none;
 		border: none;
 		color: var(--text-dim);
 		cursor: pointer;
 		font: inherit;
-		font-size: 0.85rem;
+		font-size: var(--text-secondary);
 		padding: 0.25rem;
 	}
 

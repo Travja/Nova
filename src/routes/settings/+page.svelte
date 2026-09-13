@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { PREFERENCE_KEYS, PREFERENCE_SPECS } from '$domain/preferences';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -55,6 +56,23 @@
 			</select>
 		</div>
 
+		<!-- Driven off the preference table, so #14's motion and palette settings
+		     appear here the moment they are declared. -->
+		{#each PREFERENCE_KEYS as key (key)}
+			{@const spec = PREFERENCE_SPECS[key]}
+			<div class="field">
+				<label for={key}>{spec.label}</label>
+				<select id={key} name={key}>
+					{#each spec.values as value (value)}
+						<option {value} selected={value === data.profile.preferences[key]}>
+							{spec.options[value]}
+						</option>
+					{/each}
+				</select>
+				{#if spec.hint}<p class="muted hint">{spec.hint}</p>{/if}
+			</div>
+		{/each}
+
 		<button class="button" type="submit">Save</button>
 	</form>
 
@@ -67,7 +85,7 @@
 <style>
 	.settings {
 		display: grid;
-		gap: 1.25rem;
+		gap: var(--gap-view);
 		max-width: 34rem;
 	}
 
@@ -79,11 +97,15 @@
 	.form {
 		display: grid;
 		gap: 1rem;
-		padding: 1.5rem;
+		padding: var(--pad-panel);
 	}
 
 	.saved {
 		color: var(--success);
-		font-size: 0.9rem;
+		font-size: var(--text-secondary);
+	}
+
+	.hint {
+		font-size: var(--text-secondary);
 	}
 </style>

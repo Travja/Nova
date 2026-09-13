@@ -3,6 +3,7 @@ import { SESSION_COOKIE, validateSession, clearSessionCookie } from '$lib/server
 import { startBackupSchedule } from '$lib/server/backup';
 import { handleServerError } from '$lib/server/errors';
 import { logger, newTraceId, serializeError } from '$lib/server/log';
+import { DEFAULT_PREFERENCES, preferenceAttributeString } from '$domain/preferences';
 import { sequence } from '@sveltejs/kit/hooks';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 
@@ -68,7 +69,24 @@ const withSession: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
-export const handle: Handle = sequence(withRequestLogging, withSession);
+/**
+ * Stamp the account's preferences onto `<html>`, where CSS can select on them.
+ *
+ * `app.html` is a static file and Svelte cannot reach outside the body, so this
+ * placeholder is the one seam that exists. Doing it server-side is the point:
+ * the first paint is already at the right density, with no flash of the default
+ * on every navigation. Anonymous visitors get the defaults.
+ */
+const withPreferences: Handle = async ({ event, resolve }) => {
+	const attributes = preferenceAttributeString(
+		event.locals.user?.preferences ?? DEFAULT_PREFERENCES
+	);
+	return resolve(event, {
+		transformPageChunk: ({ html }) => html.replace('%nova.preferences%', attributes)
+	});
+};
+
+export const handle: Handle = sequence(withRequestLogging, withSession, withPreferences);
 
 /**
  * Every unexpected error gets an id. The detail — including the stack — goes to

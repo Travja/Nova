@@ -3,6 +3,12 @@ import { users } from '$lib/server/db/schema';
 import { hashPassword, verifyPassword } from '$lib/server/auth/password';
 import { newId, revokeOtherSessions, type SessionUser } from '$lib/server/auth/session';
 import type { RegisterInput } from '$domain/validation';
+import {
+	DEFAULT_PREFERENCES,
+	readPreferences,
+	writePreferences,
+	type Preferences
+} from '$domain/preferences';
 import { eq } from 'drizzle-orm';
 
 export async function registerUser(
@@ -22,6 +28,7 @@ export async function registerUser(
 		displayName: input.displayName,
 		timeZone: input.timeZone,
 		weekStartsOn: input.weekStartsOn,
+		preferences: null,
 		createdAt: new Date()
 	};
 	await db.insert(users).values(user);
@@ -33,7 +40,8 @@ export async function registerUser(
 			email: user.email,
 			displayName: user.displayName,
 			timeZone: user.timeZone,
-			weekStartsOn: user.weekStartsOn
+			weekStartsOn: user.weekStartsOn,
+			preferences: DEFAULT_PREFERENCES
 		}
 	};
 }
@@ -54,15 +62,25 @@ export async function authenticate(email: string, password: string): Promise<Ses
 		email: row.email,
 		displayName: row.displayName,
 		timeZone: row.timeZone,
-		weekStartsOn: row.weekStartsOn
+		weekStartsOn: row.weekStartsOn,
+		preferences: readPreferences(row.preferences)
 	};
 }
 
 export async function updateProfile(
 	userId: string,
-	patch: { displayName?: string; timeZone?: string; weekStartsOn?: number }
+	patch: {
+		displayName?: string;
+		timeZone?: string;
+		weekStartsOn?: number;
+		preferences?: Preferences;
+	}
 ): Promise<void> {
-	await db.update(users).set(patch).where(eq(users.id, userId));
+	const { preferences, ...columns } = patch;
+	await db
+		.update(users)
+		.set(preferences ? { ...columns, preferences: writePreferences(preferences) } : columns)
+		.where(eq(users.id, userId));
 }
 
 /**

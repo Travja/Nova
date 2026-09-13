@@ -44,14 +44,14 @@
 
 		<nav>
 			{#if data.user}
-				<a class="nav-link" href={resolve('/today')}>Today</a>
-				<a class="nav-link" href={resolve('/goals/new')}>New goal</a>
-				<a class="nav-link" href={resolve('/settings')}>{data.user.displayName}</a>
+				<a class="nav-link tap" href={resolve('/today')}>Today</a>
+				<a class="nav-link tap" href={resolve('/goals/new')}>New goal</a>
+				<a class="nav-link tap" href={resolve('/settings')}>{data.user.displayName}</a>
 				<form method="POST" action={resolve('/logout')}>
-					<button class="nav-link nav-link--button" type="submit">Sign out</button>
+					<button class="nav-link nav-link--button tap" type="submit">Sign out</button>
 				</form>
 			{:else if !onAuthPage}
-				<a class="nav-link" href={resolve('/login')}>Sign in</a>
+				<a class="nav-link tap" href={resolve('/login')}>Sign in</a>
 				<a class="button" href={resolve('/register')}>Start flying</a>
 			{/if}
 		</nav>
@@ -81,9 +81,9 @@
 		align-items: center;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.75rem;
+		gap: 0.5rem 0.75rem;
 		justify-content: space-between;
-		padding: 0.25rem 0 1.5rem;
+		padding: 0 0 0.75rem;
 	}
 
 	.brand {
@@ -111,6 +111,8 @@
 		display: contents;
 	}
 
+	/* Nav items are controls, so they take the touch floor. `.tap` supplies it;
+	   the masthead's own padding came down to pay for the taller row. */
 	.nav-link {
 		color: var(--text);
 		font-size: 0.95rem;
@@ -135,8 +137,8 @@
 	}
 
 	.footer {
-		font-size: 0.82rem;
-		padding: 3rem 0 1rem;
+		font-size: var(--text-secondary);
+		padding: 2rem 0 0.5rem;
 		text-align: center;
 	}
 </style>
