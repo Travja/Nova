@@ -13,6 +13,11 @@
 	const onAuthPage = $derived(['/login', '/register'].includes(page.url.pathname));
 
 	onMount(() => {
+		// Marks the point where the forms below become interactive: until Svelte
+		// takes over, typing into a bound field is undone by hydration. Styling
+		// and the end-to-end tests both need to know when that has happened.
+		document.documentElement.dataset.hydrated = 'true';
+
 		// Workbox generates `sw.js` at build time and it updates itself, so a
 		// plain registration is all the PWA needs. There is no worker in dev.
 		if (dev || !('serviceWorker' in navigator)) return;

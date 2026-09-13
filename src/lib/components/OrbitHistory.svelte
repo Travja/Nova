@@ -23,13 +23,15 @@
 
 <ol class="history" style="--color: {color}">
 	{#each ordered as orbit, index (orbit.period.key)}
-		<li class:is-current={index === ordered.length - 1}>
+		<li class:is-current={index === ordered.length - 1} class:is-dormant={orbit.dormant}>
 			<svg
 				viewBox="0 0 24 24"
 				role="img"
-				aria-label="{shortLabel(orbit)}: {Math.round(orbit.fraction * 100)}%"
+				aria-label={orbit.dormant
+					? `${shortLabel(orbit)}: archived, no orbit expected`
+					: `${shortLabel(orbit)}: ${Math.round(orbit.fraction * 100)}%`}
 			>
-				<circle class="track" cx="12" cy="12" r={RADIUS} />
+				<circle class="track" class:dashed={orbit.dormant} cx="12" cy="12" r={RADIUS} />
 				<circle
 					class="fill"
 					class:complete={orbit.complete}
@@ -66,6 +68,11 @@
 		opacity: 1;
 	}
 
+	/* A period spent archived was never missed, so it should not read as a gap. */
+	li.is-dormant {
+		opacity: 0.4;
+	}
+
 	svg {
 		height: 2rem;
 		width: 2rem;
@@ -75,6 +82,10 @@
 		fill: none;
 		stroke: rgba(148, 163, 214, 0.2);
 		stroke-width: 2.4;
+	}
+
+	.track.dashed {
+		stroke-dasharray: 2 3;
 	}
 
 	.fill {

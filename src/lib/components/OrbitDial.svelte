@@ -34,6 +34,12 @@
 	const bodyRadius = $derived(3.2 + tierDef.scale * 2.2);
 	/** Satellites are small and fast; universes are vast and slow. */
 	const orbitSeconds = $derived(14 + tierDef.scale * 26);
+	/**
+	 * Keep the divider attached to the amount it follows. A caption long enough
+	 * to wrap — `180 pages / 300 pages` — should break after the slash, never
+	 * start its second line with one.
+	 */
+	const captionText = $derived(caption.replace(' / ', '\u00a0/ '));
 </script>
 
 <div
@@ -67,7 +73,7 @@
 		/>
 
 		<!-- The star being orbited -->
-		<circle class="core" cx={CENTER} cy={CENTER} r={caption ? 6 : 11} fill="url(#core-{tier})" />
+		<circle class="core" cx={CENTER} cy={CENTER} r="11" fill="url(#core-{tier})" />
 
 		<!-- The body itself, parked at the point the arc reached -->
 		<g class="body-spin">
@@ -89,7 +95,7 @@
 
 	{#if caption}
 		<div class="caption">
-			<span class="caption__value">{caption}</span>
+			<span class="caption__value">{captionText}</span>
 			<span class="caption__tier">{tierDef.label}</span>
 		</div>
 	{/if}
@@ -97,15 +103,13 @@
 
 <style>
 	.dial {
-		aspect-ratio: 1;
 		display: grid;
-		place-items: center;
-		position: relative;
+		justify-items: center;
 		width: var(--size);
 	}
 
 	svg {
-		height: 100%;
+		aspect-ratio: 1;
 		overflow: visible;
 		width: 100%;
 	}
@@ -141,11 +145,6 @@
 	.core {
 		animation: pulse 5.5s ease-in-out infinite;
 		transform-origin: 50px 50px;
-	}
-
-	/* The caption sits on top of the star, so the star steps back for it. */
-	.dial:has(.caption) .core {
-		opacity: 0.55;
 	}
 
 	.body {
@@ -185,27 +184,29 @@
 		stroke: color-mix(in srgb, var(--color) 40%, transparent);
 	}
 
+	/* Below the ring rather than inside it: the orbit keeps its own space, and a
+	   caption carrying units has room to sit on one line. The ring stops short of
+	   the viewBox edge, so close that gap rather than measuring from the box. */
 	.caption {
 		display: grid;
 		gap: 0.1rem;
 		justify-items: center;
-		pointer-events: none;
-		position: absolute;
+		margin-top: calc(var(--size) * -0.07);
+		max-width: 100%;
 		text-align: center;
+		text-wrap: balance;
 	}
 
 	.caption__value {
 		color: var(--text-bright);
-		text-shadow: 0 1px 6px rgba(4, 5, 13, 0.95);
-		font-size: calc(var(--size) * 0.098);
+		font-size: clamp(0.85rem, calc(var(--size) * 0.088), 1.1rem);
 		font-weight: 650;
 		letter-spacing: -0.01em;
 	}
 
 	.caption__tier {
 		color: var(--text-dim);
-		text-shadow: 0 1px 6px rgba(4, 5, 13, 0.95);
-		font-size: calc(var(--size) * 0.058);
+		font-size: clamp(0.6rem, calc(var(--size) * 0.052), 0.72rem);
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 	}

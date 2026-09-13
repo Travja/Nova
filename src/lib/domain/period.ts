@@ -228,6 +228,84 @@ export function previousPeriod(period: Period, options: PeriodOptions): Period {
 	return periodFor(addPeriods(period.start, period.cadence, -1, options), period.cadence, options);
 }
 
+const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
+
+/**
+ * Read a `datetime-local` value (`2026-09-12T14:30`) as wall-clock time in
+ * `timeZone`.
+ *
+ * `new Date(value)` would read it in the server's zone instead, which is how a
+ * backdated entry ends up in the wrong orbit. Returns null if the shape is
+ * wrong; a time that daylight saving skipped is resolved the same way every
+ * other boundary is, by `fromZonedParts`.
+ */
+export function parseLocalDateTime(value: string, timeZone: string): Date | null {
+	const match = LOCAL_DATE_TIME.exec(value.trim());
+	if (!match) return null;
+	const [, year, month, day, hour, minute, second] = match;
+	return fromZonedParts(
+		{
+			year: Number(year),
+			month: Number(month),
+			day: Number(day),
+			hour: Number(hour),
+			minute: Number(minute),
+			second: Number(second ?? '0')
+		},
+		timeZone
+	);
+}
+
+/** Render an instant as a `datetime-local` value in `timeZone`, for form fields. */
+export function toLocalDateTime(instant: Date, timeZone: string): string {
+	const parts = zonedParts(instant, timeZone);
+	return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
+}
+
+const labelFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * A fixed locale keeps labels identical on the server and in the browser, which
+ * matters because they are rendered from hydrated data.
+ */
+function labelFormatter(
+	timeZone: string,
+	options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat {
+	const key = `${timeZone}|${JSON.stringify(options)}`;
+	let formatter = labelFormatterCache.get(key);
+	if (!formatter) {
+		formatter = new Intl.DateTimeFormat('en-GB', { timeZone, ...options });
+		labelFormatterCache.set(key, formatter);
+	}
+	return formatter;
+}
+
+/**
+ * How a period is named in copy, e.g. `Sun 8 Mar`, `the week of 7 Sep`,
+ * `March 2026`. Used when an entry lands somewhere other than the orbit in
+ * flight and the screen has to say which one moved.
+ */
+export function periodLabel(period: Period, timeZone: string): string {
+	const parts = zonedParts(period.start, timeZone);
+	switch (period.cadence) {
+		case 'day':
+			return labelFormatter(timeZone, {
+				weekday: 'short',
+				day: 'numeric',
+				month: 'short'
+			}).format(period.start);
+		case 'week':
+			return `the week of ${labelFormatter(timeZone, { day: 'numeric', month: 'short' }).format(period.start)}`;
+		case 'month':
+			return labelFormatter(timeZone, { month: 'long', year: 'numeric' }).format(period.start);
+		case 'quarter':
+			return `Q${Math.floor((parts.month - 1) / 3) + 1} ${parts.year}`;
+		case 'year':
+			return String(parts.year);
+	}
+}
+
 /** Walk back `count` periods, newest first, starting from the one containing `instant`. */
 export function recentPeriods(
 	instant: Date,

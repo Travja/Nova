@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import { onMount } from 'svelte';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import OrbitHistory from '$components/OrbitHistory.svelte';
+	import { toLocalDateTime } from '$domain/period';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
@@ -11,16 +13,60 @@
 
 	const goal = $derived(data.snapshot.goal);
 	const current = $derived(data.snapshot.current);
+	const archived = $derived(goal.archivedAt !== null);
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
 	const steps = $derived(quickLogSteps(goal.metric, goal.target));
+	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
+	/**
+	 * Which entry the list is editing. The URL drives it so the row survives a
+	 * submit without JavaScript; a saved edit closes it again.
+	 */
+	const editing = $derived(form?.edited ? null : data.editing);
 
 	let confirmingDelete = $state(false);
 
-	const dateFormatter = new Intl.DateTimeFormat(undefined, {
-		month: 'short',
+	/**
+	 * What to say after an entry lands. One string rather than a block, so the
+	 * live region is genuinely empty when there is nothing to announce.
+	 */
+	const orbitMessage = $derived.by(() => {
+		if (form?.orbit && !form.orbit.current) {
+			const logged = formatAmount(form.orbit.logged, goal.metric);
+			const standing = form.orbit.closed
+				? `that orbit is closed at ${logged}.`
+				: `that orbit now stands at ${logged} of ${formatAmount(form.orbit.target, goal.metric)}.`;
+			return `${form.edited ? 'Moved' : 'Logged'} to ${form.orbit.label}, which is already over — ${standing} The orbit in flight is unchanged.`;
+		}
+		if (form?.edited) return 'Entry updated.';
+		return '';
+	});
+
+	const dateFormatter = new Intl.DateTimeFormat('en-GB', {
 		day: 'numeric',
+		month: 'short',
 		hour: 'numeric',
 		minute: '2-digit'
+	});
+
+	let whenInput: HTMLInputElement | null = $state(null);
+	/** Set once the pilot picks their own time, so we stop moving it. */
+	let whenDirty = $state(false);
+
+	/**
+	 * A page left open for hours would otherwise default new entries to whenever
+	 * it was rendered. Only the browser's clock can fix that, and only while it
+	 * agrees with the zone the account keeps its periods in.
+	 */
+	function syncWhen() {
+		if (!whenInput || whenDirty) return;
+		if (Intl.DateTimeFormat().resolvedOptions().timeZone !== data.timeZone) return;
+		whenInput.value = toLocalDateTime(new Date(), data.timeZone);
+	}
+
+	onMount(() => {
+		syncWhen();
+		document.addEventListener('visibilitychange', syncWhen);
+		return () => document.removeEventListener('visibilitychange', syncWhen);
 	});
 </script>
 
@@ -47,7 +93,9 @@
 			{#if goal.description}<p class="muted">{goal.description}</p>{/if}
 
 			<p class="status">
-				{#if current.complete}
+				{#if archived}
+					Archived — this is the orbit it stopped on.
+				{:else if current.complete}
 					Orbit closed {CADENCE_LABEL[current.period.cadence]} — {formatAmount(
 						current.logged,
 						goal.metric
@@ -61,7 +109,7 @@
 
 			<dl class="stats">
 				<div>
-					<dt>Streak</dt>
+					<dt>{archived ? 'Streak when archived' : 'Streak'}</dt>
 					<dd>{data.snapshot.streak}</dd>
 				</div>
 				<div>
@@ -75,65 +123,190 @@
 			</dl>
 
 			<div class="hero__actions">
-				<a class="button button--ghost" href={resolve('/goals/[id]/edit', { id: goal.id })}>Edit</a>
-				<form method="POST" action="?/archive" use:enhance>
-					<input type="hidden" name="archived" value="true" />
-					<button class="button button--ghost" type="submit">Archive</button>
-				</form>
+				{#if archived}
+					<form method="POST" action="?/archive" use:enhance>
+						<input type="hidden" name="archived" value="false" />
+						<button class="button" type="submit">Restore to orbit</button>
+					</form>
+					<a class="button button--ghost" href={resolve('/goals/archived')}>All archived goals</a>
+				{:else}
+					<a class="button button--ghost" href={resolve('/goals/[id]/edit', { id: goal.id })}
+						>Edit</a
+					>
+					<a class="button button--ghost" href="{goalHref}?confirm=archive">Archive</a>
+				{/if}
 			</div>
 		</div>
 	</header>
 
-	<section class="panel block">
-		<h2>Log progress</h2>
-
-		{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
-		{#if form?.errors?.amount}<p class="error">{form.errors.amount}</p>{/if}
-
-		<form class="quick" method="POST" action="?/log" use:enhance>
-			{#each steps as step (step)}
-				<button class="chip" type="submit" name="amount" value={step}>
-					+{formatAmount(step, goal.metric)}
-				</button>
-			{/each}
-		</form>
-
-		<form class="custom" method="POST" action="?/log" use:enhance>
-			<div class="field">
-				<label for="amount">
-					Amount {#if goal.metric.kind === 'duration'}<span class="muted">(minutes)</span>{/if}
-				</label>
-				<input id="amount" name="amount" type="number" step="any" required />
+	{#if archived}
+		<p class="notice panel">
+			This goal is parked. It is off the dashboard and no orbit is expected of it, but every entry
+			is still here.
+			{#if data.snapshot.streak > 0}
+				Its streak is frozen rather than broken — restore it and it carries on from {data.snapshot
+					.streak}
+				{data.snapshot.streak === 1 ? 'orbit' : 'orbits'}.
+			{:else}
+				Nothing it misses while parked counts against it.
+			{/if}
+		</p>
+	{:else if data.confirmingArchive}
+		<section class="notice panel confirm">
+			<h2>Archive {goal.title}?</h2>
+			<ul>
+				<li>Every entry stays exactly where it is.</li>
+				<li>The goal leaves the dashboard and stops asking for progress.</li>
+				<li>
+					{#if data.snapshot.streak > 0}
+						The streak freezes at {data.snapshot.streak} rather than breaking — the periods it spends
+						archived are not counted as missed.
+					{:else}
+						Periods it spends archived are never counted as missed, so a streak picks up where it
+						left off.
+					{/if}
+				</li>
+			</ul>
+			<div class="hero__actions">
+				<form method="POST" action="?/archive" use:enhance>
+					<input type="hidden" name="archived" value="true" />
+					<button class="button" type="submit">Archive it</button>
+				</form>
+				<a class="button button--ghost" href={goalHref}>Keep flying</a>
 			</div>
-			<div class="field">
-				<label for="note">Note</label>
-				<input id="note" name="note" maxlength="200" placeholder="Optional" />
-			</div>
-			<button class="button" type="submit">Log it</button>
-		</form>
-		<p class="muted hint">A negative amount corrects an over-log.</p>
-	</section>
+		</section>
+	{/if}
+
+	{#if !archived}
+		<section class="panel block">
+			<h2>Log progress</h2>
+
+			{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
+			{#if form?.errors?.amount}<p class="error">{form.errors.amount}</p>{/if}
+			{#if form?.errors?.occurredAt}<p class="error">{form.errors.occurredAt}</p>{/if}
+
+			<p class="live" role="status">{orbitMessage}</p>
+
+			<form class="quick" method="POST" action="?/log" use:enhance>
+				{#each steps as step (step)}
+					<button class="chip" type="submit" name="amount" value={step}>
+						+{formatAmount(step, goal.metric)}
+					</button>
+				{/each}
+			</form>
+
+			<form
+				class="custom"
+				method="POST"
+				action="?/log"
+				use:enhance={() =>
+					async ({ update }) => {
+						await update();
+						whenDirty = false;
+						syncWhen();
+					}}
+			>
+				<div class="field">
+					<label for="amount">
+						Amount {#if goal.metric.kind === 'duration'}<span class="muted">(minutes)</span>{/if}
+					</label>
+					<input id="amount" name="amount" type="number" step="any" required />
+				</div>
+				<div class="field">
+					<label for="occurredAt">When</label>
+					<input
+						bind:this={whenInput}
+						id="occurredAt"
+						name="occurredAt"
+						type="datetime-local"
+						defaultValue={data.occurredAt.now}
+						min={data.occurredAt.min}
+						max={data.occurredAt.max}
+						oninput={() => (whenDirty = true)}
+					/>
+				</div>
+				<div class="field">
+					<label for="note">Note</label>
+					<input id="note" name="note" maxlength="200" placeholder="Optional" />
+				</div>
+				<button class="button" type="submit">Log it</button>
+			</form>
+			<p class="muted hint">
+				A negative amount corrects an over-log. Missed a day? Move the time back and the entry lands
+				in that orbit instead.
+			</p>
+		</section>
+	{/if}
 
 	<section class="panel block">
 		<h2>Recent orbits</h2>
 		<OrbitHistory history={data.snapshot.history} color={goal.color} />
 	</section>
 
-	<section class="panel block">
+	<section class="panel block" id="entries">
 		<h2>Entries</h2>
 		{#if data.recentEntries.length === 0}
 			<p class="muted">Nothing logged yet. The first entry starts the orbit.</p>
 		{:else}
 			<ul class="entries">
 				{#each data.recentEntries as entry (entry.id)}
-					<li>
-						<span class="entry__amount">{formatAmount(entry.amount, goal.metric)}</span>
-						<span class="muted entry__when">{dateFormatter.format(entry.occurredAt)}</span>
-						{#if entry.note}<span class="entry__note muted">{entry.note}</span>{/if}
-						<form method="POST" action="?/deleteEntry" use:enhance>
-							<input type="hidden" name="entryId" value={entry.id} />
-							<button class="link-button" type="submit" aria-label="Delete entry">Remove</button>
-						</form>
+					<li class:entries__row--editing={editing === entry.id}>
+						{#if editing === entry.id && !archived}
+							<form class="edit" method="POST" action="?/editEntry&edit={entry.id}" use:enhance>
+								<input type="hidden" name="entryId" value={entry.id} />
+								<div class="field">
+									<label for="amount-{entry.id}">Amount</label>
+									<input
+										id="amount-{entry.id}"
+										name="amount"
+										type="number"
+										step="any"
+										defaultValue={entry.amount}
+										required
+									/>
+								</div>
+								<div class="field">
+									<label for="when-{entry.id}">When</label>
+									<input
+										id="when-{entry.id}"
+										name="occurredAt"
+										type="datetime-local"
+										defaultValue={toLocalDateTime(entry.occurredAt, data.timeZone)}
+										min={data.occurredAt.min}
+										max={data.occurredAt.max}
+									/>
+								</div>
+								<div class="field">
+									<label for="note-{entry.id}">Note</label>
+									<input
+										id="note-{entry.id}"
+										name="note"
+										maxlength="200"
+										defaultValue={entry.note ?? ''}
+										placeholder="Optional"
+									/>
+								</div>
+								<div class="edit__actions">
+									<button class="button" type="submit">Save entry</button>
+									<a class="button button--ghost" href="{goalHref}#entries">Cancel</a>
+								</div>
+							</form>
+						{:else}
+							<span class="entry__amount">{formatAmount(entry.amount, goal.metric)}</span>
+							<span class="muted entry__when">{dateFormatter.format(entry.occurredAt)}</span>
+							{#if entry.note}<span class="entry__note muted">{entry.note}</span>{/if}
+							{#if !archived}
+								<span class="entry__actions">
+									<a class="link-button" href="{goalHref}?edit={entry.id}#entries">Edit</a>
+									<form method="POST" action="?/deleteEntry" use:enhance>
+										<input type="hidden" name="entryId" value={entry.id} />
+										<button class="link-button" type="submit" aria-label="Delete entry">
+											Remove
+										</button>
+									</form>
+								</span>
+							{/if}
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -194,6 +367,32 @@
 		color: var(--text-bright);
 	}
 
+	.notice {
+		display: grid;
+		gap: 0.75rem;
+		padding: 1.25rem;
+	}
+
+	.notice ul {
+		display: grid;
+		gap: 0.35rem;
+		margin: 0;
+		padding-left: 1.1rem;
+	}
+
+	.confirm h2 {
+		font-size: 1.05rem;
+	}
+
+	.live:empty {
+		display: none;
+	}
+
+	.live {
+		color: var(--success);
+		font-size: 0.9rem;
+	}
+
 	.stats {
 		display: flex;
 		flex-wrap: wrap;
@@ -221,6 +420,7 @@
 	}
 
 	.hero__actions {
+		align-items: center;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
@@ -257,7 +457,7 @@
 		align-items: end;
 		display: grid;
 		gap: 0.75rem;
-		grid-template-columns: 1fr 1.4fr auto;
+		grid-template-columns: 0.8fr 1.1fr 1.2fr auto;
 	}
 
 	.hint {
@@ -285,6 +485,10 @@
 		border-bottom: none;
 	}
 
+	.entries__row--editing {
+		grid-template-columns: 1fr;
+	}
+
 	.entry__amount {
 		color: var(--text-bright);
 		font-weight: 620;
@@ -293,6 +497,27 @@
 	.entry__when,
 	.entry__note {
 		font-size: 0.88rem;
+	}
+
+	.entry__actions {
+		align-items: center;
+		display: flex;
+		gap: 0.35rem;
+	}
+
+	.edit {
+		align-items: end;
+		display: grid;
+		gap: 0.75rem;
+		grid-template-columns: 0.8fr 1.1fr 1.2fr auto;
+		padding: 0.35rem 0 0.6rem;
+		width: 100%;
+	}
+
+	.edit__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 
 	.link-button {
@@ -306,6 +531,11 @@
 	}
 
 	.link-button:hover {
+		color: var(--text-bright);
+		text-decoration: none;
+	}
+
+	form .link-button:hover {
 		color: var(--danger);
 	}
 
@@ -330,7 +560,8 @@
 			justify-content: center;
 		}
 
-		.custom {
+		.custom,
+		.edit {
 			grid-template-columns: 1fr;
 		}
 

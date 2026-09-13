@@ -67,6 +67,15 @@ If Nova ever needs Postgres — concurrent writers, or a hosted multi-tenant
 deployment — the change is contained to `src/lib/server/db/` plus the Drizzle
 dialect, because routes never build queries themselves.
 
+### Archive windows
+
+`goals.archivedAt` answers "is this archived right now"; `goal_archive_windows`
+answers "when was it asleep", one row per archive/restore cycle. The streak
+maths treats an orbit that falls wholly inside a window as neither closed nor
+missed, which is what lets archiving freeze a streak instead of breaking it.
+Windows are passed into `snapshotGoal()` as plain data, so the rule stays in the
+domain layer with everything else.
+
 ### A known limit
 
 `listGoalSnapshots()` loads every entry for every goal to compute lifetime orbit

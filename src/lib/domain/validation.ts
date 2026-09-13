@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_COLOR, isPaletteColor } from './palette';
-import { TIERS } from './tiers';
+import { parseLocalDateTime, periodFor, periodLabel, type PeriodOptions } from './period';
+import { cadenceOf, TIERS, type Tier } from './tiers';
 
 /** Schemas shared by the form actions and by any future JSON API. */
 
@@ -59,19 +60,77 @@ export const goalSchema = z
 		metricUnit: value.metricKind === 'duration' ? 'minutes' : value.metricUnit
 	}));
 
-export const entrySchema = z.object({
-	amount: z.coerce
-		.number()
-		.refine((value) => value !== 0, 'Log something other than zero.')
-		.refine((value) => Math.abs(value) <= 1_000_000, 'That is a suspiciously large amount.'),
-	note: z
-		.string()
-		.trim()
-		.max(200)
-		.optional()
-		.transform((value) => (value ? value : null)),
-	occurredAt: z.coerce.date().optional()
-});
+/** A phone with a slightly fast clock should still be able to log "now". */
+export const CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+/** The window an entry's `occurredAt` may fall in for a particular goal. */
+export interface OccurredAtBounds {
+	earliest: Date;
+	latest: Date;
+	/** How the earliest orbit is named, so the error can say what the floor is. */
+	earliestLabel: string;
+	/** The zone a `datetime-local` value is read in — never the server's. */
+	timeZone: string;
+}
+
+/**
+ * Backdating reaches to the start of the orbit the goal launched in — a Planet
+ * goal added on Wednesday can still take Monday's work — but no further, since
+ * an entry in an orbit that predates the goal would invent history.
+ */
+export function occurredAtBounds(
+	goal: { tier: Tier; createdAt: Date },
+	options: PeriodOptions,
+	now: Date = new Date()
+): OccurredAtBounds {
+	const launch = periodFor(goal.createdAt, cadenceOf(goal.tier), options);
+	return {
+		earliest: launch.start,
+		latest: new Date(now.getTime() + CLOCK_SKEW_MS),
+		earliestLabel: periodLabel(launch, options.timeZone),
+		timeZone: options.timeZone
+	};
+}
+
+/**
+ * Entries validate the same way wherever they come from. Pass bounds to police
+ * backdating; without them any timestamp parses, which is what the quick-log
+ * path on the dashboard needs since it never sends one.
+ */
+export function entrySchemaFor(bounds?: OccurredAtBounds) {
+	return z.object({
+		amount: z.coerce
+			.number()
+			.refine((value) => value !== 0, 'Log something other than zero.')
+			.refine((value) => Math.abs(value) <= 1_000_000, 'That is a suspiciously large amount.'),
+		note: z
+			.string()
+			.trim()
+			.max(200)
+			.optional()
+			.transform((value) => (value ? value : null)),
+		occurredAt: z
+			.preprocess((value) => {
+				if (value === '' || value === null || value === undefined) return undefined;
+				if (typeof value !== 'string') return value;
+				// Browsers send wall-clock time with no zone, so read it in the
+				// user's own; anything else falls back to normal Date parsing.
+				return (bounds && parseLocalDateTime(value, bounds.timeZone)) ?? new Date(value);
+			}, z.date('Nova could not read that date and time.').optional())
+			.refine(
+				(value) => !value || !bounds || value.getTime() <= bounds.latest.getTime(),
+				'That is in the future. Log it once it has happened.'
+			)
+			.refine(
+				(value) => !value || !bounds || value.getTime() >= bounds.earliest.getTime(),
+				bounds
+					? `Nothing lands before ${bounds.earliestLabel}, when this goal launched.`
+					: 'That is before the goal launched.'
+			)
+	});
+}
+
+export const entrySchema = entrySchemaFor();
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
