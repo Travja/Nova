@@ -1,0 +1,154 @@
+# The visual language
+
+The space theme is not decoration bolted onto a progress bar — it _is_ the
+progress bar. A goal's fraction becomes an arc, and the body sits at the point
+the arc reached, so position and fill say the same thing twice.
+
+Everything here is CSS and inline SVG. No animation library, no Lottie, no
+raster assets, nothing that ships a runtime for decoration.
+
+## The dial
+
+`OrbitDial.svelte` draws one goal: a dotted track for the whole period, an arc
+for what is logged, a star at the centre and the body parked where the arc
+stops. The caption sits below the ring rather than inside it, so a goal measured
+in `180 pages / 300 pages` still reads on a phone.
+
+![A goal's detail page](screenshots/goal-detail.png)
+
+A closed orbit keeps travelling — the body carries on round the ring — because a
+habit you have already hit today should look alive rather than finished.
+
+## A body per tier, and a few per tier
+
+Every tier used to be the same circle in a different colour, which made the
+ladder the whole app is built on invisible until you read the label. Each tier
+now has its own silhouette, and three bodies inside it, so a dashboard of six
+satellites is not one drawing repeated six times.
+
+![Three bodies per tier](screenshots/tier-variants.png)
+
+| Tier            | Bodies                                             |
+| --------------- | -------------------------------------------------- |
+| **Satellite**   | a comsat, a cratered moon, a dish probe            |
+| **Planet**      | a banded giant, a ringed world, an ice world       |
+| **Star System** | a star with worlds, a binary pair, a ringed system |
+| **Galaxy**      | a spiral, a barred spiral, an elliptical           |
+| **Universe**    | a field of light, a nebula, the cosmic web         |
+
+Which body a goal flies is **pinned to its id** by `bodyVariant()` in
+`src/lib/domain/bodies.ts`, which hashes the id and takes the remainder. Nothing
+is stored on the goal row: there is no column to migrate, and no way for a body
+to change under a goal that has been flying for a year. Ids are the only thing
+about a goal that never changes — titles, colours and even tiers do.
+
+![One tier, three goals](screenshots/tier-variants-in-place.png)
+
+The one place this shows a white lie is the goal form's live preview, which
+draws the tier's first body because the goal has no id yet.
+
+### At 24px
+
+The history strip draws the same body at a fraction of the size, where detail
+stops being detail and becomes mush. Below roughly ten pixels across each body
+drops to its tier's silhouette — disc and bar, banded disc, spike, swirl, dot
+field — which is what stays readable when a ring is the size of a full stop.
+
+![The history strip](screenshots/tier-bodies-small-after.png)
+
+### Dormant orbits
+
+A goal that was archived for a whole period never flew it, and that has to look
+different from a period that was flown and missed. Dormant orbits are drawn
+cold: grey, dimmed, with motion paused rather than removed.
+
+![Dormant orbits in the strip](screenshots/dormant-orbits.png)
+
+Above, W27–W32 were slept through and W26 and W33 were missed.
+
+## Closing an orbit
+
+The best moment in the app is the one that used to pass unnoticed. When a log
+closes an orbit the arc sweeps up to full, an ignition fires where the body
+reached, the streak lands rather than changing, and the pilot salutes.
+
+![Closing an orbit](screenshots/orbit-celebration.png)
+
+It scales with the tier, because a satellite closing daily and a universe
+closing once a year are not the same news: six rays over 620ms for the one,
+sixteen over 960ms for the other. Both are over inside a second, and neither
+blocks anything.
+
+It fires **once per closing** — never on a re-render, a second log into an orbit
+that is already closed, a period that rolled over between looks, or a return
+visit to a goal that closed yesterday. `src/lib/domain/celebration.ts` makes that
+call on plain data, and `src/lib/celebration.svelte.ts` holds the tab's memory of
+what each orbit looked like last time it was seen.
+
+On `/today` a goal that closes leaves the at-risk list and takes its dial with
+it, so the moment there is the row leaving, the live region naming the goal, and
+the pilot's salute.
+
+![Closing an orbit on /today](screenshots/orbit-celebration-today.png)
+
+## The pilot
+
+The astronaut used to drift on empty states and do nothing else. It now reads
+the week off the same split `/today` is drawn from, and says what it sees.
+
+![The pilot's four moods](screenshots/mascot-states.png)
+
+| Mood        | When                                                |
+| ----------- | --------------------------------------------------- |
+| **Resting** | everything that could close has closed              |
+| **Working** | orbits in flight, none of them behind               |
+| **Alert**   | something needs attention with time left to give it |
+| **Adrift**  | a period nearly over and still well short of target |
+
+`mascotFor()` in `src/lib/domain/mascot.ts` names the orbit that decided the
+mood, so the pilot points at that one rather than gesturing at the screen. The
+copy is warm on purpose — a missed orbit is information, not a telling-off — and
+the pilot can be sent away with the ✕ if you find it distracting.
+
+![The pilot in place](screenshots/mascot-today.png)
+
+## The rules
+
+Four of these are load-bearing, and breaking any of them shows up immediately:
+
+- **Everything yields to `prefers-reduced-motion`**, handled globally in
+  `src/lib/styles/app.css`. Position has to carry the meaning without motion,
+  which is why a body is placed by the arc's angle and never by an animation,
+  why the drifting pose is a static transform with the drift animated on top of
+  it, and why the closing burst is simply not drawn.
+- **Anything random uses a seeded generator.** The starfield and a universe's
+  field of light both come from one, so the server and the browser draw the same
+  sky and hydration stays quiet. A bare `Math.random()` in a component is a
+  hydration mismatch waiting to happen.
+- **Size in pixels, not user units, inside a stretched viewBox.** A
+  `preserveAspectRatio="none"` SVG turns circles into ellipses; the starfield
+  sizes its stars in pixels for exactly this reason. The dials are square, so
+  bodies there are free to use user units.
+- **Draw it, then look at it at the size it ships at.** Almost everything on
+  this page was redrawn at least once after seeing it on a 390px screen: haloes
+  that read as coins, flares that swallowed their own orbit rings, a dish that
+  looked like a monocle, a binary that was two specks.
+
+## Where it lives
+
+```
+src/lib/components/OrbitDial.svelte     The dial: track, arc, core, body, burst
+src/lib/components/TierBody.svelte      Picks the body and sets its colours
+src/lib/components/bodies/              One file per tier, holding its bodies
+src/lib/components/OrbitHistory.svelte  The strip of recent orbits
+src/lib/components/Mascot.svelte        The pilot, and the copy beside it
+src/lib/components/Astronaut.svelte     The sprite itself, one pose per mood
+src/lib/components/Starfield.svelte     The backdrop, three parallax layers
+src/lib/domain/bodies.ts                Which body a goal flies
+src/lib/domain/celebration.ts           Whether a closing just happened
+src/lib/domain/mascot.ts                What the week adds up to
+```
+
+The three domain modules are pure functions over plain data, tested like the
+rest of `src/lib/domain`. Nothing about how something looks is decided inside a
+component if it can be decided on the data instead.

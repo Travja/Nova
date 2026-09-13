@@ -100,6 +100,10 @@ under the user's id before inserting.
 
 ## The visuals
 
+[`VISUALS.md`](VISUALS.md) is the illustrated tour of this section — every body,
+the celebration, the pilot's moods, and what each rule below costs when it is
+broken.
+
 The space theme is not decoration bolted on afterwards; the orbit is the
 progress bar. `OrbitDial.svelte` maps a goal's fraction to an arc and puts the
 body at the matching angle, so position and fill say the same thing two ways.
