@@ -40,6 +40,22 @@ disappearing; seeing them done is part of the reward.
 On a narrow screen it is where a fresh visit lands, and the tiered dashboard
 stays one tap away.
 
+## The look
+
+The orbit is the progress bar, not decoration on top of one. Each tier has its
+own body — and three of them, so a screen full of satellites is not one drawing
+repeated — pinned to the goal so it never changes under you.
+
+![Three bodies per tier](docs/screenshots/tier-variants.png)
+
+Closing an orbit is a moment rather than a line of text changing, and the pilot
+on `/today` reads the week off the same numbers the list is drawn from. All of
+it is CSS and inline SVG, and all of it yields to `prefers-reduced-motion`.
+
+[`docs/VISUALS.md`](docs/VISUALS.md) is the tour: every body, what a dormant
+orbit looks like, how a closing fires exactly once, the pilot's four moods, and
+the four rules that keep the whole thing honest.
+
 ## Stack
 
 - **SvelteKit 2** with Svelte 5 runes, TypeScript throughout
@@ -149,12 +165,13 @@ a snapshot before you need it.
 ## Project layout
 
 ```
-src/lib/domain/     Pure logic: tiers, period maths, orbit progress, validation
-src/lib/server/     Database schema, sessions, password hashing, services
-src/lib/components/ Svelte components, including the animated space visuals
-src/routes/         Pages and form actions
-e2e/                Playwright journeys
-scripts/            Migration runner and the PWA icon generator
+src/lib/domain/            Pure logic: tiers, period maths, orbit progress, validation
+src/lib/server/            Database schema, sessions, password hashing, services
+src/lib/components/        Svelte components, including the animated space visuals
+src/lib/components/bodies/ The bodies each tier can be drawn as, one file per tier
+src/routes/                Pages and form actions
+e2e/                       Playwright journeys
+scripts/                   Migration runner and the PWA icon generator
 ```
 
 `src/lib/domain` has no imports from `$lib/server` or SvelteKit, so the same
@@ -165,7 +182,8 @@ arrives.
 
 Work is tracked as GitHub issues, grouped by milestone. `docs/ARCHITECTURE.md`
 explains the decisions behind the shape of the code — read it before adding a
-subsystem.
+subsystem — and [`docs/VISUALS.md`](docs/VISUALS.md) covers the visual side:
+the dial, the bodies, the celebration, the pilot, and the rules they all follow.
 
 Before opening a pull request:
 

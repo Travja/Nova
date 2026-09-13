@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import OrbitHistory from '$components/OrbitHistory.svelte';
+	import { celebrationFor, noteOrbits } from '$lib/celebration.svelte';
 	import { toLocalDateTime } from '$domain/period';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
@@ -24,6 +25,14 @@
 	const editing = $derived(form?.edited ? null : data.editing);
 
 	let confirmingDelete = $state(false);
+
+	/**
+	 * Every log re-renders this page, so the closing has to be spotted by
+	 * comparing what the browser saw last. Effects do not run on the server, so a
+	 * closed orbit that arrives in the first render is history, not a moment.
+	 */
+	$effect(() => noteOrbits([data.snapshot]));
+	const closing = $derived(celebrationFor(goal.id) !== null);
 
 	/**
 	 * What to say after an entry lands. One string rather than a block, so the
@@ -83,6 +92,7 @@
 				goal.target,
 				goal.metric
 			)}"
+			goalId={goal.id}
 		/>
 
 		<div class="hero__copy">
@@ -110,7 +120,7 @@
 			<dl class="stats">
 				<div>
 					<dt>{archived ? 'Streak when archived' : 'Streak'}</dt>
-					<dd>{data.snapshot.streak}</dd>
+					<dd class:dd--ticked={closing}>{data.snapshot.streak}</dd>
 				</div>
 				<div>
 					<dt>Orbits closed</dt>
@@ -240,7 +250,12 @@
 
 	<section class="panel block">
 		<h2>Recent orbits</h2>
-		<OrbitHistory history={data.snapshot.history} color={goal.color} />
+		<OrbitHistory
+			history={data.snapshot.history}
+			tier={goal.tier}
+			goalId={goal.id}
+			color={goal.color}
+		/>
 	</section>
 
 	<section class="panel block" id="entries">
@@ -417,6 +432,25 @@
 		font-size: 1.1rem;
 		font-weight: 640;
 		margin: 0;
+	}
+
+	/* The streak does not just change, it lands. */
+	.dd--ticked {
+		animation: tick 620ms cubic-bezier(0.22, 1, 0.36, 1);
+		color: var(--success);
+		display: inline-block;
+	}
+
+	@keyframes tick {
+		0% {
+			transform: translateY(0.35em) scale(0.9);
+		}
+		55% {
+			transform: translateY(-0.12em) scale(1.12);
+		}
+		100% {
+			transform: translateY(0) scale(1);
+		}
 	}
 
 	.hero__actions {

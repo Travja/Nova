@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import OrbitDial from '$components/OrbitDial.svelte';
+	import { celebrationFor } from '$lib/celebration.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
@@ -27,11 +28,20 @@
 		`${formatAmount(snapshot.current.logged, goal.metric)} / ${formatAmount(goal.target, goal.metric)}`
 	);
 	const percent = $derived(Math.round(snapshot.current.fraction * 100));
+	/** True for the second or so after this goal closes an orbit. */
+	const closing = $derived(celebrationFor(goal.id) !== null);
 </script>
 
 <article class="card panel" class:card--complete={snapshot.current.complete}>
 	<a class="dial-link" href={goalHref} aria-label="Open {goal.title}">
-		<OrbitDial orbit={snapshot.current} tier={goal.tier} color={goal.color} size={168} {caption} />
+		<OrbitDial
+			orbit={snapshot.current}
+			tier={goal.tier}
+			color={goal.color}
+			size={168}
+			{caption}
+			goalId={goal.id}
+		/>
 	</a>
 
 	<div class="body">
@@ -62,7 +72,7 @@
 		<dl class="stats">
 			<div>
 				<dt>Streak</dt>
-				<dd>{snapshot.streak}</dd>
+				<dd class:dd--ticked={closing}>{snapshot.streak}</dd>
 			</div>
 			<div>
 				<dt>Orbits</dt>
@@ -158,6 +168,25 @@
 		color: var(--text-bright);
 		font-weight: 620;
 		margin: 0;
+	}
+
+	/* The streak does not just change, it lands. */
+	.dd--ticked {
+		animation: tick 620ms cubic-bezier(0.22, 1, 0.36, 1);
+		color: var(--success);
+		display: inline-block;
+	}
+
+	@keyframes tick {
+		0% {
+			transform: translateY(0.35em) scale(0.9);
+		}
+		55% {
+			transform: translateY(-0.12em) scale(1.12);
+		}
+		100% {
+			transform: translateY(0) scale(1);
+		}
 	}
 
 	.quick-log {

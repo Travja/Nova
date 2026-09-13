@@ -2,6 +2,8 @@
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
+	import Mascot from '$components/Mascot.svelte';
+	import { celebration, noteOrbits } from '$lib/celebration.svelte';
 	import type { FocusRow, GoalSnapshot } from '$domain/progress';
 	import { focusForToday, formatAmount, formatTimeLeft, periodElapsed } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
@@ -13,6 +15,14 @@
 	/** Ranked on the same clock the orbits were measured against. */
 	const focus = $derived(focusForToday(snapshots, data.now));
 	const logAction = $derived(`${resolve('/today')}?/log`);
+
+	/**
+	 * A goal that closes leaves the at-risk list, taking its dial with it, so the
+	 * closing is caught here rather than in a component that is on its way out.
+	 * The mascot salutes and the live region says which goal it was.
+	 */
+	$effect(() => noteOrbits(snapshots));
+	const closed = $derived(celebration());
 
 	function timeLeft(snapshot: GoalSnapshot): string {
 		return formatTimeLeft(snapshot.current.period, data.now);
@@ -66,13 +76,23 @@
 		<a class="button button--ghost" href={resolve('/')}>All tiers</a>
 	</header>
 
+	{#if snapshots.length > 0}
+		<Mascot {focus} now={data.now} />
+	{/if}
+
 	{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
 
-	<p class="live" role="status">{form?.logged ? 'Logged.' : ''}</p>
+	<p class="live" role="status">
+		{#if closed}
+			{closed.title} closed its orbit ✦
+		{:else if form?.logged}
+			Logged.
+		{/if}
+	</p>
 
 	{#if snapshots.length === 0}
 		<div class="empty panel">
-			<Astronaut size={170} />
+			<Astronaut size={170} cheer={closed !== null} />
 			<h2>Nothing in orbit yet</h2>
 			<p class="muted">
 				Today has nothing to ask of you until something is flying. A Satellite closes every day,
@@ -81,14 +101,10 @@
 			<a class="button" href={resolve('/goals/new')}>Launch a goal</a>
 		</div>
 	{:else if focus.atRisk.length === 0}
-		<div class="empty panel">
-			<Astronaut size={170} />
-			<h2>Clear sky</h2>
-			<p class="muted">
-				Nothing is short of target with its period closing, and nothing is behind the pace its
-				period asks for. Whatever is still in flight has room left.
-			</p>
-		</div>
+		<p class="muted clear">
+			Nothing is short of target with its period closing, and nothing is behind the pace its period
+			asks for. Whatever is still in flight has room left.
+		</p>
 	{:else}
 		<ul class="risk">
 			{#each focus.atRisk as row (row.snapshot.goal.id)}
@@ -178,6 +194,13 @@
 		justify-items: center;
 		padding: 2.5rem 1.5rem;
 		text-align: center;
+	}
+
+	/* The pilot above says it is a clear sky; this says what that means. */
+	.clear {
+		font-size: 0.9rem;
+		margin: -0.75rem 0 0;
+		max-width: 60ch;
 	}
 
 	.risk {

@@ -100,18 +100,45 @@ under the user's id before inserting.
 
 ## The visuals
 
+[`VISUALS.md`](VISUALS.md) is the illustrated tour of this section — every body,
+the celebration, the pilot's moods, and what each rule below costs when it is
+broken.
+
 The space theme is not decoration bolted on afterwards; the orbit is the
 progress bar. `OrbitDial.svelte` maps a goal's fraction to an arc and puts the
 body at the matching angle, so position and fill say the same thing two ways.
+
+`TierBody.svelte` draws the body itself, inside a unit circle that the caller
+scales into place — which is why the same component works on a 230px hero dial
+and on a 24px ring in the history strip. Anything finer than a pixel is dropped
+rather than drawn small.
+
+Each tier is a family rather than a stamp: `src/lib/components/bodies/` holds a
+few bodies per tier, and `bodyVariant()` in the domain picks one by hashing the
+goal's id. Pinning it to the id rather than storing it on the row means there is
+no column to migrate and no way for a body to change under a goal that has been
+flying for a year — ids never change, and titles, colours and tiers do.
 
 Rules for anything animated:
 
 - Everything is CSS or inline SVG. No animation library, no Lottie, nothing that
   ships a runtime for decoration.
 - Every animation yields to `prefers-reduced-motion` — handled globally in
-  `src/lib/styles/app.css`.
-- Anything random (the starfield) uses a seeded generator so server and client
-  render identically and hydration stays quiet.
+  `src/lib/styles/app.css`. Position has to carry the meaning without it, which
+  is why bodies are placed by the arc's angle and never by an animation.
+- Anything random (the starfield, a universe's field of light) uses a seeded
+  generator so server and client render identically and hydration stays quiet.
+
+Two things react to the data rather than just drawing it, and both keep the
+decision in `src/lib/domain/`:
+
+- **Closing an orbit** (`celebration.ts`) has to fire once, on the closing
+  itself, when every log re-renders the whole page. The rule is "this browser
+  saw the same period open, then closed"; `src/lib/celebration.svelte.ts` holds
+  that memory for the tab, fed by the pages from an effect, so the server never
+  has an opinion about it.
+- **The mascot's mood** (`mascot.ts`) is read off the same `focusForToday` split
+  the focused view is drawn from, so the drawing and the list cannot disagree.
 
 ## PWA
 

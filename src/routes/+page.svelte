@@ -5,6 +5,7 @@
 	import GoalCard from '$components/GoalCard.svelte';
 	import GoalOrderList from '$components/GoalOrderList.svelte';
 	import Rocket from '$components/Rocket.svelte';
+	import { noteOrbits } from '$lib/celebration.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
 	import { TIER_LIST } from '$domain/tiers';
 	import type { PageProps } from './$types';
@@ -20,6 +21,9 @@
 			goals: snapshots.filter((snapshot: GoalSnapshot) => snapshot.goal.tier === tier.id)
 		})).filter((section) => section.goals.length > 0)
 	);
+
+	/** Logging happens on the cards here, so this is where a closing is spotted. */
+	$effect(() => noteOrbits(snapshots));
 
 	const closedThisPeriod = $derived(
 		snapshots.filter((snapshot: GoalSnapshot) => snapshot.current.complete).length
