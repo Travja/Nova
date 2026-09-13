@@ -90,6 +90,14 @@ sheet posts to the same action and never leaves the list.
 Measured on Today at 390px with seven goals: **246px per goal down to 66px**, and
 one goal fully on screen up to six.
 
+The sheet is also where the card never had room to go. It carries a **custom
+amount** — seven pages, when the chips offer five, ten and twenty — with an
+optional note, so the row giving up its chips buys something the card could not
+do at all. Around it sit the things a list drops: the tier and its cadence, what
+a full orbit asks, the lifetime total, the goal's own description, and the last
+eight orbits as rings. Backdating stays on the goal's page, which the sheet
+links to: that is a decision with a calendar attached.
+
 `<dialog>` carries the sheet, so the focus trap, the escape key and the
 inertness of the page behind it are the platform's rather than ours. The row is
 an ordinary link to the goal underneath the enhancement, so no JavaScript and no

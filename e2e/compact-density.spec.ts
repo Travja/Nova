@@ -4,8 +4,9 @@ import { hydrated } from './helpers';
 /**
  * Compact is a different shape, not the same one with less padding: the lists
  * become rows, and the quick-log that used to sit on every card moves into a
- * sheet the row opens. Logging has to survive that move, and the row has to
- * still be a link to the goal for anyone the sheet never reaches.
+ * sheet the row opens. Logging has to survive that move — including the amount
+ * no chip offers — and the row has to still be a link to the goal for anyone
+ * the sheet never reaches.
  */
 
 const PHONE = { width: 390, height: 844 };
@@ -124,4 +125,72 @@ test('the sheet closes on escape, and the row is a real link underneath it', asy
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('dialog')).toBeHidden();
 	await expect(page).toHaveURL(/\/today$/);
+});
+
+test('the sheet logs an amount no chip offers, and stays put to show it', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await register(page);
+	await launchGoal(page, 'Read pages', '20');
+	await chooseCompact(page);
+
+	await page.goto('/today');
+	await hydrated(page);
+	await rows(page).filter({ hasText: 'Read pages' }).click();
+	const sheet = page.getByRole('dialog');
+
+	// Seven is not on a chip, which is the whole reason this box is here.
+	await sheet.getByLabel(/^Amount/).fill('7');
+	await sheet.getByLabel('Note').fill('On the train');
+	await sheet.getByRole('button', { name: 'Log it' }).click();
+
+	await expect(sheet).toBeVisible();
+	await expect(sheet.getByRole('article')).toContainText('13 pages left today');
+	// The box empties itself, so a second log does not repeat the first.
+	await expect(sheet.getByLabel(/^Amount/)).toHaveValue('');
+
+	await sheet.getByRole('button', { name: 'Close' }).click();
+	await expect(rows(page).filter({ hasText: 'Read pages' })).toContainText('13 pages left today');
+});
+
+test('a rejected amount is answered inside the sheet, not behind it', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await register(page);
+	await launchGoal(page, 'Read pages', '20');
+	await chooseCompact(page);
+
+	await page.goto('/today');
+	await hydrated(page);
+	await rows(page).filter({ hasText: 'Read pages' }).click();
+	const sheet = page.getByRole('dialog');
+
+	await sheet.getByLabel(/^Amount/).fill('0');
+	await sheet.getByRole('button', { name: 'Log it' }).click();
+
+	// The page's own live region is behind the backdrop and no use here.
+	await expect(sheet.getByRole('alert')).toContainText('zero');
+	await expect(sheet).toBeVisible();
+	await expect(sheet.getByRole('article')).toContainText('20 pages left today');
+});
+
+test('the sheet carries the detail a row has no room for', async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await register(page);
+	await launchGoal(page, 'Read pages', '20');
+	await chooseCompact(page);
+
+	await page.goto('/today');
+	await hydrated(page);
+	await rows(page).filter({ hasText: 'Read pages' }).click();
+	const sheet = page.getByRole('dialog');
+
+	// The tier the row gave up, what a full orbit asks, and the running total.
+	await expect(sheet).toContainText('Satellite · one orbit per day');
+	await expect(sheet.getByText('A full orbit')).toBeVisible();
+	await expect(sheet.getByText('Logged in all')).toBeVisible();
+	await expect(sheet.getByRole('heading', { name: 'Recent orbits' })).toBeVisible();
+	// And a way out to the goal's own page, which is where backdating lives.
+	await expect(sheet.getByRole('link', { name: 'Open goal' })).toHaveAttribute(
+		'href',
+		/^\/goals\/[\w-]+$/
+	);
 });

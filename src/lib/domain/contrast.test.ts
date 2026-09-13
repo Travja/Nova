@@ -34,13 +34,22 @@ const SURFACE = composite(parseHex('#161d3d'), 0.72, VOID);
 const SURFACE_STRONG = composite(parseHex('#1c244a'), 0.92, VOID);
 const CHIP = composite([10, 14, 36], 0.8, SURFACE);
 const INPUT = composite([6, 9, 26], 0.72, SURFACE);
+/**
+ * A compact row's sheet stacks them: the card's translucent surface sits on the
+ * sheet's strong one rather than straight on the page, which lands lighter than
+ * either pair on its own.
+ */
+const CARD_ON_SHEET = composite(parseHex('#161d3d'), 0.72, SURFACE_STRONG);
+const CHIP_ON_SHEET = composite([10, 14, 36], 0.8, CARD_ON_SHEET);
 
 const GROUNDS = {
 	'space-void': VOID,
 	'space-surface': SURFACE,
 	'space-surface-strong': SURFACE_STRONG,
 	'chip fill': CHIP,
-	'input fill': INPUT
+	'input fill': INPUT,
+	'card on a sheet': CARD_ON_SHEET,
+	'chip on a sheet': CHIP_ON_SHEET
 } as const;
 
 describe('the contrast arithmetic', () => {

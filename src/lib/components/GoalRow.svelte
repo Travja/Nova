@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import GoalCard from '$components/GoalCard.svelte';
+	import GoalSheet from '$components/GoalSheet.svelte';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import { celebrationFor } from '$lib/celebration.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
@@ -16,8 +16,9 @@
 	 * roughly a quarter of the height, with the quick-log moved into a sheet the
 	 * row opens rather than dropped.
 	 *
-	 * The sheet is the same `GoalCard` the default density draws, so there is one
-	 * card in the app and this is a second way of getting at it.
+	 * The sheet is the same `GoalCard` the default density draws, with the custom
+	 * amount and the goal's details around it — so the row gives up its chips to
+	 * something that carries more than the card it replaced, not less.
 	 *
 	 * No `role="progressbar"` here, unlike the card: the dial is presentational
 	 * and #7 asks for an equivalent text node beside it, which is exactly what
@@ -103,14 +104,7 @@
 <dialog bind:this={sheet} class="sheet" onclose={() => (open = false)} onclick={maybeDismiss}>
 	{#if open}
 		<div class="sheet__inner">
-			<GoalCard {snapshot} {logAction} />
-			<button
-				class="button button--ghost sheet__close"
-				type="button"
-				onclick={() => sheet?.close()}
-			>
-				Close
-			</button>
+			<GoalSheet {snapshot} {logAction} onclose={() => sheet?.close()} />
 		</div>
 	{/if}
 </dialog>
@@ -202,8 +196,12 @@
 	.sheet {
 		background: transparent;
 		border: none;
+		/* A column so the body below can take the leftover height and scroll in
+		   it, rather than running off the bottom of a long sheet. */
+		display: flex;
+		flex-direction: column;
 		margin: auto auto 0;
-		max-height: 100%;
+		max-height: 92%;
 		max-width: 32rem;
 		overflow: visible;
 		padding: 0;
@@ -215,15 +213,22 @@
 		background: rgba(4, 5, 13, 0.66);
 	}
 
+	/*
+	 * The sheet's own ground. Without it the card floats and everything around
+	 * it — the custom amount, the facts, the history — is read straight off the
+	 * blurred page behind the backdrop.
+	 */
 	.sheet__inner {
-		display: grid;
-		gap: var(--gap-block);
-		/* Clear of the home indicator, and of the floating quick-add behind it. */
-		padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
-	}
-
-	.sheet__close {
-		justify-self: stretch;
+		backdrop-filter: blur(16px);
+		background: var(--space-surface-strong);
+		border: 1px solid var(--space-border);
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+		box-shadow: var(--shadow-lift);
+		min-height: 0;
+		/* Clear of the home indicator. A sheet long enough to need it scrolls
+		   inside itself rather than running off the bottom of the screen. */
+		overflow-y: auto;
+		padding: 0.85rem 0.85rem calc(0.85rem + env(safe-area-inset-bottom));
 	}
 
 	.sheet[open] {
@@ -242,6 +247,12 @@
 	@media (min-width: 34rem) {
 		.sheet {
 			margin: auto;
+		}
+
+		/* Centred rather than risen from the bottom edge, so it is a card on all
+		   four sides. */
+		.sheet__inner {
+			border-radius: var(--radius-lg);
 		}
 	}
 </style>
