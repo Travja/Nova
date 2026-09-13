@@ -26,6 +26,20 @@ per revolution. Cleaning the house for two hours a week is a Planet goal with a
 Period boundaries are drawn in the user's own time zone, so "this week" means
 the same thing whether you log from home or from an airport.
 
+## Two screens
+
+The dashboard above groups everything by tier, which is the right mental model
+and the wrong first screen on a phone. `/today` answers the narrower question
+most mornings actually ask — what is short of target with its period closing,
+and what has fallen behind the pace its period calls for — and logs against any
+of it without navigating away. Closed orbits fold out of the way rather than
+disappearing; seeing them done is part of the reward.
+
+![The Today view](docs/screenshots/today.png)
+
+On a narrow screen it is where a fresh visit lands, and the tiered dashboard
+stays one tap away.
+
 ## Stack
 
 - **SvelteKit 2** with Svelte 5 runes, TypeScript throughout
