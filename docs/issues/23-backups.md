@@ -54,4 +54,6 @@ The fix is a catch-up on boot: read the newest snapshot's timestamp at startup
 and take one immediately if it is older than the interval, rather than always
 waiting a full interval from launch. `listSnapshots()` already returns the
 timestamps it needs, so it is a small change inside `startBackupSchedule()` —
-left out of this pass deliberately rather than missed.
+left out of this pass deliberately rather than missed, and tracked as
+[#29](https://github.com/Travja/Nova/issues/29)
+([spec](29-backup-catch-up.md)).
