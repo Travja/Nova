@@ -1,9 +1,10 @@
 import { db } from '$lib/server/db';
 import { sessions, users, type UserRow } from '$lib/server/db/schema';
 import { describeDevice } from '$lib/server/auth/user-agent';
+import { hashToken, newToken } from '$lib/server/auth/token';
 import type { Cookies } from '@sveltejs/kit';
 import { and, desc, eq, gt, ne } from 'drizzle-orm';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 export const SESSION_COOKIE = 'nova_session';
 
@@ -16,13 +17,8 @@ const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 /** How long a user agent may be before it is stored truncated. */
 const USER_AGENT_MAX = 400;
 
-/**
- * The browser holds a random token; the database holds only its SHA-256. A
- * leaked database therefore cannot be used to impersonate anyone.
- */
-function tokenToId(token: string): string {
-	return createHash('sha256').update(token).digest('hex');
-}
+/** The browser holds the token; the database holds only this. */
+const tokenToId = hashToken;
 
 export interface SessionUser {
 	id: string;
@@ -46,7 +42,7 @@ export async function createSession(
 	userId: string,
 	userAgent?: string | null
 ): Promise<{ token: string; expiresAt: Date }> {
-	const token = randomBytes(32).toString('base64url');
+	const token = newToken();
 	const now = new Date();
 	const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS);
 	await db.insert(sessions).values({

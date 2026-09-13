@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { InProcessLimiter, type ThrottlePolicy } from '$lib/server/rate-limit';
-import { ACCOUNT_POLICY, ADDRESS_POLICY, LoginThrottle } from './login-throttle';
+import {
+	ACCOUNT_POLICY,
+	ADDRESS_POLICY,
+	loginThrottle,
+	LoginThrottle,
+	RESET_ACCOUNT_POLICY,
+	resetRequestThrottle
+} from './login-throttle';
 
 const accountPolicy: ThrottlePolicy = {
 	freeAttempts: 2,
@@ -118,5 +125,20 @@ describe('LoginThrottle', () => {
 		expect(ACCOUNT_POLICY.maxDelayMs).toBeLessThanOrEqual(15 * 60_000);
 		expect(ACCOUNT_POLICY.freeAttempts).toBeGreaterThanOrEqual(3);
 		expect(ADDRESS_POLICY.freeAttempts).toBeGreaterThan(ACCOUNT_POLICY.freeAttempts);
+	});
+
+	it('keeps reset requests out of the sign-in budget', async () => {
+		// Otherwise anyone could lock any account out of signing in just by
+		// asking for reset links until its counter tripped.
+		const attempt = { email: 'locked-out@example.com', address: '10.0.0.9' };
+		for (let i = 0; i < 10; i += 1) await resetRequestThrottle.recordFailure(attempt);
+
+		expect((await resetRequestThrottle.check(attempt)).allowed).toBe(false);
+		expect((await loginThrottle.check(attempt)).allowed).toBe(true);
+	});
+
+	it('rations reset mail more tightly than password guesses', () => {
+		expect(RESET_ACCOUNT_POLICY.freeAttempts).toBeLessThan(ACCOUNT_POLICY.freeAttempts);
+		expect(RESET_ACCOUNT_POLICY.baseDelayMs).toBeGreaterThan(ACCOUNT_POLICY.baseDelayMs);
 	});
 });

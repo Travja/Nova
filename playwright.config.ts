@@ -27,7 +27,13 @@ export default defineConfig({
 		command: 'pnpm db:reset:e2e && pnpm db:migrate && pnpm dev --port 4173',
 		port: 4173,
 		reuseExistingServer: false,
-		env: { DATABASE_URL: 'file:./data/e2e.db' },
+		env: {
+			DATABASE_URL: 'file:./data/e2e.db',
+			// Mail goes to files the tests read, never to a server, and ORIGIN is
+			// what the reset links are built from.
+			MAIL_OUTBOX_DIR: './data/e2e-outbox',
+			ORIGIN: 'http://localhost:4173'
+		},
 		stdout: 'pipe'
 	}
 });

@@ -3,7 +3,7 @@
 	import Astronaut from '$components/Astronaut.svelte';
 	import type { PageProps } from './$types';
 
-	let { form }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 </script>
 
 <svelte:head><title>Sign in · Nova</title></svelte:head>
@@ -14,6 +14,12 @@
 	<form class="panel auth__form" method="POST">
 		<h1>Welcome back</h1>
 		<p class="muted">Your orbits are right where you left them.</p>
+
+		{#if data.justReset}
+			<p class="sent" role="status">
+				Your password is set. Sign in with it — every other device was signed out.
+			</p>
+		{/if}
 
 		{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
 
@@ -43,6 +49,9 @@
 		</div>
 
 		<button class="button" type="submit">Sign in</button>
+		{#if data.canReset}
+			<p class="muted"><a href={resolve('/forgot')}>Forgotten your password?</a></p>
+		{/if}
 		<p class="muted">No account yet? <a href={resolve('/register')}>Start flying</a>.</p>
 	</form>
 </section>
@@ -65,6 +74,10 @@
 		display: grid;
 		gap: 1rem;
 		padding: 1.75rem;
+	}
+
+	.sent {
+		color: var(--success);
 	}
 
 	@media (max-width: 48rem) {

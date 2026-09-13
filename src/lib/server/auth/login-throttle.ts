@@ -38,6 +38,21 @@ export const ADDRESS_POLICY: ThrottlePolicy = {
 	decayMs: 60 * 60_000
 };
 
+/**
+ * The client address, or null when the platform cannot say.
+ *
+ * Only as trustworthy as the proxy in front of the app — behind one,
+ * adapter-node needs `ADDRESS_HEADER` and `XFF_DEPTH` set or this is whatever
+ * the client claimed. The per-account half of every limit works without it.
+ */
+export function addressOf(getClientAddress: () => string): string | null {
+	try {
+		return getClientAddress() || null;
+	} catch {
+		return null;
+	}
+}
+
 export interface LoginAttempt {
 	/** As typed, registered or not. */
 	email: string;
@@ -95,3 +110,34 @@ export class LoginThrottle {
 
 /** The process-wide throttle the sign-in action uses. */
 export const loginThrottle = new LoginThrottle();
+
+/**
+ * Reset requests get counters of their own.
+ *
+ * They must never share the sign-in buckets: if asking for a reset spent the
+ * same budget, anyone could lock any account out of signing in simply by
+ * filling its owner's inbox. These are looser in time and tighter in count,
+ * because the thing being rationed is email, not guesses.
+ */
+export const RESET_ACCOUNT_POLICY: ThrottlePolicy = {
+	freeAttempts: 3,
+	baseDelayMs: 30_000,
+	maxDelayMs: 30 * 60_000,
+	decayMs: 60 * 60_000
+};
+
+export const RESET_ADDRESS_POLICY: ThrottlePolicy = {
+	freeAttempts: 8,
+	baseDelayMs: 30_000,
+	maxDelayMs: 30 * 60_000,
+	decayMs: 60 * 60_000
+};
+
+/**
+ * Every reset request spends budget — there is no success to forgive, so the
+ * caller records each attempt with `recordFailure`.
+ */
+export const resetRequestThrottle = new LoginThrottle(
+	new InProcessLimiter(RESET_ACCOUNT_POLICY),
+	new InProcessLimiter(RESET_ADDRESS_POLICY)
+);

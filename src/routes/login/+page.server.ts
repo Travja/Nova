@@ -1,28 +1,20 @@
 import { fieldErrors, formError, loginSchema } from '$domain/validation';
 import { createSession, setSessionCookie } from '$lib/server/auth/session';
-import { loginThrottle } from '$lib/server/auth/login-throttle';
+import { addressOf, loginThrottle } from '$lib/server/auth/login-throttle';
 import { formatRetryAfter } from '$lib/server/rate-limit';
+import { mailConfigured } from '$lib/server/mail';
 import { authenticate } from '$lib/server/users';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
 	if (locals.user) redirect(303, '/');
-	return {};
+	return {
+		// No point offering a reset link on an instance that cannot send one.
+		canReset: mailConfigured,
+		justReset: url.searchParams.get('reset') === 'done'
+	};
 };
-
-/**
- * The address is only as trustworthy as the proxy in front of the app — behind
- * one, adapter-node needs `ADDRESS_HEADER` and `XFF_DEPTH` set or this is
- * whatever the client claimed. The per-account limit does not depend on it.
- */
-function addressOf(getClientAddress: () => string): string | null {
-	try {
-		return getClientAddress() || null;
-	} catch {
-		return null;
-	}
-}
 
 export const actions: Actions = {
 	default: async ({ request, cookies, url, getClientAddress }) => {
