@@ -36,14 +36,15 @@ The gaps that stand between "it works" and "I use it every day".
 
 The reason to open the app rather than a spreadsheet.
 
-| #                                               | Issue                                                                 | Why it matters                                    |
-| ----------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- |
-| [#9](https://github.com/Travja/Nova/issues/9)   | [Celebrate a closed orbit](issues/09-celebrate-closed-orbit.md)       | The best moment currently passes unnoticed        |
-| [#10](https://github.com/Travja/Nova/issues/10) | [A body per tier](issues/10-tier-bodies.md)                           | Every tier draws the same circle today            |
-| [#11](https://github.com/Travja/Nova/issues/11) | [Solar-system view](issues/11-system-view.md)                         | One sky instead of a grid of dials                |
-| [#12](https://github.com/Travja/Nova/issues/12) | [Nested orbits](issues/12-nested-orbits.md)                           | Makes the tier ladder mean something mechanically |
-| [#13](https://github.com/Travja/Nova/issues/13) | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app             |
-| [#14](https://github.com/Travja/Nova/issues/14) | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield             |
+| #                                               | Issue                                                                 | Why it matters                                     |
+| ----------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
+| [#9](https://github.com/Travja/Nova/issues/9)   | [Celebrate a closed orbit](issues/09-celebrate-closed-orbit.md)       | The best moment currently passes unnoticed         |
+| [#10](https://github.com/Travja/Nova/issues/10) | [A body per tier](issues/10-tier-bodies.md)                           | Every tier draws the same circle today             |
+| [#11](https://github.com/Travja/Nova/issues/11) | [Solar-system view](issues/11-system-view.md)                         | One sky instead of a grid of dials                 |
+| [#12](https://github.com/Travja/Nova/issues/12) | [Nested orbits](issues/12-nested-orbits.md)                           | Makes the tier ladder mean something mechanically  |
+| [#13](https://github.com/Travja/Nova/issues/13) | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app              |
+| [#14](https://github.com/Travja/Nova/issues/14) | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield              |
+| [#30](https://github.com/Travja/Nova/issues/30) | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app |
 
 ## M3 — Insight
 
@@ -80,3 +81,6 @@ Worth saying out loud, so they do not creep in:
 - **A native app.** The PWA is the delivery mechanism; a second client would
   double the surface for no gain Nova needs.
 - **AI goal suggestions.** Nothing here is improved by guessing at your intent.
+- **A project tracker.** One-off tasks get a home in #30, deliberately without
+  sub-tasks, due dates or dependencies. A one-off that needs those is a project,
+  and Nova is not going to be a good one.
