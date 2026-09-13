@@ -20,7 +20,17 @@ Constraints that keep this from bloating: no animation library, no raster assets
 legible at 24px in the history strip and at 230px on the detail page, and honest
 under reduced motion.
 
+**Read `OrbitDial.svelte` before trusting this spec's layout.** It has changed
+since this was written: the progress caption now sits below the orbit rather than
+inside it, and the ring stops short to make room. Anything here describing where
+things sit on the dial is a description of the old one.
+
+`Orbit` also carries a `dormant` flag now, for periods the goal spent archived.
+Decide what each body does while dormant — dimmed, unlit, still — rather than
+letting it render as an ordinary empty orbit.
+
 **Done when**
 
 - Each tier is identifiable without its label.
 - The same component renders correctly at every size currently in use.
+- A dormant orbit is visibly distinct from one that was simply missed.

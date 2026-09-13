@@ -54,6 +54,10 @@ Routes parse forms and render; they do not build queries.
 - **Ownership is checked inside the service functions**, not in the route — see
   `logEntry()`, which re-reads the goal under the user's id before inserting. Keep
   new services doing the same so every caller gets the guarantee.
+- **Compute snapshots through `src/lib/server/goals.ts`**, never by calling
+  `snapshotGoal()` directly from a route. It needs `dormantWindows` passed or
+  streaks silently break across spans the goal spent archived; the service loads
+  them for you.
 - **Migrations are committed and immutable.** Change `schema.ts`, run
   `pnpm db:generate`, commit the generated SQL. Never edit one that has shipped.
 - **Timestamps are UTC epoch milliseconds.** Nothing stores a local time.
