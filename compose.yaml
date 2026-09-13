@@ -9,6 +9,13 @@ services:
       ORIGIN: ${ORIGIN:-http://localhost:3000}
       DATABASE_URL: file:/data/nova.db
       BODY_SIZE_LIMIT: 512K
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Snapshots land on the same volume as the database. Copy them off the
+      # host too — a volume that dies takes both with it.
+      BACKUP_DIR: /data/backups
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
     volumes:
       - nova-data:/data
 

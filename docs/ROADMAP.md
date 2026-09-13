@@ -9,6 +9,9 @@ with enough context to pick up cold. They are specs, not tickets — read the on
 you are about to build before you start. Issue numbers match the spec filenames,
 so `docs/issues/12-nested-orbits.md` is issue #12.
 
+Deploying rather than building? [`DEPLOYMENT.md`](DEPLOYMENT.md) is the
+operations guide: reverse proxy, TLS, backups and upgrades.
+
 Editing a spec does not update the issue on GitHub; keep the spec as the source
 of truth and link to it from the issue when the two drift.
 
@@ -65,6 +68,7 @@ Making it dependable, and making it speak up.
 | [#22](https://github.com/Travja/Nova/issues/22) | [Logging and errors](issues/22-logging-and-errors.md) | Debugging a self-hosted instance is guesswork     |
 | [#23](https://github.com/Travja/Nova/issues/23) | [Automated backups](issues/23-backups.md)             | Years of history in one file                      |
 | [#24](https://github.com/Travja/Nova/issues/24) | [Deployment guide](issues/24-deployment-guide.md)     | PWAs need HTTPS and an exact `ORIGIN`             |
+| [#29](https://github.com/Travja/Nova/issues/29) | [Backup catch-up](issues/29-backup-catch-up.md)       | A rebooting host can miss every snapshot          |
 
 ## Deliberately not planned
 

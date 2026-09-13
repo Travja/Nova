@@ -104,7 +104,7 @@ position and fill say the same thing twice.
 
 ## Where the work is
 
-Issues #1–24, grouped into four milestones. The full spec for each lives in
+Issues #1–24 plus follow-ups (#29), grouped into four milestones. The full spec for each lives in
 `docs/issues/`, numbered to match — `docs/issues/12-nested-orbits.md` is issue
 #12. `docs/ROADMAP.md` indexes them.
 
