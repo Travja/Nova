@@ -60,13 +60,13 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 	await riskRow(page, 'Read pages').getByRole('button', { name: '+2 pages' }).click();
 	await expect(page).toHaveURL(/\/today$/);
 	await riskRow(page, 'Read pages').getByRole('button', { name: '+2 pages' }).click();
-	await expect(riskRow(page, 'Read pages')).toContainText('1 pages left today');
+	await expect(riskRow(page, 'Read pages')).toContainText('1 page left today');
 
 	// With four fifths of one target logged, the untouched goal is the urgent one.
 	await expect(riskRows(page).first()).toContainText('Push-ups');
 
 	// Closing an orbit moves it out of the list without hiding it.
-	await riskRow(page, 'Read pages').getByRole('button', { name: '+1 pages' }).click();
+	await riskRow(page, 'Read pages').getByRole('button', { name: '+1 page', exact: true }).click();
 	await expect(page.getByText('1 orbit needs attention')).toBeVisible();
 	await expect(riskRows(page)).toHaveCount(1);
 

@@ -8,6 +8,7 @@ import {
 	formatTimeLeft,
 	isAtRisk,
 	periodElapsed,
+	singularize,
 	snapshotGoal,
 	streakFrom,
 	urgency
@@ -366,5 +367,34 @@ describe('formatAmount', () => {
 		expect(formatAmount(1, { kind: 'checkin', unit: '' })).toBe('1 check-in');
 		expect(formatAmount(3, { kind: 'checkin', unit: '' })).toBe('3 check-ins');
 		expect(formatAmount(12, { kind: 'count', unit: 'pages' })).toBe('12 pages');
+	});
+
+	it('drops the plural on a counted unit at exactly one', () => {
+		expect(formatAmount(1, { kind: 'count', unit: 'pages' })).toBe('1 page');
+		expect(formatAmount(-1, { kind: 'count', unit: 'pages' })).toBe('-1 page');
+		expect(formatAmount(1.5, { kind: 'count', unit: 'pages' })).toBe('1.5 pages');
+		expect(formatAmount(0, { kind: 'count', unit: 'pages' })).toBe('0 pages');
+		expect(formatAmount(1, { kind: 'count', unit: '' })).toBe('1');
+	});
+});
+
+describe('singularize', () => {
+	it('undoes the regular endings', () => {
+		expect(singularize('pages')).toBe('page');
+		expect(singularize('workouts')).toBe('workout');
+		expect(singularize('entries')).toBe('entry');
+		expect(singularize('boxes')).toBe('box');
+		expect(singularize('pushes')).toBe('push');
+		expect(singularize('glasses')).toBe('glass');
+	});
+
+	it('leaves alone anything it cannot reduce safely', () => {
+		// Already singular, a mass noun, or only looking plural.
+		expect(singularize('chapter')).toBe('chapter');
+		expect(singularize('water')).toBe('water');
+		expect(singularize('press')).toBe('press');
+		expect(singularize('focus')).toBe('focus');
+		expect(singularize('analysis')).toBe('analysis');
+		expect(singularize('lines')).toBe('line');
 	});
 });

@@ -276,7 +276,26 @@ export function formatAmount(value: number, metric: MetricDefinition): string {
 		return `${rounded} ${rounded === 1 ? 'check-in' : 'check-ins'}`;
 	}
 	const rounded = Math.round(value * 100) / 100;
-	return metric.unit ? `${rounded} ${metric.unit}` : String(rounded);
+	if (!metric.unit) return String(rounded);
+	return `${rounded} ${Math.abs(rounded) === 1 ? singularize(metric.unit) : metric.unit}`;
+}
+
+/**
+ * The singular of a counted unit, for the one case where "1 pages" would read
+ * wrong.
+ *
+ * The unit is whatever the pilot typed, and the field asks for a plural
+ * (`pages, workouts, chapters…`), so this undoes the regular English endings
+ * and leaves anything it cannot reduce safely alone — a unit that is already
+ * singular, a mass noun like `water`, or a word ending in `ss`, `us` or `is`
+ * that only looks plural.
+ */
+export function singularize(unit: string): string {
+	if (/(?:ss|us|is)$/i.test(unit)) return unit;
+	if (/[^aeiou]ies$/i.test(unit)) return `${unit.slice(0, -3)}y`;
+	if (/(?:ss|sh|ch|x|z)es$/i.test(unit)) return unit.slice(0, -2);
+	if (/[^s]s$/i.test(unit)) return unit.slice(0, -1);
+	return unit;
 }
 
 /** Quick-log buttons offered for a metric, in its own units. */
