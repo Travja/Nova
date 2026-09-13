@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { periodFor } from './period';
-import { buildOrbit, formatAmount, snapshotGoal, streakFrom } from './progress';
+import { cadenceOf } from './tiers';
+import {
+	buildOrbit,
+	focusForToday,
+	formatAmount,
+	formatTimeLeft,
+	isAtRisk,
+	periodElapsed,
+	snapshotGoal,
+	streakFrom,
+	urgency
+} from './progress';
 import type { Goal } from './types';
 
 const options = { timeZone: 'UTC', now: new Date('2026-09-12T18:00:00Z') };
@@ -174,6 +185,173 @@ describe('streakFrom', () => {
 	it('is zero when nothing has closed', () => {
 		const period = periodFor(options.now, 'week', options);
 		expect(streakFrom([buildOrbit(period, 10, 120)])).toBe(0);
+	});
+});
+
+describe('periodElapsed', () => {
+	it('reads the span from the period rather than assuming a length', () => {
+		// 8 March 2026 is 23 hours long in Denver, so noon is past the halfway mark.
+		const denver = { timeZone: 'America/Denver' };
+		const springForward = periodFor(new Date('2026-03-08T12:00:00Z'), 'day', denver);
+		expect(springForward.end.getTime() - springForward.start.getTime()).toBe(23 * 3_600_000);
+		// Denver's 8 March starts at 07:00Z, so the halfway mark is 11h30m later.
+		expect(periodElapsed(springForward, new Date('2026-03-08T18:30:00Z'))).toBeCloseTo(0.5, 2);
+	});
+
+	it('clamps outside its own bounds', () => {
+		const period = periodFor(options.now, 'week', options);
+		expect(periodElapsed(period, period.start)).toBe(0);
+		expect(periodElapsed(period, new Date(period.start.getTime() - 1_000))).toBe(0);
+		expect(periodElapsed(period, period.end)).toBe(1);
+	});
+});
+
+describe('urgency', () => {
+	const year = periodFor(new Date('2026-06-01T00:00:00Z'), 'year', options);
+
+	it('grows as the period runs out at the same standing', () => {
+		const january = urgency(buildOrbit(year, 1.2, 12), new Date('2026-01-15T00:00:00Z'));
+		const november = urgency(buildOrbit(year, 1.2, 12), new Date('2026-11-15T00:00:00Z'));
+		expect(january).toBeLessThan(0.1);
+		expect(november).toBeGreaterThan(0.7);
+	});
+
+	it('grows as more of the target is missing at the same point', () => {
+		const now = new Date('2026-11-15T00:00:00Z');
+		const behind = urgency(buildOrbit(year, 1.2, 12), now);
+		const nearlyThere = urgency(buildOrbit(year, 11, 12), now);
+		expect(behind).toBeGreaterThan(nearlyThere);
+	});
+
+	it('is zero for a closed orbit', () => {
+		expect(urgency(buildOrbit(year, 12, 12), new Date('2026-11-15T00:00:00Z'))).toBe(0);
+	});
+
+	it('is zero for a dormant orbit, however late the period is', () => {
+		const dormant = buildOrbit(year, 0, 12, true);
+		expect(urgency(dormant, new Date('2026-12-31T00:00:00Z'))).toBe(0);
+	});
+});
+
+describe('isAtRisk', () => {
+	const day = periodFor(new Date('2026-09-12T06:00:00Z'), 'day', options);
+	const year = periodFor(new Date('2026-09-12T06:00:00Z'), 'year', options);
+
+	it('flags an unclosed satellite at any hour, since its period is short', () => {
+		expect(isAtRisk(buildOrbit(day, 0, 1), new Date('2026-09-12T00:00:00Z'))).toBe(true);
+		expect(isAtRisk(buildOrbit(day, 0, 1), new Date('2026-09-12T23:00:00Z'))).toBe(true);
+	});
+
+	it('leaves a long period alone until its last day', () => {
+		expect(isAtRisk(buildOrbit(year, 1, 12), new Date('2026-09-12T06:00:00Z'))).toBe(false);
+		expect(isAtRisk(buildOrbit(year, 1, 12), new Date('2026-12-31T06:00:00Z'))).toBe(true);
+	});
+
+	it('never flags a closed or dormant orbit', () => {
+		const now = new Date('2026-09-12T18:00:00Z');
+		expect(isAtRisk(buildOrbit(day, 1, 1), now)).toBe(false);
+		expect(isAtRisk(buildOrbit(day, 0, 1, true), now)).toBe(false);
+	});
+});
+
+describe('focusForToday', () => {
+	// New Year's Eve: every cadence closes at the same instant, which is exactly
+	// when the ordering has to say something other than "by tier".
+	const now = new Date('2026-12-31T18:00:00Z');
+	/** Mid-quarter, so nothing longer than a day is anywhere near its deadline. */
+	const november = new Date('2026-11-01T12:00:00Z');
+
+	function snapshotFor(overrides: Partial<Goal>, logged: number, dormant = false, at: Date = now) {
+		const subject = goal(overrides);
+		const period = periodFor(at, cadenceOf(subject.tier), options);
+		return {
+			goal: subject,
+			current: buildOrbit(period, logged, subject.target, dormant),
+			history: [],
+			streak: 0,
+			totalOrbits: 0,
+			lifetimeLogged: logged
+		};
+	}
+
+	it('sorts what is at risk by pressure, not by tier', () => {
+		// The satellite is 80% of the way through today; the year is at 10% with
+		// hours to go, so it is the one in trouble.
+		const satellite = snapshotFor({ id: 'sat', tier: 'satellite', target: 10 }, 8);
+		const lateYear = snapshotFor({ id: 'year', tier: 'universe', target: 12 }, 1.2);
+		const focus = focusForToday([satellite, lateYear], now);
+
+		expect(focus.atRisk.map((snapshot) => snapshot.goal.id)).toEqual(['year', 'sat']);
+	});
+
+	it('collapses the closed ones out of the list rather than dropping them', () => {
+		const closed = snapshotFor({ id: 'done', tier: 'satellite', target: 10 }, 10);
+		const open = snapshotFor({ id: 'todo', tier: 'satellite', target: 10 }, 0);
+		const focus = focusForToday([closed, open], now);
+
+		expect(focus.closed.map((snapshot) => snapshot.goal.id)).toEqual(['done']);
+		expect(focus.atRisk.map((snapshot) => snapshot.goal.id)).toEqual(['todo']);
+	});
+
+	it('parks a goal with room left as steady rather than actionable', () => {
+		const quarter = snapshotFor({ id: 'galaxy', tier: 'galaxy', target: 30 }, 4, false, november);
+		const focus = focusForToday([quarter], november);
+
+		expect(focus.atRisk).toEqual([]);
+		expect(focus.steady.map((snapshot) => snapshot.goal.id)).toEqual(['galaxy']);
+	});
+
+	it('ranks the ones that can wait by urgency as well', () => {
+		// Two goals on the same quarter, one barely started: it is not work today,
+		// but it is the first thing that becomes work.
+		const behind = snapshotFor(
+			{ id: 'behind', tier: 'galaxy', target: 30, sortOrder: 1 },
+			2,
+			false,
+			november
+		);
+		const ahead = snapshotFor(
+			{ id: 'ahead', tier: 'galaxy', target: 30, sortOrder: 0 },
+			25,
+			false,
+			november
+		);
+		const focus = focusForToday([ahead, behind], november);
+
+		expect(focus.steady.map((snapshot) => snapshot.goal.id)).toEqual(['behind', 'ahead']);
+	});
+
+	it('keeps a dormant orbit out of the at-risk list', () => {
+		const dormant = snapshotFor({ id: 'asleep', tier: 'satellite', target: 10 }, 0, true);
+		const focus = focusForToday([dormant], now);
+
+		expect(focus.atRisk).toEqual([]);
+		expect(focus.steady.map((snapshot) => snapshot.goal.id)).toEqual(['asleep']);
+	});
+
+	it("breaks a tie on the nearer deadline, then the pilot's own order", () => {
+		const first = snapshotFor({ id: 'a', tier: 'satellite', target: 10, sortOrder: 0 }, 0);
+		const second = snapshotFor({ id: 'b', tier: 'satellite', target: 10, sortOrder: 1 }, 0);
+		const focus = focusForToday([second, first], now);
+
+		expect(focus.atRisk.map((snapshot) => snapshot.goal.id)).toEqual(['a', 'b']);
+	});
+});
+
+describe('formatTimeLeft', () => {
+	const day = periodFor(new Date('2026-09-12T06:00:00Z'), 'day', options);
+	const year = periodFor(new Date('2026-09-12T06:00:00Z'), 'year', options);
+
+	it('counts down in the coarsest unit that still says something', () => {
+		expect(formatTimeLeft(day, new Date('2026-09-12T23:30:00Z'))).toBe('30m left');
+		expect(formatTimeLeft(day, new Date('2026-09-12T18:00:00Z'))).toBe('6h left');
+		expect(formatTimeLeft(year, new Date('2026-12-30T00:00:00Z'))).toBe('2 days left');
+		expect(formatTimeLeft(year, new Date('2026-12-31T00:00:00Z'))).toBe('1 day left');
+	});
+
+	it('never rounds the last minute down to nothing', () => {
+		expect(formatTimeLeft(day, day.end)).toBe('under a minute left');
+		expect(formatTimeLeft(day, new Date(day.end.getTime() - 30_000))).toBe('under a minute left');
 	});
 });
 

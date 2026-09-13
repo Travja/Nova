@@ -10,9 +10,14 @@
 		snapshot: GoalSnapshot;
 		/** Set while a log request for this goal is in flight. */
 		pending?: boolean;
+		/**
+		 * Where the quick-log form posts. Each screen owns its own `log` action so
+		 * a card logs without navigating away from the page it is drawn on.
+		 */
+		logAction?: string;
 	}
 
-	let { snapshot, pending = false }: Props = $props();
+	let { snapshot, pending = false, logAction = `${resolve('/')}?/log` }: Props = $props();
 
 	const goal = $derived(snapshot.goal);
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
@@ -69,7 +74,7 @@
 			</div>
 		</dl>
 
-		<form class="quick-log" method="POST" action="{resolve('/')}?/log" use:enhance>
+		<form class="quick-log" method="POST" action={logAction} use:enhance>
 			<input type="hidden" name="goalId" value={goal.id} />
 			{#each steps as step (step)}
 				<button class="chip" type="submit" name="amount" value={step} disabled={pending}>

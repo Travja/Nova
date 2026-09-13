@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
@@ -23,6 +24,45 @@
 	const closedThisPeriod = $derived(
 		snapshots.filter((snapshot: GoalSnapshot) => snapshot.current.complete).length
 	);
+
+	/**
+	 * On a phone the tiered grid is the wrong first screen, so a fresh landing on
+	 * `/` goes to the focused view instead — the nav and the button above keep the
+	 * dashboard one tap away.
+	 *
+	 * Only a fresh landing: arriving here by link is a deliberate choice, and the
+	 * session flag makes that choice survive a reload. Both the media query and
+	 * the redirect need a browser, so the dashboard is what renders on the server
+	 * and what anyone without JavaScript keeps.
+	 */
+	const NARROW = '(max-width: 40rem)';
+	const CHOSE_TIERS = 'nova:tiered-dashboard';
+
+	function rememberTiers() {
+		try {
+			sessionStorage.setItem(CHOSE_TIERS, '1');
+		} catch {
+			// Private modes can refuse storage; the redirect simply stays on.
+		}
+	}
+
+	function choseTiers(): boolean {
+		try {
+			return sessionStorage.getItem(CHOSE_TIERS) === '1';
+		} catch {
+			return false;
+		}
+	}
+
+	afterNavigate(({ type }) => {
+		if (!data.user) return;
+		if (type !== 'enter') {
+			rememberTiers();
+			return;
+		}
+		if (choseTiers() || !window.matchMedia(NARROW).matches) return;
+		goto(resolve('/today'), { replaceState: true });
+	});
 
 	/** Set by a drag; the move buttons are announced from the server's reply instead. */
 	let dragAnnouncement = $state('');

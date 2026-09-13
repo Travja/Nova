@@ -157,6 +157,109 @@ export function streakFrom(history: readonly Orbit[]): number {
 	return streak;
 }
 
+/**
+ * How far through its period an instant sits, clamped to 0-1.
+ *
+ * Periods are unequal by design — a day is 23 or 25 hours across a daylight
+ * saving transition, and a quarter is not three equal months — so this reads
+ * the span from the period itself rather than assuming a length.
+ */
+export function periodElapsed(period: Period, now: Date = new Date()): number {
+	const span = period.end.getTime() - period.start.getTime();
+	if (span <= 0) return 1;
+	return Math.max(0, Math.min(1, (now.getTime() - period.start.getTime()) / span));
+}
+
+/**
+ * How pressing an orbit is, on a 0-1 scale.
+ *
+ * Two things make an orbit urgent: how much of the target is still missing, and
+ * how little of the period is left to cover it. Multiplying them is what makes
+ * a Universe goal at 10% unremarkable in January and alarming in November,
+ * without ever ranking one tier above another by fiat.
+ *
+ * A closed orbit has nothing left to do, and a dormant one was never expected
+ * to fly, so both score zero — a sleeping goal is not urgent.
+ */
+export function urgency(orbit: Orbit, now: Date = new Date()): number {
+	if (orbit.complete || orbit.dormant) return 0;
+	return (1 - orbit.fraction) * periodElapsed(orbit.period, now);
+}
+
+/** How close a period has to be to closing for its orbit to count as at risk. */
+export const RISK_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether an orbit needs attention now: short of target, with the period about
+ * to close.
+ *
+ * A satellite's period is never longer than the window, so every unclosed
+ * satellite qualifies; everything larger only surfaces as its deadline nears.
+ */
+export function isAtRisk(orbit: Orbit, now: Date = new Date(), windowMs = RISK_WINDOW_MS): boolean {
+	if (orbit.complete || orbit.dormant) return false;
+	return orbit.period.end.getTime() - now.getTime() <= windowMs;
+}
+
+export interface TodayFocus {
+	/** Short of target with the period closing, most urgent first. */
+	atRisk: GoalSnapshot[];
+	/** Closed in their current period — kept for the reward, not for the work. */
+	closed: GoalSnapshot[];
+	/** In flight with room left, most behind first. Nothing here is owed today. */
+	steady: GoalSnapshot[];
+}
+
+/**
+ * Split goals into what today asks for, what it has already given, and what can
+ * wait. Pass the same `now` the snapshots were computed with.
+ *
+ * Both open groups are ranked by urgency, so the long-range goal drifting behind
+ * sits at the top of the ones that can wait — the first thing to become work
+ * once its own deadline comes into view.
+ */
+export function focusForToday(
+	snapshots: readonly GoalSnapshot[],
+	now: Date = new Date(),
+	windowMs = RISK_WINDOW_MS
+): TodayFocus {
+	const atRisk: GoalSnapshot[] = [];
+	const closed: GoalSnapshot[] = [];
+	const steady: GoalSnapshot[] = [];
+
+	for (const snapshot of snapshots) {
+		if (snapshot.current.complete) closed.push(snapshot);
+		else if (isAtRisk(snapshot.current, now, windowMs)) atRisk.push(snapshot);
+		else steady.push(snapshot);
+	}
+
+	return { atRisk: byUrgency(atRisk, now), closed, steady: byUrgency(steady, now) };
+}
+
+/** Most urgent first, ties going to the nearer deadline and then the pilot's own order. */
+function byUrgency(snapshots: GoalSnapshot[], now: Date): GoalSnapshot[] {
+	return snapshots
+		.map((snapshot) => ({ snapshot, score: urgency(snapshot.current, now) }))
+		.sort(
+			(a, b) =>
+				b.score - a.score ||
+				a.snapshot.current.period.end.getTime() - b.snapshot.current.period.end.getTime() ||
+				a.snapshot.goal.sortOrder - b.snapshot.goal.sortOrder
+		)
+		.map((ranked) => ranked.snapshot);
+}
+
+/** How long a period has left, in the coarsest unit that still says something. */
+export function formatTimeLeft(period: Period, now: Date = new Date()): string {
+	const minutes = Math.floor((period.end.getTime() - now.getTime()) / 60_000);
+	if (minutes <= 0) return 'under a minute left';
+	if (minutes < 60) return `${minutes}m left`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours}h left`;
+	const days = Math.round(hours / 24);
+	return `${days} ${days === 1 ? 'day' : 'days'} left`;
+}
+
 /** Format an amount for display, e.g. `1h 30m` or `12 pages`. */
 export function formatAmount(value: number, metric: MetricDefinition): string {
 	if (metric.kind === 'duration') {
