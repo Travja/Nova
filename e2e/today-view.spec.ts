@@ -96,6 +96,37 @@ test('a goal with a whole year to run waits in the steady fold', async ({ page }
 	await expect(steady.getByRole('link', { name: 'Finish the novel' })).toBeVisible();
 });
 
+test('the pilot reacts to the week, and can be sent away and asked back', async ({ page }) => {
+	await register(page, 'Rae Whitlock');
+	await launchGoal(page, 'Read pages', 'Satellite', '10');
+
+	await page.goto('/today');
+	await hydrated(page);
+
+	// Nothing logged with the day closing: out of time and well short of target.
+	const mascot = page.locator('.mascot');
+	await expect(mascot).toHaveAttribute('data-mood', 'adrift');
+	await expect(mascot).toContainText('Read pages');
+
+	// Half of it in, with the same day left: worth a nudge rather than a drift.
+	await page.getByRole('button', { name: '+5 pages' }).first().click();
+	await expect(mascot).toHaveAttribute('data-mood', 'alert');
+
+	// And once it closes there is nothing left to ask for.
+	await page.getByRole('button', { name: '+5 pages' }).first().click();
+	await expect(mascot).toHaveAttribute('data-mood', 'resting');
+
+	// Skippable, and the choice survives a reload.
+	await page.getByRole('button', { name: 'Hide the pilot' }).click();
+	await expect(mascot).toHaveCount(0);
+	await page.reload();
+	await hydrated(page);
+	await expect(mascot).toHaveCount(0);
+
+	await page.getByRole('button', { name: 'Bring the pilot back' }).click();
+	await expect(mascot).toHaveAttribute('data-mood', 'resting');
+});
+
 test('a phone lands on the focused view, with the tiered dashboard one tap away', async ({
 	page
 }) => {
