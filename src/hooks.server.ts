@@ -1,8 +1,14 @@
+import { building } from '$app/environment';
 import { SESSION_COOKIE, validateSession, clearSessionCookie } from '$lib/server/auth/session';
+import { startBackupSchedule } from '$lib/server/backup';
 import { handleServerError } from '$lib/server/errors';
 import { logger, newTraceId, serializeError } from '$lib/server/log';
 import { sequence } from '@sveltejs/kit/hooks';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
+
+// Snapshots run in-process so a stock `docker compose up` is backed up without
+// anyone wiring up cron. Off while developing; see `readBackupConfig()`.
+if (!building) startBackupSchedule();
 
 /** The container healthcheck polls this every 30s; it does not belong in the request stream. */
 const HEALTH_PATH = '/health';

@@ -98,13 +98,46 @@ session cookie both require HTTPS on anything other than `localhost`.
 
 ### Backups
 
-Everything is in one SQLite file. With the container running:
+Everything is in one SQLite file, and the server snapshots it for you. Once a
+day it runs `VACUUM INTO` — which is safe on a live WAL database, unlike copying
+`nova.db` out from under a running server — and rotates the results.
+
+| Variable                | Default              | What it does                                |
+| ----------------------- | -------------------- | ------------------------------------------- |
+| `BACKUP_ENABLED`        | on in production     | `false` switches scheduled backups off      |
+| `BACKUP_DIR`            | `backups/` beside it | Where snapshots are written                 |
+| `BACKUP_INTERVAL_HOURS` | `24`                 | How often a snapshot is taken               |
+| `BACKUP_KEEP_DAILY`     | `7`                  | Newest snapshot of each of the last N days  |
+| `BACKUP_KEEP_WEEKLY`    | `4`                  | Newest snapshot of each of the last M weeks |
+
+Snapshots are named `nova-20260913T030000Z.db` and land on the same volume as
+the database, so **copy them off the host as well** — a volume that dies takes
+the database and its snapshots with it.
 
 ```bash
-docker compose exec nova sh -c 'sqlite3 /data/nova.db ".backup /data/backup.db"'
+docker compose cp nova:/data/backups ./nova-backups
 ```
 
-Or stop the container and copy `/data/nova.db` along with its `-wal` file.
+#### Restoring
+
+A snapshot is an ordinary, self-contained SQLite file: there is no `-wal`
+sidecar to remember and nothing to replay.
+
+```bash
+docker compose down                       # stop the writer first
+docker volume ls                          # find the volume, e.g. nova_nova-data
+
+docker run --rm -v nova_nova-data:/data alpine sh -c '
+  cp /data/nova.db /data/nova.db.before-restore 2>/dev/null;
+  cp /data/backups/nova-20260913T030000Z.db /data/nova.db &&
+  rm -f /data/nova.db-wal /data/nova.db-shm'
+
+docker compose up -d
+```
+
+Deleting `nova.db-wal` and `nova.db-shm` matters: left behind, they belong to
+the database you just replaced. Migrations run on start, so a snapshot from an
+older version is brought up to date automatically.
 
 ## Project layout
 
