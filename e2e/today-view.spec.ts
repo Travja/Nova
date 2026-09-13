@@ -60,9 +60,15 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 	await expect(riskRows(page).first()).toContainText('Read pages');
 
 	// Logging happens on the row: the view reloads itself, it does not navigate.
-	await riskRow(page, 'Read pages').getByRole('button', { name: '+2 pages' }).click();
+	// A five-page target breaks down into +1, +3 and +5, so four fifths of it is
+	// two taps.
+	await riskRow(page, 'Read pages')
+		.getByRole('button', { name: /^\+3 pages$/ })
+		.click();
 	await expect(page).toHaveURL(/\/today$/);
-	await riskRow(page, 'Read pages').getByRole('button', { name: '+2 pages' }).click();
+	await riskRow(page, 'Read pages')
+		.getByRole('button', { name: /^\+1 page$/ })
+		.click();
 	await expect(riskRow(page, 'Read pages')).toContainText('1 page left today');
 
 	// With four fifths of one target logged, the untouched goal is the urgent one.

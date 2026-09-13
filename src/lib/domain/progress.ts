@@ -358,10 +358,37 @@ export function singularize(unit: string): string {
 	return unit;
 }
 
-/** Quick-log buttons offered for a metric, in its own units. */
+/** Round amounts people actually think in, rather than a quarter of 47 minutes. */
+const DURATION_STEPS = [1, 2, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480];
+
+/** The largest friendly value at or below `value`, or the smallest one there is. */
+function snapDown(value: number, ladder: readonly number[]): number {
+	let chosen = ladder[0];
+	for (const rung of ladder) {
+		if (rung <= value) chosen = rung;
+	}
+	return chosen;
+}
+
+/**
+ * Quick-log buttons offered for a metric, in its own units.
+ *
+ * The steps are a breakdown of the goal itself — a quarter, a half, the whole
+ * thing — so a twenty-minute goal never offers to log an hour against it. The
+ * largest button always closes the orbit exactly.
+ */
 export function quickLogSteps(metric: MetricDefinition, target: number): number[] {
 	if (metric.kind === 'checkin') return [1];
-	if (metric.kind === 'duration') return [15, 30, 60];
-	const step = target >= 20 ? 5 : 1;
-	return [step, step * 2, step * 5];
+	if (!Number.isFinite(target) || target <= 0) return [1];
+
+	const fractions = [0.25, 0.5, 1];
+	const steps = fractions.map((fraction) => {
+		const raw = target * fraction;
+		if (metric.kind === 'duration') return Math.min(snapDown(raw, DURATION_STEPS), target);
+		// Counts are whole things: you log a page, not four fifths of one.
+		return Math.min(Math.max(1, Math.round(raw)), Math.max(1, Math.round(target)));
+	});
+
+	// Small targets collapse several fractions onto the same rung.
+	return [...new Set(steps)].filter((step) => step > 0).sort((a, b) => a - b);
 }

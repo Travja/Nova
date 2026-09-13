@@ -2,15 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { periodFor } from './period';
 import { cadenceOf } from './tiers';
 import {
+	PACE_TOLERANCE,
 	buildOrbit,
 	focusForToday,
 	formatAmount,
 	formatTimeLeft,
 	isBehindPace,
 	isClosing,
-	PACE_TOLERANCE,
 	paceDeficit,
 	periodElapsed,
+	quickLogSteps,
 	singularize,
 	snapshotGoal,
 	streakFrom,
@@ -479,5 +480,58 @@ describe('singularize', () => {
 		expect(singularize('focus')).toBe('focus');
 		expect(singularize('analysis')).toBe('analysis');
 		expect(singularize('lines')).toBe('line');
+	});
+});
+
+describe('quickLogSteps', () => {
+	const duration = { kind: 'duration', unit: 'minutes' } as const;
+	const count = { kind: 'count', unit: 'pages' } as const;
+
+	it('never offers to log more than the goal asks for', () => {
+		for (const target of [1, 5, 12, 20, 47, 120, 300]) {
+			for (const metric of [duration, count]) {
+				for (const step of quickLogSteps(metric, target)) {
+					expect(step).toBeLessThanOrEqual(target);
+					expect(step).toBeGreaterThan(0);
+				}
+			}
+		}
+	});
+
+	it('breaks a short duration down instead of jumping to a quarter hour', () => {
+		// The old behaviour offered +15m, +30m, +1h against a five-minute goal.
+		expect(quickLogSteps(duration, 5)).toEqual([1, 2, 5]);
+	});
+
+	it('still reads naturally at the sizes people actually use', () => {
+		expect(quickLogSteps(duration, 120)).toEqual([30, 60, 120]);
+		expect(quickLogSteps(duration, 20)).toEqual([5, 10, 20]);
+	});
+
+	it('closes the orbit exactly with its largest button', () => {
+		for (const target of [5, 20, 60, 120]) {
+			const steps = quickLogSteps(duration, target);
+			expect(steps.at(-1)).toBe(target);
+		}
+	});
+
+	it('keeps counts whole', () => {
+		expect(quickLogSteps(count, 8)).toEqual([2, 4, 8]);
+		expect(quickLogSteps(count, 1)).toEqual([1]);
+		expect(quickLogSteps(count, 3).every(Number.isInteger)).toBe(true);
+	});
+
+	it('returns ascending, unique, non-empty steps for any sane target', () => {
+		for (const target of [1, 2, 3, 7, 47, 1000]) {
+			const steps = quickLogSteps(duration, target);
+			expect(steps.length).toBeGreaterThan(0);
+			expect([...new Set(steps)]).toEqual(steps);
+			expect([...steps].sort((a, b) => a - b)).toEqual(steps);
+		}
+	});
+
+	it('a check-in is one check-in', () => {
+		expect(quickLogSteps({ kind: 'checkin', unit: '' }, 1)).toEqual([1]);
+		expect(quickLogSteps({ kind: 'checkin', unit: '' }, 30)).toEqual([1]);
 	});
 });

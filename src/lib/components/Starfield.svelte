@@ -123,6 +123,21 @@
 	}
 
 	.shooting-star {
+		/*
+		 * The bright end of the bar is the head, so the tilt has to put the bar's
+		 * LEFT edge on the direction of travel — that is the travel angle minus
+		 * 180deg. Keep the two in step or the tail sticks out sideways.
+		 *
+		 * Both components of the travel are in `vw` on purpose. Mixing `vw` with
+		 * `vh` makes the angle depend on the viewport's aspect ratio, so no single
+		 * tilt can match it on both a phone and a desktop; and `vh` rebases when a
+		 * mobile address bar hides, which made the comet jump mid-flight as the
+		 * page was scrolled.
+		 */
+		--comet-travel-x: -138vw;
+		--comet-travel-y: 80vw; /* atan2(80, 138) ~= 30deg below the horizontal */
+		--comet-tilt: -30deg;
+
 		background: linear-gradient(90deg, rgba(255, 255, 255, 0.9), transparent);
 		border-radius: 999px;
 		height: 2px;
@@ -167,14 +182,14 @@
 		0%,
 		92% {
 			opacity: 0;
-			transform: translate(0, 0) rotate(18deg);
+			transform: translate(0, 0) rotate(var(--comet-tilt));
 		}
 		94% {
 			opacity: 1;
 		}
 		100% {
 			opacity: 0;
-			transform: translate(-60vw, 42vh) rotate(18deg);
+			transform: translate(var(--comet-travel-x), var(--comet-travel-y)) rotate(var(--comet-tilt));
 		}
 	}
 </style>

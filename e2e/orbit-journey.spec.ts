@@ -31,10 +31,14 @@ test('a new pilot can register, launch a goal and close part of an orbit', async
 	await expect(page.getByRole('heading', { name: 'Clean the house' })).toBeVisible();
 	await expect(page.getByText('2h to go this week.')).toBeVisible();
 
-	// Two quick logs add up to 45 minutes of the two-hour target.
+	// The quick-log chips are a breakdown of the goal itself, so a two-hour
+	// target offers a half hour, an hour, and the whole thing.
 	await page.getByRole('button', { name: '+30m' }).click();
 	await expect(page.getByText('1h 30m to go this week.')).toBeVisible();
-	await page.getByRole('button', { name: '+15m' }).click();
+
+	// Anything the chips do not cover goes through the custom amount.
+	await page.getByLabel(/Amount/).fill('15');
+	await page.getByRole('button', { name: 'Log it' }).click();
 	await expect(page.getByText('1h 15m to go this week.')).toBeVisible();
 	await expect(page.getByText('45m / 2h')).toBeVisible();
 
