@@ -4,12 +4,19 @@
 		size?: number;
 		/** Seconds for one full drift cycle. */
 		speed?: number;
+		/** Set while an orbit has just closed: a salute, and then back to drifting. */
+		cheer?: boolean;
 	}
 
-	let { size = 160, speed = 9 }: Props = $props();
+	let { size = 160, speed = 9, cheer = false }: Props = $props();
 </script>
 
-<div class="astronaut" style="--size: {size}px; --speed: {speed}s" aria-hidden="true">
+<div
+	class="astronaut"
+	class:is-cheering={cheer}
+	style="--size: {size}px; --speed: {speed}s"
+	aria-hidden="true"
+>
 	<svg viewBox="0 0 120 140">
 		<!-- tether -->
 		<path class="tether" d="M60 120 C 40 128, 26 134, 8 138" />
@@ -89,6 +96,17 @@
 		animation: glint 6s ease-in-out infinite;
 	}
 
+	/* Someone closed an orbit: a salute and a hop, over before it is in the way. */
+	.is-cheering .arm--right {
+		animation: salute 900ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	.is-cheering .float {
+		animation:
+			hop 900ms cubic-bezier(0.22, 1, 0.36, 1),
+			float var(--speed) ease-in-out infinite;
+	}
+
 	@keyframes float {
 		0%,
 		100% {
@@ -116,6 +134,29 @@
 		}
 		50% {
 			transform: rotate(5deg);
+		}
+	}
+
+	@keyframes salute {
+		0% {
+			transform: rotate(0deg);
+		}
+		25%,
+		65% {
+			transform: rotate(-62deg);
+		}
+		100% {
+			transform: rotate(0deg);
+		}
+	}
+
+	@keyframes hop {
+		0%,
+		100% {
+			transform: translateY(0);
+		}
+		40% {
+			transform: translateY(-9px);
 		}
 	}
 

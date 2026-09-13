@@ -1,5 +1,7 @@
 <script lang="ts">
 	import TierBody from '$components/TierBody.svelte';
+	import { celebrationFor } from '$lib/celebration.svelte';
+	import { rayAngles } from '$domain/celebration';
 	import type { Orbit } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
@@ -20,9 +22,15 @@
 		size?: number;
 		/** Text shown at the centre, e.g. `45m / 2h`. */
 		caption?: string;
+		/**
+		 * The goal this dial is drawing, so it can catch the moment that goal
+		 * closes an orbit. Left out — by the form preview, which has no goal —
+		 * the dial never celebrates.
+		 */
+		celebrationKey?: string;
 	}
 
-	let { orbit, tier, color, size = 180, caption = '' }: Props = $props();
+	let { orbit, tier, color, size = 180, caption = '', celebrationKey = '' }: Props = $props();
 
 	const CENTER = 50;
 	const RADIUS = 36;
@@ -49,6 +57,10 @@
 
 	/** Gradient ids have to be unique per dial and stable across hydration. */
 	const uid = $props.id();
+
+	/** Set for as long as this goal's closing is being celebrated. */
+	const closing = $derived(celebrationKey ? celebrationFor(celebrationKey) : null);
+	const rays = $derived(closing ? rayAngles(closing.shape.rays) : []);
 </script>
 
 <div
@@ -106,6 +118,42 @@
 				{/if}
 				<!-- Travelling round the ring must not tip the body over with it: a
 				     planet's bands stay level however far along the arc it is. -->
+				{#if closing}
+					<!-- Keyed on the stamp so a second closing restarts the animation
+					     rather than sitting out the first one's tail. -->
+					{#key closing.stamp}
+						<g class="burst" style="--burst-ms: {closing.shape.ms}ms">
+							<circle
+								class="burst__wave"
+								cx={CENTER}
+								cy={CENTER - RADIUS}
+								r={bodyRadius}
+								style="transform-origin: {CENTER}px {CENTER - RADIUS}px; --reach: {closing.shape
+									.reach}"
+							/>
+							<g class="burst__rays" style="transform-origin: {CENTER}px {CENTER - RADIUS}px">
+								{#each rays as angle (angle)}
+									<line
+										class="burst__ray"
+										x1={CENTER}
+										y1={CENTER - RADIUS - bodyRadius * 1.15}
+										x2={CENTER}
+										y2={CENTER - RADIUS - bodyRadius * closing.shape.reach}
+										style="transform: rotate({angle}deg); transform-origin: {CENTER}px {CENTER -
+											RADIUS}px"
+									/>
+								{/each}
+							</g>
+							<circle
+								class="burst__flash"
+								cx={CENTER}
+								cy={CENTER - RADIUS}
+								r={bodyRadius * 1.1}
+								style="transform-origin: {CENTER}px {CENTER - RADIUS}px"
+							/>
+						</g>
+					{/key}
+				{/if}
 				<g
 					style="transform: rotate({-bodyAngle}deg); transform-origin: {CENTER}px {CENTER -
 						RADIUS}px"
@@ -184,6 +232,39 @@
 		transform-origin: center;
 	}
 
+	/*
+	 * The moment an orbit closes: an ignition where the body reached, rays out of
+	 * it, and a wave that leaves the ring behind. The arc sweeping up to it is
+	 * the transition on `.arc` above, which is what makes the two read as one
+	 * movement rather than a flash on top of a jump.
+	 */
+	.burst {
+		pointer-events: none;
+	}
+
+	.burst__flash {
+		fill: #fff;
+		animation: flash var(--burst-ms) ease-out forwards;
+	}
+
+	.burst__wave {
+		fill: none;
+		stroke: var(--color);
+		stroke-width: 1.4;
+		animation: wave var(--burst-ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	.burst__rays {
+		animation: rays var(--burst-ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	.burst__ray {
+		filter: drop-shadow(0 0 2px var(--color));
+		stroke: var(--color);
+		stroke-linecap: round;
+		stroke-width: 1.3;
+	}
+
 	/* A period spent archived was never flown, so the whole dial goes cold: the
 	   ring is drawn but nothing about it is lit. */
 	.dial--dormant .arc {
@@ -253,6 +334,47 @@
 		}
 	}
 
+	@keyframes flash {
+		0% {
+			opacity: 1;
+			transform: scale(0.4);
+		}
+		35% {
+			opacity: 0.45;
+			transform: scale(1.4);
+		}
+		100% {
+			opacity: 0;
+			transform: scale(2);
+		}
+	}
+
+	@keyframes wave {
+		0% {
+			opacity: 0.85;
+			transform: scale(0.6);
+		}
+		100% {
+			opacity: 0;
+			transform: scale(var(--reach));
+		}
+	}
+
+	@keyframes rays {
+		0% {
+			opacity: 0;
+			transform: scale(0.25);
+		}
+		15%,
+		55% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+			transform: scale(1);
+		}
+	}
+
 	@keyframes pulse {
 		0%,
 		100% {
@@ -262,6 +384,14 @@
 		50% {
 			opacity: 1;
 			transform: scale(1.08);
+		}
+	}
+
+	/* Under reduced motion the closed state is the whole celebration: the arc is
+	   already full and the caption already says so, so nothing else happens. */
+	@media (prefers-reduced-motion: reduce) {
+		.burst {
+			display: none;
 		}
 	}
 </style>

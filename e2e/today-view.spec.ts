@@ -50,6 +50,9 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 
 	await page.getByRole('link', { name: 'Today' }).click();
 	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+	// The quick-log forms below post for real until `use:enhance` is attached,
+	// which navigates away from the view this test is about.
+	await hydrated(page);
 	await expect(page.getByText('2 orbits need attention')).toBeVisible();
 
 	// Both satellites close today and neither has moved, so the tie falls to the
