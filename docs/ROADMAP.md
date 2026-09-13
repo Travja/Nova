@@ -9,6 +9,9 @@ with enough context to pick up cold. They are specs, not tickets — read the on
 you are about to build before you start. Issue numbers match the spec filenames,
 so `docs/issues/12-nested-orbits.md` is issue #12.
 
+Deploying rather than building? [`DEPLOYMENT.md`](DEPLOYMENT.md) is the
+operations guide: reverse proxy, TLS, backups and upgrades.
+
 Editing a spec does not update the issue on GitHub; keep the spec as the source
 of truth and link to it from the issue when the two drift.
 

@@ -96,6 +96,10 @@ Two environment variables matter in production:
 Put it behind a TLS-terminating reverse proxy: installing a PWA and storing a
 session cookie both require HTTPS on anything other than `localhost`.
 
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) is the full guide — Caddy and nginx
+examples with automatic TLS, the headers the Node adapter needs behind a proxy,
+what `ORIGIN` breaks when it is wrong, and how upgrades work.
+
 ### Backups
 
 Everything is in one SQLite file, and the server snapshots it for you. Once a
@@ -138,6 +142,9 @@ docker compose up -d
 Deleting `nova.db-wal` and `nova.db-shm` matters: left behind, they belong to
 the database you just replaced. Migrations run on start, so a snapshot from an
 older version is brought up to date automatically.
+
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) covers off-site copies and verifying
+a snapshot before you need it.
 
 ## Project layout
 
