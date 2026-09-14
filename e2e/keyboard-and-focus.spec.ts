@@ -258,8 +258,11 @@ test('the goal form tabs in order, and both hidden radio groups show focus', asy
 	await page.getByLabel('What is the goal?').focus();
 
 	// The order the form is laid out in — a radio group is one stop, landing on
-	// whichever option is checked.
-	const order = ['description', 'tier', 'metricKind', 'target', 'color'];
+	// whichever option is checked. `parentId` is the goal this one feeds (#12);
+	// it sits after the target because picking it is the last thing about what
+	// the goal measures. `metricUnit` is not a stop here: the metric defaults to
+	// time, which posts the unit as a hidden input.
+	const order = ['description', 'tier', 'metricKind', 'target', 'parentId', 'color'];
 	const rings: Record<string, Awaited<ReturnType<typeof focusRing>>> = {};
 
 	for (const field of order) {

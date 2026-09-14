@@ -2,7 +2,7 @@
 	import GoalForm from '$components/GoalForm.svelte';
 	import type { PageProps } from './$types';
 
-	let { form }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 </script>
 
 <svelte:head><title>New goal · Nova</title></svelte:head>
@@ -12,7 +12,7 @@
 	<p class="muted">Pick the orbit it belongs in, then say what one revolution takes.</p>
 </header>
 
-<GoalForm errors={form?.errors ?? null} />
+<GoalForm goals={data.goals} errors={form?.errors ?? null} />
 
 <style>
 	.head {

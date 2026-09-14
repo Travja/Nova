@@ -14,7 +14,13 @@
 	</p>
 </header>
 
-<GoalForm goal={data.goal} errors={form?.errors ?? null} submitLabel="Save changes" />
+<GoalForm
+	goal={data.goal}
+	goals={data.goals}
+	children={data.children}
+	errors={form?.errors ?? null}
+	submitLabel="Save changes"
+/>
 
 <style>
 	.head {

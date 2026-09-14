@@ -3,6 +3,7 @@
 	import Astronaut from '$components/Astronaut.svelte';
 	import { mascotFor } from '$domain/mascot';
 	import { formatAmount, formatTimeLeft, type TodayFocus } from '$domain/progress';
+	import { metricFor } from '$domain/nesting';
 	import { celebration } from '$lib/celebration.svelte';
 	import { focusTarget } from '$lib/focus';
 	import { onMount, tick } from 'svelte';
@@ -38,7 +39,7 @@
 
 	const timeLeft = $derived(subject ? formatTimeLeft(subject.current.period, now) : '');
 	const remaining = $derived(
-		subject ? formatAmount(subject.current.remaining, subject.goal.metric) : ''
+		subject ? formatAmount(subject.current.remaining, metricFor(subject)) : ''
 	);
 	/** "today" or "the week": what is running out, in the sentence it appears in. */
 	const runningOut = $derived.by(() => {

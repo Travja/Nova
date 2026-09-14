@@ -5,6 +5,7 @@
 	import { celebrationFor } from '$lib/celebration.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
 	import { formatAmount } from '$domain/progress';
+	import { metricFor } from '$domain/nesting';
 	import { CADENCE_LABEL } from '$domain/tiers';
 	import { pendingFor } from '$lib/offline/queue.svelte';
 
@@ -40,6 +41,8 @@
 
 	const goal = $derived(snapshot.goal);
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
+	/** Orbits rather than minutes or pages, once this goal has children. */
+	const metric = $derived(metricFor(snapshot));
 	const closing = $derived(celebrationFor(goal.id) !== null);
 	/**
 	 * Entries this goal is still carrying. The row has no `aria-label`, so this
@@ -83,6 +86,7 @@
 		color={goal.color}
 		size={52}
 		goalId={goal.id}
+		satellites={snapshot.derived?.children ?? []}
 	/>
 
 	<span class="body">
@@ -92,7 +96,7 @@
 				Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]}
 				<span aria-hidden="true">✦</span>
 			{:else}
-				{formatAmount(snapshot.current.remaining, goal.metric)} left {CADENCE_LABEL[
+				{formatAmount(snapshot.current.remaining, metric)} left {CADENCE_LABEL[
 					snapshot.current.period.cadence
 				]}
 			{/if}

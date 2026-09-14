@@ -79,6 +79,29 @@ missed, which is what lets archiving freeze a streak instead of breaking it.
 Windows are passed into `snapshotGoal()` as plain data, so the rule stays in the
 domain layer with everything else.
 
+### Nested orbits
+
+`goals.parent_id` is a self-reference with `ON DELETE SET NULL`: deleting a Star
+System orphans the weekly habits under it rather than taking them with it.
+
+A goal with children is **derived** — its orbit counts the closed orbits of its
+direct children rather than anything logged against it, and `logEntry()` refuses
+entries for one. The maths is `$domain/nesting`, pure over already-loaded
+children exactly as the archive windows are: `src/lib/server/goals.ts` loads the
+forest once, `snapshotWithChildren()` decides whether a goal is a leaf, and
+nothing in `$domain` reaches for a row.
+
+Three rules are enforced at write time rather than found at read time — the
+parent must be the same user's, its cadence must be strictly longer, and the
+graph must stay acyclic. A cycle discovered while rendering is a stack overflow
+in the middle of a dashboard; a cycle refused at the edge is a form error.
+
+The subtle part is which of the parent's periods a closed child orbit counts
+towards: the one containing the child period's **end**, read as the last instant
+that period covers rather than as its exclusive `end`. A week finishing on the
+last day of October belongs to October; `period.end` for that week is 1 November.
+Getting it wrong fails nothing and moves every straddling orbit by one.
+
 ### A known limit
 
 `listGoalSnapshots()` loads every entry for every goal to compute lifetime orbit

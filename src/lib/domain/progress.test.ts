@@ -36,6 +36,7 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 		sortOrder: 0,
 		createdAt: new Date('2026-01-01T00:00:00Z'),
 		archivedAt: null,
+		parentId: null,
 		...overrides
 	};
 }

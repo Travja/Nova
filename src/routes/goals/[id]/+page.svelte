@@ -2,11 +2,13 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import ChildOrbits from '$components/ChildOrbits.svelte';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import OrbitHistory from '$components/OrbitHistory.svelte';
 	import { celebrationFor, noteOrbits } from '$lib/celebration.svelte';
 	import { toLocalDateTime } from '$domain/period';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
+	import { metricFor } from '$domain/nesting';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import { overlayQueued } from '$domain/queue';
 	import { logOrQueue, type QueuedState } from '$lib/offline/enhance';
@@ -32,7 +34,13 @@
 	const current = $derived(snapshot.current);
 	const archived = $derived(goal.archivedAt !== null);
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
-	const steps = $derived(quickLogSteps(goal.metric, goal.target));
+	/**
+	 * A goal with children counts closed child orbits, so every amount on this
+	 * page is in orbits. `metricFor` is the one place that decides it.
+	 */
+	const metric = $derived(metricFor(snapshot));
+	const nested = $derived(snapshot.derived ?? null);
+	const steps = $derived(quickLogSteps(metric, goal.target));
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
 	/**
 	 * Which entry the list is editing. The URL drives it so the row survives a
@@ -134,16 +142,14 @@
 			tier={goal.tier}
 			color={goal.color}
 			size={200}
-			caption="{formatAmount(current.logged, goal.metric)} / {formatAmount(
-				goal.target,
-				goal.metric
-			)}"
+			caption="{formatAmount(current.logged, metric)} / {formatAmount(goal.target, metric)}"
 			goalId={goal.id}
+			satellites={nested?.children ?? []}
 		/>
 
 		<div class="hero__copy">
 			<p class="tier-tag" style="color: {tierDef.accent}">
-				{tierDef.label} · one orbit per {current.period.cadence}
+				{tierDef.label} · one orbit per {current.period.cadence}{nested ? ' · derived' : ''}
 			</p>
 			<h1>{goal.title}</h1>
 			{#if goal.description}<p class="muted">{goal.description}</p>{/if}
@@ -154,12 +160,10 @@
 				{:else if current.complete}
 					Orbit closed {CADENCE_LABEL[current.period.cadence]} — {formatAmount(
 						current.logged,
-						goal.metric
-					)} logged.
+						metric
+					)}{nested ? ' closed underneath it' : ' logged'}.
 				{:else}
-					{formatAmount(current.remaining, goal.metric)} to go {CADENCE_LABEL[
-						current.period.cadence
-					]}.
+					{formatAmount(current.remaining, metric)} to go {CADENCE_LABEL[current.period.cadence]}.
 				{/if}
 			</p>
 
@@ -173,8 +177,8 @@
 					<dd>{snapshot.totalOrbits}</dd>
 				</div>
 				<div>
-					<dt>Lifetime</dt>
-					<dd>{formatAmount(snapshot.lifetimeLogged, goal.metric)}</dd>
+					<dt>{nested ? 'Orbits fed in' : 'Lifetime'}</dt>
+					<dd>{formatAmount(snapshot.lifetimeLogged, metric)}</dd>
 				</div>
 			</dl>
 
@@ -232,7 +236,23 @@
 		</section>
 	{/if}
 
-	{#if !archived}
+	{#if nested}
+		<section class="panel block">
+			<h2>What feeds this orbit</h2>
+			<p class="muted">
+				This goal counts the orbits its children close, so nothing is logged against it directly. A
+				child period that falls short counts nothing and one that overshoots counts once — the orbit
+				here measures how many of them you closed, not how much you did.
+			</p>
+			<ChildOrbits children={nested.children} orbit={current} />
+			{#if data.recentEntries.length > 0}
+				<p class="muted hint">
+					The entries below were logged before this goal had children. They are still here and still
+					yours, but they no longer move this orbit.
+				</p>
+			{/if}
+		</section>
+	{:else if !archived}
 		<section class="panel block">
 			<h2>Log progress</h2>
 
@@ -312,7 +332,7 @@
 			<ul class="entries">
 				{#each data.recentEntries as entry (entry.id)}
 					<li class:entries__row--editing={editing === entry.id}>
-						{#if editing === entry.id && !archived}
+						{#if editing === entry.id && !archived && !nested}
 							<form class="edit" method="POST" action="?/editEntry&edit={entry.id}" use:enhance>
 								<input type="hidden" name="entryId" value={entry.id} />
 								<div class="field">
@@ -356,7 +376,7 @@
 							<span class="entry__amount">{formatAmount(entry.amount, goal.metric)}</span>
 							<span class="muted entry__when">{dateFormatter.format(entry.occurredAt)}</span>
 							{#if entry.note}<span class="entry__note muted">{entry.note}</span>{/if}
-							{#if !archived}
+							{#if !archived && !nested}
 								<span class="entry__actions">
 									<!-- Every row carried the same two names, so a screen reader read a
 									     list of "Edit, Remove, Edit, Remove" with nothing to say which

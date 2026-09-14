@@ -1,5 +1,5 @@
 import { periodFor, recentPeriods, type Period, type PeriodOptions } from './period';
-import { cadenceOf } from './tiers';
+import { cadenceOf, type Tier } from './tiers';
 import type { Goal, MetricDefinition, ProgressEntry } from './types';
 
 /**
@@ -37,6 +37,36 @@ export interface DormantWindow {
 	until: Date | null;
 }
 
+/**
+ * One direct child of a derived goal, as the parent draws it.
+ *
+ * Enough to put the child's own body on the parent's dial and to say what it
+ * has contributed this period — not a snapshot of the child, which the screen
+ * already has if it is showing the child at all.
+ */
+export interface ChildStanding {
+	goalId: string;
+	title: string;
+	tier: Tier;
+	color: string;
+	/** The child's own orbit in flight, so its body sits where its progress is. */
+	current: Orbit;
+	/** Closed child orbits this child has contributed to the parent's current period. */
+	closed: number;
+}
+
+/**
+ * What a goal with children counts, when it has any.
+ *
+ * `snapshot.derived` being set is the one test for "this goal is derived": its
+ * orbit counts closed child orbits and nothing can be logged against it
+ * directly. See `$domain/nesting`, which computes it.
+ */
+export interface DerivedStanding {
+	/** Direct children only — a parent never reaches past them. */
+	children: ChildStanding[];
+}
+
 export interface GoalSnapshot {
 	goal: Goal;
 	current: Orbit;
@@ -48,6 +78,12 @@ export interface GoalSnapshot {
 	totalOrbits: number;
 	/** Lifetime total logged, in the metric's units. */
 	lifetimeLogged: number;
+	/**
+	 * Set when this goal has children, in which case every number above counts
+	 * closed child orbits rather than amounts in the goal's own metric. Null or
+	 * absent for a leaf, which is every goal that can be logged against.
+	 */
+	derived?: DerivedStanding | null;
 }
 
 type EntryLike = Pick<ProgressEntry, 'amount' | 'occurredAt'>;

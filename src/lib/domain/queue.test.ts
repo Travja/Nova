@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { overlayAll, overlayQueued, queuedFor, type QueuedEntry } from './queue';
 import { snapshotGoal } from './progress';
+import { snapshotDerivedGoal } from './nesting';
 import type { Goal } from './types';
 
 const utc = { timeZone: 'UTC' };
@@ -18,6 +19,7 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 		sortOrder: 0,
 		createdAt: new Date('2026-01-01T00:00:00Z'),
 		archivedAt: null,
+		parentId: null,
 		...overrides
 	};
 }
@@ -156,5 +158,67 @@ describe('overlayAll', () => {
 
 		expect(shown[0].current.logged).toBe(4);
 		expect(shown[1].current.logged).toBe(5);
+	});
+});
+
+describe('what the queue closes reaches the goals counting it', () => {
+	const now = new Date('2026-09-16T18:00:00Z');
+	const child = goal({ id: 'child', tier: 'planet', target: 2, parentId: 'parent' });
+	const parent = goal({ id: 'parent', tier: 'starSystem', target: 2, parentId: null });
+
+	function forest(childEntries: { amount: number; occurredAt: Date }[]) {
+		const childSnapshot = snapshotGoal(child, childEntries, { ...utc, now });
+		return [
+			childSnapshot,
+			snapshotDerivedGoal(parent, [{ goal: child, entries: childEntries }], { ...utc, now })
+		];
+	}
+
+	it('carries a week the queue closes up to the month counting it', () => {
+		// One closed week in September already, and this week one short.
+		const logged = [
+			{ amount: 2, occurredAt: new Date('2026-09-08T12:00:00Z') },
+			{ amount: 1, occurredAt: new Date('2026-09-15T12:00:00Z') }
+		];
+		const [, before] = forest(logged);
+		expect(before.current.logged).toBe(1);
+		expect(before.current.complete).toBe(false);
+
+		const [, after] = overlayAll(
+			forest(logged),
+			[queued('2026-09-16T09:00:00Z', 1, { goalId: 'child' })],
+			utc
+		);
+
+		// The queued page closes this week, which closes the month above it.
+		expect(after.current.logged).toBe(2);
+		expect(after.current.complete).toBe(true);
+		expect(after.derived?.children[0].closed).toBe(2);
+	});
+
+	it('leaves the parent alone when the queued entry does not close anything', () => {
+		const logged = [{ amount: 2, occurredAt: new Date('2026-09-08T12:00:00Z') }];
+		const [, after] = overlayAll(
+			forest(logged),
+			[queued('2026-09-16T09:00:00Z', 1, { goalId: 'child' })],
+			utc
+		);
+
+		// A week still short of its target contributes nothing, however much of it
+		// is waiting to sync.
+		expect(after.current.logged).toBe(1);
+		expect(after.derived?.children[0].closed).toBe(1);
+	});
+
+	it('never folds a queued amount into a count of orbits', () => {
+		const [, before] = forest([]);
+		// An entry queued against the parent itself is stale — `logEntry` refuses
+		// them now — and must not be added to its orbit as though it were a count.
+		const shown = overlayQueued(
+			before,
+			[queued('2026-09-16T09:00:00Z', 5, { goalId: 'parent' })],
+			utc
+		);
+		expect(shown).toBe(before);
 	});
 });

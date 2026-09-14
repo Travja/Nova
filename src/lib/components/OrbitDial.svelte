@@ -4,7 +4,7 @@
 	import { bodyVariant } from '$domain/bodies';
 	import { MIN_DIAL_SCALE } from '$domain/preferences';
 	import { SWEEP_MS, rayAngles } from '$domain/celebration';
-	import type { Orbit } from '$domain/progress';
+	import type { ChildStanding, Orbit } from '$domain/progress';
 	import { orbitStanding } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
@@ -33,6 +33,23 @@
 	 * sentence is the contract — and it holds on a row, a card, the form preview
 	 * and the goal page identically, with no call site free to solve it its own
 	 * way.
+	 *
+	 * ## Nested orbits
+	 *
+	 * A derived goal's children are drawn as bodies orbiting its own body — the
+	 * thing the tier ladder has been promising since the scaffold, and the reason
+	 * the metaphor is a nesting one rather than five buckets. Each child gets its
+	 * own small ring around the parent's body and sits at its own progress angle,
+	 * so one dial says the same thing at two scales: how far round the month is,
+	 * and how far round the week inside it is.
+	 *
+	 * Everything about a child is drawn inside the counter-rotated group that
+	 * keeps the parent's body level, so a moon does not swing round the planet
+	 * just because the planet moved along its year.
+	 *
+	 * The moons need no convention of their own: they are drawn inside the same
+	 * `aria-hidden` `<svg>`, so they are decorative with everything else in it,
+	 * and `ChildOrbits` beside the dial carries what they say as ordinary text.
 	 */
 
 	interface Props {
@@ -58,9 +75,24 @@
 		 * nothing to attach it to.
 		 */
 		label?: string;
+		/**
+		 * The children this goal counts, each drawn orbiting its body. Empty for
+		 * every goal that is not derived, which is every goal that can be logged
+		 * against.
+		 */
+		satellites?: readonly ChildStanding[];
 	}
 
-	let { orbit, tier, color, size = 180, caption = '', goalId = '', label = '' }: Props = $props();
+	let {
+		orbit,
+		tier,
+		color,
+		size = 180,
+		caption = '',
+		goalId = '',
+		label = '',
+		satellites = []
+	}: Props = $props();
 
 	const CENTER = 50;
 	const RADIUS = 36;
@@ -95,6 +127,30 @@
 
 	/** The body this goal flies, which never changes under it. */
 	const variant = $derived(bodyVariant(tier, goalId));
+
+	/** A moon is a fraction of the body it orbits, never a fraction of the dial. */
+	const moonRadius = $derived(Math.max(1.4, bodyRadius * 0.3));
+	/**
+	 * How many children a dial can carry before it is a smudge round a planet.
+	 *
+	 * Each one needs a ring of its own — several children at the same progress
+	 * would otherwise sit on top of each other, and spreading them by index would
+	 * be a position that means nothing — and the rings have to stay inside the
+	 * dial. Four is where both run out. The list beside the dial carries the rest,
+	 * and the number the dial is drawing is a count either way.
+	 */
+	const MAX_MOONS = 4;
+	/**
+	 * Measured the way `compact` is, at the smallest this dial can be drawn: below
+	 * about three pixels a moon is a speck that reads as a rendering artefact
+	 * rather than as a body, so the dial draws the parent alone and the copy
+	 * beside it does the work.
+	 */
+	const moons = $derived(
+		(2 * moonRadius * size * MIN_DIAL_SCALE) / 100 >= 3 ? satellites.slice(0, MAX_MOONS) : []
+	);
+	/** Rings step outwards so two children at the same angle are still two bodies. */
+	const moonRing = (index: number) => bodyRadius * (1.55 + index * 0.32);
 	/** Set for as long as this goal's closing is being celebrated. */
 	const closing = $derived(goalId ? celebrationFor(goalId) : null);
 	const rays = $derived(closing ? rayAngles(closing.shape.rays) : []);
@@ -222,6 +278,38 @@
 						dormant={orbit.dormant}
 						spinSeconds={orbitSeconds}
 					/>
+
+					{#each moons as moon, index (moon.goalId)}
+						{@const ring = moonRing(index)}
+						<g
+							class="moon"
+							class:moon--complete={moon.current.complete && !moon.current.dormant}
+							class:moon--dormant={moon.current.dormant}
+							style="--moon-color: {moon.color}; --moon-seconds: {orbitSeconds *
+								0.45}s; transform-origin: {CENTER}px {CENTER - RADIUS}px"
+						>
+							<circle class="moon__track" cx={CENTER} cy={CENTER - RADIUS} r={ring} />
+							<g
+								class="moon__travel"
+								style="transform: rotate({moon.current
+									.angle}deg); transform-origin: {CENTER}px {CENTER - RADIUS}px"
+							>
+								<!-- The child's own colour, which `TierBody` reads off an ancestor. -->
+								<g style="--color: {moon.color}">
+									<TierBody
+										tier={moon.tier}
+										variant={bodyVariant(moon.tier, moon.goalId)}
+										cx={CENTER}
+										cy={CENTER - RADIUS - ring}
+										r={moonRadius}
+										compact
+										dormant={moon.current.dormant}
+										spinSeconds={orbitSeconds}
+									/>
+								</g>
+							</g>
+						</g>
+					{/each}
 				</g>
 			</g>
 		</g>
@@ -358,6 +446,35 @@
 	.dial--dormant .dust {
 		animation: none;
 		opacity: 0.4;
+	}
+
+	/*
+	 * A child orbiting its parent. The ring is drawn the same way the parent's
+	 * own track is — dotted, unlit — so the two read as the same kind of thing at
+	 * two scales, and the body on it sits at its own progress angle.
+	 */
+	.moon__track {
+		fill: none;
+		stroke: color-mix(in srgb, var(--moon-color) 45%, transparent);
+		stroke-dasharray: 1 2.4;
+		stroke-width: 0.5;
+	}
+
+	/* Moves with the parent's body for the same reason the parent's does: the
+	   arc sweeps, so anything reading it has to arrive with it. */
+	.moon__travel {
+		transition: transform var(--sweep-ms) cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	/* A closed child keeps circling, the small version of the reward the parent
+	   gets for closing its own orbit. */
+	.moon--complete {
+		animation: spin var(--moon-seconds) linear infinite;
+	}
+
+	.moon--dormant .moon__track {
+		opacity: 0.3;
+		stroke: #7c87b4;
 	}
 
 	/* A closed orbit keeps moving as its own small reward. */

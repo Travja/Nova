@@ -1,6 +1,6 @@
 import { clientEntryIdSchema, entrySchemaFor, occurredAtBounds } from '$domain/validation';
 import type { SessionUser } from '$lib/server/auth/session';
-import { getGoal, logEntry } from '$lib/server/goals';
+import { getGoal, logEntry, LOG_REFUSAL_MESSAGE } from '$lib/server/goals';
 import type { Goal } from '$domain/types';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { z } from 'zod';
@@ -124,12 +124,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		});
 
 		results.push(
-			logged
+			logged.ok
 				? { clientId: queued.clientId, status: 'logged' }
 				: {
 						clientId: queued.clientId,
 						status: 'rejected',
-						reason: 'That goal is archived. Restore it before logging against it.'
+						reason: LOG_REFUSAL_MESSAGE[logged.reason]
 					}
 		);
 	}

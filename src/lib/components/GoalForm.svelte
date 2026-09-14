@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { Goal } from '$domain/types';
 	import { PALETTE, DEFAULT_COLOR } from '$domain/palette';
-	import { TIER_LIST } from '$domain/tiers';
+	import { eligibleParents, ORBIT_METRIC, type ParentCandidate } from '$domain/nesting';
+	import { TIER_DEFINITIONS, TIER_LIST } from '$domain/tiers';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import { buildOrbit, formatAmount } from '$domain/progress';
 	import { resolve } from '$app/paths';
@@ -12,9 +13,24 @@
 		goal?: Goal | null;
 		errors?: FormErrors | null;
 		submitLabel?: string;
+		/**
+		 * Every live goal the pilot owns, so the parent picker can narrow itself
+		 * as the tier changes without a round trip. It filters with
+		 * `eligibleParents`, the same function the write path rejects with, so the
+		 * picker cannot offer something the server will refuse.
+		 */
+		goals?: readonly ParentCandidate[];
+		/** Goals already feeding this one, which is what makes it derived. */
+		children?: readonly ParentCandidate[];
 	}
 
-	let { goal = null, errors = null, submitLabel = 'Launch goal' }: Props = $props();
+	let {
+		goal = null,
+		errors = null,
+		submitLabel = 'Launch goal',
+		goals = [],
+		children = []
+	}: Props = $props();
 
 	// Form fields seed from the goal once; the props never change under this
 	// component because each page renders a fresh instance.
@@ -30,8 +46,36 @@
 	let target = $state(goal?.target ?? 120);
 	/* svelte-ignore state_referenced_locally */
 	let color = $state(goal?.color ?? DEFAULT_COLOR);
+	/* svelte-ignore state_referenced_locally */
+	let parentId = $state(goal?.parentId ?? '');
 
 	const tierDef = $derived(TIER_LIST.find((entry) => entry.id === tier) ?? TIER_LIST[1]);
+	/**
+	 * A goal with children counts closed child orbits rather than anything logged
+	 * against it, so its target is a number of orbits and its own metric is the
+	 * one it would go back to if its children ever left. The fields stay in the
+	 * form as hidden values rather than disappearing from the row.
+	 */
+	const nested = $derived(children.length > 0);
+	const previewMetric = $derived(nested ? ORBIT_METRIC : { kind: metricKind, unit: metricUnit });
+	/** Recomputed as the tier changes: a Satellite can feed more than a Galaxy can. */
+	const parents = $derived(eligibleParents({ id: goal?.id ?? null, tier }, goals));
+	/** A parent that stops being eligible — the tier moved — is quietly dropped. */
+	const parentChoice = $derived(
+		parents.some((candidate) => candidate.id === parentId) ? parentId : ''
+	);
+	/**
+	 * True when the goal being fed has nothing feeding it yet. Picking it turns it
+	 * derived, which changes what its target means — from minutes or pages to a
+	 * number of orbits — and that is worth saying before it happens rather than
+	 * leaving a monthly goal quietly asking for 120 closed weeks.
+	 */
+	const parentIsNew = $derived(
+		parentChoice !== '' && !goals.some((candidate) => candidate.parentId === parentChoice)
+	);
+	const parentTitle = $derived(
+		parents.find((candidate) => candidate.id === parentChoice)?.title ?? ''
+	);
 	/** A live preview so the shape of the goal is visible before saving. */
 	const previewOrbit = $derived(
 		buildOrbit(
@@ -74,48 +118,98 @@
 			{#if errors?.tier}<p class="error">{errors.tier}</p>{/if}
 		</fieldset>
 
-		<div class="row">
+		{#if nested}
+			<!-- Nothing is logged against a goal with children, so it has no metric
+			     to pick: its target is a count of the orbits underneath it. The
+			     stored metric rides along hidden rather than being thrown away, so
+			     the goal still has one the day its last child leaves. -->
 			<div class="field">
-				<label for="metricKind">Measured in</label>
-				<select id="metricKind" name="metricKind" bind:value={metricKind}>
-					<option value="duration">Time</option>
-					<option value="count">A count</option>
-					<option value="checkin">Check-ins</option>
-				</select>
-			</div>
-
-			<div class="field">
-				<label for="target">
-					Target per orbit
-					{#if metricKind === 'duration'}<span class="muted">(minutes)</span>{/if}
-				</label>
+				<label for="target">Target per orbit <span class="muted">(child orbits)</span></label>
 				<input
 					id="target"
 					name="target"
 					type="number"
-					min="0.01"
-					step="any"
+					min="1"
+					step="1"
 					bind:value={target}
 					required
 				/>
 				{#if errors?.target}<p class="error">{errors.target}</p>{/if}
+				<p class="muted note">
+					{children.length}
+					{children.length === 1 ? 'goal feeds' : 'goals feed'} this one, so its orbit counts how many
+					of their orbits closed. A child period that falls short counts nothing; one that overshoots
+					counts once.
+				</p>
 			</div>
-		</div>
-
-		{#if metricKind === 'count'}
-			<div class="field">
-				<label for="metricUnit">Unit</label>
-				<input
-					id="metricUnit"
-					name="metricUnit"
-					bind:value={metricUnit}
-					maxlength="24"
-					placeholder={unitPlaceholder}
-				/>
-			</div>
+			<input type="hidden" name="metricKind" value={metricKind} />
+			<input type="hidden" name="metricUnit" value={metricUnit} />
 		{:else}
-			<input type="hidden" name="metricUnit" value={metricKind === 'duration' ? 'minutes' : ''} />
+			<div class="row">
+				<div class="field">
+					<label for="metricKind">Measured in</label>
+					<select id="metricKind" name="metricKind" bind:value={metricKind}>
+						<option value="duration">Time</option>
+						<option value="count">A count</option>
+						<option value="checkin">Check-ins</option>
+					</select>
+				</div>
+
+				<div class="field">
+					<label for="target">
+						Target per orbit
+						{#if metricKind === 'duration'}<span class="muted">(minutes)</span>{/if}
+					</label>
+					<input
+						id="target"
+						name="target"
+						type="number"
+						min="0.01"
+						step="any"
+						bind:value={target}
+						required
+					/>
+					{#if errors?.target}<p class="error">{errors.target}</p>{/if}
+				</div>
+			</div>
+
+			{#if metricKind === 'count'}
+				<div class="field">
+					<label for="metricUnit">Unit</label>
+					<input
+						id="metricUnit"
+						name="metricUnit"
+						bind:value={metricUnit}
+						maxlength="24"
+						placeholder={unitPlaceholder}
+					/>
+				</div>
+			{:else}
+				<input type="hidden" name="metricUnit" value={metricKind === 'duration' ? 'minutes' : ''} />
+			{/if}
 		{/if}
+
+		<div class="field">
+			<label for="parentId">Feeds <span class="muted">(optional)</span></label>
+			<select id="parentId" name="parentId" bind:value={parentId}>
+				<option value="">Nothing — this goal stands alone</option>
+				{#each parents as candidate (candidate.id)}
+					<option value={candidate.id}>
+						{candidate.title} · {TIER_DEFINITIONS[candidate.tier].label}
+					</option>
+				{/each}
+			</select>
+			{#if errors?.parentId}<p class="error">{errors.parentId}</p>{/if}
+			<p class="muted note">
+				{#if parents.length === 0}
+					Nothing to feed yet. A goal can only feed one on a longer cadence — a weekly Planet into a
+					monthly Star System — so launch the bigger goal first.
+				{:else}
+					Every orbit this goal closes counts as one toward the goal it feeds. Close it twice over
+					in a period and it still counts once.
+				{/if}
+			</p>
+		</div>
 
 		<fieldset class="field">
 			<legend>Colour</legend>
@@ -145,15 +239,28 @@
 			tier={tierDef.id}
 			{color}
 			size={170}
-			caption={formatAmount(Number(target) || 0, { kind: metricKind, unit: metricUnit })}
+			caption={formatAmount(Number(target) || 0, previewMetric)}
 		/>
 		<!-- The preview redraws on every keystroke in the form, and a live region
 		     would narrate the lot. It is not one: the copy below is ordinary text,
 		     read when the user reaches it. -->
 		<p class="muted preview__copy">
-			{title || 'This goal'} closes one orbit when you log
-			<strong>{formatAmount(Number(target) || 0, { kind: metricKind, unit: metricUnit })}</strong>
-			per {tierDef.cadence}.
+			{#if nested}
+				{title || 'This goal'} closes one orbit when
+				<strong>{formatAmount(Number(target) || 0, previewMetric)}</strong>
+				close underneath it in a {tierDef.cadence}.
+			{:else}
+				{title || 'This goal'} closes one orbit when you log
+				<strong>{formatAmount(Number(target) || 0, previewMetric)}</strong>
+				per {tierDef.cadence}.
+			{/if}
+			{#if parentTitle}
+				Each one it closes feeds <strong>{parentTitle}</strong>.
+				{#if parentIsNew}
+					That makes {parentTitle} a derived goal — its orbit will count closed orbits rather than anything
+					logged against it, so check its target once this one is saved.
+				{/if}
+			{/if}
 		</p>
 	</aside>
 </div>
@@ -191,6 +298,13 @@
 		display: grid;
 		gap: 1rem;
 		grid-template-columns: 1fr 1fr;
+	}
+
+	/* Sits under the control it explains, in the same column, so it reads as part
+	   of the field rather than as copy the layout dropped there. */
+	.note {
+		font-size: var(--text-secondary);
+		margin: 0.15rem 0 0;
 	}
 
 	.tiers {

@@ -5,6 +5,7 @@
 	import { celebrationFor } from '$lib/celebration.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
+	import { metricFor } from '$domain/nesting';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import { logOrQueue } from '$lib/offline/enhance';
 	import { pendingFor } from '$lib/offline/queue.svelte';
@@ -26,7 +27,14 @@
 	const goal = $derived(snapshot.goal);
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
-	const steps = $derived(quickLogSteps(goal.metric, goal.target));
+	/**
+	 * A goal with children counts closed child orbits, so its amounts are in
+	 * orbits whatever metric its own row carries. One read of the snapshot
+	 * rather than a branch at every `formatAmount` below.
+	 */
+	const metric = $derived(metricFor(snapshot));
+	const nested = $derived(snapshot.derived ?? null);
+	const steps = $derived(quickLogSteps(metric, goal.target));
 	/** True for the second or so after this goal closes an orbit. */
 	const closing = $derived(celebrationFor(goal.id) !== null);
 	/**
@@ -59,6 +67,7 @@
 			size={120}
 			goalId={goal.id}
 			label={goal.title}
+			satellites={nested?.children ?? []}
 		/>
 	</a>
 
@@ -79,7 +88,7 @@
 					Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]}
 					<span aria-hidden="true">✦</span>
 				{:else}
-					{formatAmount(snapshot.current.remaining, goal.metric)} left {CADENCE_LABEL[
+					{formatAmount(snapshot.current.remaining, metric)} left {CADENCE_LABEL[
 						snapshot.current.period.cadence
 					]}
 				{/if}
@@ -114,15 +123,26 @@
 		</dl>
 	</div>
 
-	<form class="quick-log" method="POST" action={logAction} use:enhance={logSubmit}>
-		<input type="hidden" name="goalId" value={goal.id} />
-		{#each steps as step (step)}
-			<button class="chip tap" type="submit" name="amount" value={step} disabled={pending}>
-				+{formatAmount(step, goal.metric)}
-			</button>
-		{/each}
-		<a class="chip chip--ghost tap" href={goalHref}>More…</a>
-	</form>
+	{#if nested}
+		<!-- Nothing is logged against a goal with children — its orbit is the
+		     orbits underneath it — so the chips give way to what closes it. -->
+		<p class="derived">
+			Fed by
+			{#each nested.children as child, index (child.goalId)}{index > 0 ? ', ' : ''}<a
+					href={resolve('/goals/[id]', { id: child.goalId })}>{child.title}</a
+				>{/each}.
+		</p>
+	{:else}
+		<form class="quick-log" method="POST" action={logAction} use:enhance={logSubmit}>
+			<input type="hidden" name="goalId" value={goal.id} />
+			{#each steps as step (step)}
+				<button class="chip tap" type="submit" name="amount" value={step} disabled={pending}>
+					+{formatAmount(step, metric)}
+				</button>
+			{/each}
+			<a class="chip chip--ghost tap" href={goalHref}>More…</a>
+		</form>
+	{/if}
 </article>
 
 <style>
@@ -150,8 +170,20 @@
 		grid-area: dial;
 	}
 
-	.quick-log {
+	.quick-log,
+	.derived {
 		grid-area: log;
+	}
+
+	/*
+	 * Links in a sentence rather than chips: they go somewhere else, which is the
+	 * opposite of what a chip does, and a row of controls here would read as
+	 * something to log against.
+	 */
+	.derived {
+		font-size: var(--text-secondary);
+		margin: 0;
+		min-height: var(--tap-min);
 	}
 
 	.card--complete {

@@ -26,6 +26,12 @@ export interface Goal {
 	sortOrder: number;
 	createdAt: Date;
 	archivedAt: Date | null;
+	/**
+	 * The goal this one feeds, in a strictly longer tier, or null for a goal
+	 * that stands alone. A parent counts the closed orbits of its direct
+	 * children rather than anything logged against it — see `$domain/nesting`.
+	 */
+	parentId: string | null;
 }
 
 export interface ProgressEntry {
