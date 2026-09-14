@@ -61,7 +61,8 @@ the four rules that keep the whole thing honest.
 - **SvelteKit 2** with Svelte 5 runes, TypeScript throughout
 - **SQLite** via **Drizzle ORM** — one file, trivially backed up
 - **Sessions** with hashed tokens and Argon2id password hashing, no third-party auth
-- **PWA** via `@vite-pwa/sveltekit` (Workbox), installable on iOS and Android
+- **PWA** via `@vite-pwa/sveltekit` (Workbox), installable on iOS and Android,
+  and able to log without a network — entries queue in IndexedDB and sync later
 - **adapter-node** in a multi-stage **Docker** image
 
 There is no separate backend service: SvelteKit's server routes are the API.
@@ -171,12 +172,14 @@ src/lib/components/        Svelte components, including the animated space visua
 src/lib/components/bodies/ The bodies each tier can be drawn as, one file per tier
 src/routes/                Pages and form actions
 e2e/                       Playwright journeys
+src/lib/offline/           The sync queue behind logging without a network
 scripts/                   Migration runner and the PWA icon generator
 ```
 
 `src/lib/domain` has no imports from `$lib/server` or SvelteKit, so the same
-functions run on the server today and in the browser when offline logging
-arrives.
+functions run on the server and in the browser — which is how an entry logged
+with no signal moves its orbit immediately, computed by the very code that will
+compute it again once the entry reaches the database.
 
 ## Contributing
 

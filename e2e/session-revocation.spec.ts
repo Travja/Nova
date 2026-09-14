@@ -36,6 +36,17 @@ function signedOut(page: Page) {
 	return page.getByRole('navigation').getByRole('link', { name: 'Sign in' });
 }
 
+/**
+ * The page's own live region.
+ *
+ * Named rather than taken as the only `status` on the page: the offline queue
+ * keeps a live region of its own in the layout, so every signed-in page has two
+ * and this test is about what the security page says.
+ */
+function announcement(page: Page) {
+	return page.locator('main').getByRole('status');
+}
+
 function sessionRows(page: Page) {
 	return page.getByRole('list', { name: 'Active sessions' }).getByRole('listitem');
 }
@@ -57,12 +68,12 @@ test('a pilot can see their sessions and sign other devices out', async ({ brows
 		.first()
 		.getByRole('button', { name: /Sign out/ })
 		.click();
-	await expect(page.getByRole('status')).toHaveText('One session has been signed out.');
+	await expect(announcement(page)).toHaveText('One session has been signed out.');
 	await expect(sessionRows(page)).toHaveCount(2);
 
 	// And the rest go together.
 	await page.getByRole('button', { name: 'Sign out all other sessions (1)' }).click();
-	await expect(page.getByRole('status')).toHaveText('One session has been signed out.');
+	await expect(announcement(page)).toHaveText('One session has been signed out.');
 	await expect(sessionRows(page)).toHaveCount(1);
 	await expect(page.getByText('This device')).toBeVisible();
 
@@ -100,9 +111,7 @@ test('changing the password signs every other device out', async ({ browser, pag
 	await page.getByLabel('New password again').fill(next);
 	await page.getByRole('button', { name: 'Change password' }).click();
 
-	await expect(page.getByRole('status')).toHaveText(
-		'Password changed. 1 other session was signed out.'
-	);
+	await expect(announcement(page)).toHaveText('Password changed. 1 other session was signed out.');
 	await expect(sessionRows(page)).toHaveCount(1);
 
 	await other.page.goto('/');

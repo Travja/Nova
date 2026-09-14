@@ -19,15 +19,18 @@ the routes, are the contract.
 ```
 src/lib/domain/   pure, portable logic — no database, no SvelteKit imports
 src/lib/server/   persistence and anything holding a secret
+src/lib/offline/  the browser's side of the sync queue — storage, retries, fetch
 src/routes/       loading data, parsing forms, rendering
 ```
 
 The rule that matters: **`domain/` never imports from `server/`**. Period
 boundaries, orbit fractions, streaks and validation are all pure functions over
 plain data. That keeps them fast to test (`src/lib/domain/*.test.ts` run in
-milliseconds with no fixtures) and means the same code can run in the browser
-when offline logging lands — the client will be able to compute an optimistic
-orbit without waiting for a round trip.
+milliseconds with no fixtures) and means the same code runs in the browser:
+`overlayQueued()` in `domain/queue.ts` folds the entries the offline queue is
+still carrying into the snapshot the server sent, using `bucketByPeriod`,
+`buildOrbit` and `streakFrom` unchanged. The optimistic orbit is not a second
+implementation of the maths, and cannot drift from the first.
 
 ## Periods are the hard part
 
@@ -147,6 +150,44 @@ worker at build time. The plugin does not touch `app.html`, so the manifest link
 lives there explicitly and the worker is registered in `+layout.svelte` on
 mount, skipped in dev.
 
-The app shell is precached today. Offline _logging_ — queueing entries while
-disconnected and reconciling them later — is a separate piece of work and the
-reason the domain layer is kept free of server imports.
+`navigateFallback` is explicitly `undefined`. The plugin defaults it to the
+base path, which generates `createHandlerBoundToURL('/')` — and with
+`adapter-node` and nothing prerendered, `/` is not in the precache manifest, so
+that call throws while the worker is being evaluated and the worker never
+installs at all. Navigations are served by a `NetworkFirst` runtime route
+instead, which is also what puts a page in the cache for a reload to land on
+while offline.
+
+### Offline logging
+
+The queue is in three pieces, and the split is the design:
+
+- **`domain/queue.ts`** is pure. It says what a queued entry does to an orbit,
+  by running the same functions the server's snapshot was built with.
+- **`lib/offline/`** is the browser's half: an IndexedDB store, an `enhance`
+  wrapper that catches a log the network could not take, and a flush with a
+  backoff. Nothing here knows any maths.
+- **`POST /api/entries`** is where a flush lands. It is the one place that is
+  not a form action, because a queued entry carries the instant it was made and
+  the id that makes a retry safe, several arrive at once, and a service worker
+  replays it far more comfortably than it replays a form post.
+
+Idempotency is a constraint, not a check: `entries.client_id` is unique per
+goal and the insert conflicts on it. A read-then-write would race two retries
+against each other, and there are three things that can deliver the same entry
+— the page's own flush, the `online` listener, and Workbox's Background Sync
+replay, which is the one that works with the tab closed. Safari has no
+Background Sync, which is why the other two exist.
+
+An entry carries `occurredAt` from the moment it was made, and nothing on the
+way in restamps it: logged on Monday, flushed on Wednesday, it closes Monday's
+orbit. The flush is held to the same `occurredAtBounds` a backdated entry is,
+so it cannot invent history before the goal launched, and `CLOCK_SKEW_MS`
+keeps a phone running a few minutes fast from being told its own present is the
+future.
+
+The queue belongs to the browser rather than to the account, which has one
+consequence worth naming: sign out with entries still waiting and the flush is
+refused, because the goals are not the signed-in user's. They are reported in
+the queue bar with the reason rather than written to the wrong account, and
+rather than disappearing quietly.

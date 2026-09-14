@@ -371,27 +371,60 @@ export async function deleteGoal(userId: string, goalId: string): Promise<boolea
 	return result.changes > 0;
 }
 
+/**
+ * Record an entry against a goal the user owns.
+ *
+ * Pass `clientId` — the id the browser gave the entry before it was first sent
+ * — and the insert becomes idempotent: a second arrival of the same entry
+ * conflicts on `entries_goal_client_unique` and the row already written is
+ * returned instead. That is the whole guarantee behind offline logging, and it
+ * is a constraint rather than a read-then-write check on purpose, because two
+ * retries in flight at once would both read "not there yet" and both insert.
+ *
+ * Everything else about a queued entry is treated exactly like a live one: the
+ * goal is re-read under this user's id here rather than trusted from the route,
+ * so arriving late buys an entry no authority it did not have when it was made.
+ */
 export async function logEntry(
 	userId: string,
 	goalId: string,
-	input: { amount: number; note: string | null; occurredAt?: Date }
+	input: { amount: number; note: string | null; occurredAt?: Date; clientId?: string }
 ): Promise<ProgressEntry | null> {
-	// Ownership is checked here rather than trusted from the route, so every
-	// caller gets the same guarantee. An archived goal is dormant: restoring it
-	// is the way back to logging.
+	// An archived goal is dormant: restoring it is the way back to logging.
 	const goal = await getGoal(userId, goalId);
 	if (!goal || goal.archivedAt) return null;
 
+	const clientId = input.clientId ?? null;
 	const row = {
 		id: newId(),
 		goalId,
 		amount: input.amount,
 		note: input.note,
 		occurredAt: input.occurredAt ?? new Date(),
-		createdAt: new Date()
+		createdAt: new Date(),
+		clientId
 	};
-	await db.insert(entries).values(row);
-	return toEntry(row);
+
+	if (!clientId) {
+		await db.insert(entries).values(row);
+		return toEntry(row);
+	}
+
+	const result = await db
+		.insert(entries)
+		.values(row)
+		.onConflictDoNothing({ target: [entries.goalId, entries.clientId] });
+	if (result.changes > 0) return toEntry(row);
+
+	// The entry landed on an earlier attempt whose answer never arrived. Hand
+	// back what was written then, so the caller sees a success rather than
+	// retrying forever against a constraint it cannot satisfy.
+	const [existing] = await db
+		.select()
+		.from(entries)
+		.where(and(eq(entries.goalId, goalId), eq(entries.clientId, clientId)))
+		.limit(1);
+	return existing ? toEntry(existing) : null;
 }
 
 /**

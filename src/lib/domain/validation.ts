@@ -93,12 +93,32 @@ export function occurredAtBounds(
 }
 
 /**
+ * The id a browser gives an entry before it has ever been sent.
+ *
+ * An entry logged offline is retried until it lands, and a retry after a
+ * partial failure cannot tell whether the first attempt was written — so the
+ * id travels with the entry and the insert conflicts on it. Bounded and
+ * alphanumeric because it reaches a unique index: `crypto.randomUUID()` is
+ * what the queue actually sends.
+ */
+export const clientEntryIdSchema = z
+	.string()
+	.trim()
+	.min(8, 'That entry id is too short.')
+	.max(64, 'That entry id is too long.')
+	.regex(/^[A-Za-z0-9_-]+$/, 'That entry id has characters Nova cannot store.');
+
+/**
  * Entries validate the same way wherever they come from. Pass bounds to police
  * backdating; without them any timestamp parses, which is what the quick-log
  * path on the dashboard needs since it never sends one.
  */
 export function entrySchemaFor(bounds?: OccurredAtBounds) {
 	return z.object({
+		clientId: z.preprocess(
+			(value) => (value === '' || value === null ? undefined : value),
+			clientEntryIdSchema.optional()
+		),
 		amount: z.coerce
 			.number()
 			.refine((value) => value !== 0, 'Log something other than zero.')
@@ -107,7 +127,10 @@ export function entrySchemaFor(bounds?: OccurredAtBounds) {
 			.string()
 			.trim()
 			.max(200)
-			.optional()
+			// Nullable as well as optional: a form leaves the field out, while the
+			// offline queue sends the entry as JSON with `note: null` for one that
+			// never had a note. Both mean the same thing, and both land as null.
+			.nullish()
 			.transform((value) => (value ? value : null)),
 		occurredAt: z
 			.preprocess((value) => {

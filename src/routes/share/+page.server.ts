@@ -25,7 +25,10 @@ export const actions: Actions = {
 		const goalId = String(form.get('goalId') ?? '');
 		const parsed = entrySchema.safeParse({
 			amount: form.get('amount'),
-			note: form.get('note') ?? undefined
+			note: form.get('note') ?? undefined,
+			// Sent by the browser on every log, so a submission whose answer went
+			// missing can be retried from the offline queue without double-counting.
+			clientId: form.get('clientId') ?? undefined
 		});
 
 		if (!goalId) return fail(400, { errors: formError('Pick a goal to log against.') });

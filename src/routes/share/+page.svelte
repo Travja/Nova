@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
+	import { logOrQueue } from '$lib/offline/enhance';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -10,6 +11,14 @@
 	/* svelte-ignore state_referenced_locally */
 	let note = $state(data.sharedText);
 	const logAction = `${resolve('/share')}?/log`;
+
+	/**
+	 * The share target logs through the same queue as everything else. It is the
+	 * one entry point another app can open while the phone has no signal at all
+	 * — sharing a note into Nova from a train is exactly the case #5 exists for
+	 * — so it queues rather than degrading to an error page.
+	 */
+	let queued = $state(false);
 </script>
 
 <svelte:head>
@@ -24,7 +33,9 @@
 
 	{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
 	<p class="live" role="status">
-		{#if form?.logged}Logged.{/if}
+		{#if queued}
+			Saved on this device — it will sync when you are back online.
+		{:else if form?.logged}Logged.{/if}
 	</p>
 
 	<div class="field">
@@ -40,7 +51,11 @@
 		<ul class="goals">
 			{#each data.goals as goal (goal.id)}
 				<li>
-					<form method="POST" action={logAction} use:enhance>
+					<form
+						method="POST"
+						action={logAction}
+						use:enhance={logOrQueue({ goalId: goal.id, onqueued: () => (queued = true) })}
+					>
 						<input type="hidden" name="goalId" value={goal.id} />
 						<input type="hidden" name="note" value={note} />
 						<input type="hidden" name="amount" value="1" />

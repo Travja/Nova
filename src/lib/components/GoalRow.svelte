@@ -6,6 +6,7 @@
 	import type { GoalSnapshot } from '$domain/progress';
 	import { formatAmount } from '$domain/progress';
 	import { CADENCE_LABEL } from '$domain/tiers';
+	import { pendingFor } from '$lib/offline/queue.svelte';
 
 	/**
 	 * One goal as a row, for compact density.
@@ -39,6 +40,12 @@
 	const goal = $derived(snapshot.goal);
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
 	const closing = $derived(celebrationFor(goal.id) !== null);
+	/**
+	 * Entries this goal is still carrying. The row has no `aria-label`, so this
+	 * lands in its accessible name with everything else on the line — compact
+	 * density says pending out loud rather than only tinting a dial.
+	 */
+	const waiting = $derived(pendingFor(goal.id));
 
 	let sheet: HTMLDialogElement | null = $state(null);
 	/**
@@ -90,6 +97,15 @@
 		</span>
 	</span>
 
+	{#if waiting > 0}
+		<span class="pending">
+			<span class="pending__dot" aria-hidden="true"></span>
+			{waiting}
+			<span class="visually-hidden">{waiting === 1 ? 'entry' : 'entries'}</span> waiting
+			<span class="visually-hidden">to sync</span>
+		</span>
+	{/if}
+
 	{#if flag}<span class="flag">{flag}</span>{/if}
 
 	{#if snapshot.streak > 0}
@@ -116,7 +132,9 @@
 		color: var(--text);
 		display: grid;
 		gap: 0 0.7rem;
-		grid-template-columns: auto minmax(0, 1fr) auto auto;
+		/* Dial, body, then a column each for pending, the flag and the streak —
+		   all three optional, and the row stays one line with any of them. */
+		grid-template-columns: auto minmax(0, 1fr) auto auto auto;
 		/* Comfortably over the touch floor at the row's natural height. */
 		min-height: var(--tap-min);
 		padding: 0.4rem 0.7rem;
@@ -160,6 +178,38 @@
 		padding: 0.1rem 0.45rem;
 		text-transform: uppercase;
 		white-space: nowrap;
+	}
+
+	/* The same words the card uses, at the width a row can spare. */
+	.pending {
+		align-items: center;
+		color: var(--accent-warm);
+		display: inline-flex;
+		font-size: var(--text-label);
+		font-weight: 640;
+		gap: 0.3rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+
+	.pending__dot {
+		animation: breathe 1.8s ease-in-out infinite;
+		background: currentColor;
+		border-radius: 50%;
+		flex: none;
+		height: 0.4rem;
+		width: 0.4rem;
+	}
+
+	@keyframes breathe {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+		50% {
+			opacity: 1;
+		}
 	}
 
 	.streak {

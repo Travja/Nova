@@ -8,12 +8,28 @@
 	import { toLocalDateTime } from '$domain/period';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
+	import { overlayQueued } from '$domain/queue';
+	import { logOrQueue } from '$lib/offline/enhance';
+	import { queuedEntries } from '$lib/offline/queue.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
-	const goal = $derived(data.snapshot.goal);
-	const current = $derived(data.snapshot.current);
+	/**
+	 * The server's snapshot with anything still in the offline queue folded in,
+	 * so the dial on this page reads the same as the card that queued the entry.
+	 * `overlayQueued` is the domain's own maths over plain data — the point of
+	 * keeping `$domain` free of server imports.
+	 */
+	const snapshot = $derived(
+		overlayQueued(data.snapshot, queuedEntries(), {
+			timeZone: data.timeZone,
+			weekStartsOn: data.user?.weekStartsOn
+		})
+	);
+	const goal = $derived(snapshot.goal);
+	const current = $derived(snapshot.current);
 	const archived = $derived(goal.archivedAt !== null);
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
 	const steps = $derived(quickLogSteps(goal.metric, goal.target));
@@ -25,13 +41,38 @@
 	const editing = $derived(form?.edited ? null : data.editing);
 
 	let confirmingDelete = $state(false);
+	/** Set when a log went to the offline queue instead of to the server. */
+	let queued = $state(false);
+
+	/**
+	 * Both log forms here go through the queue, and this one carries a `When`,
+	 * so it hands over the zone: a `datetime-local` is wall-clock time in the
+	 * user's own zone, and reading it in the browser's would file a backdated
+	 * entry under the wrong orbit for anybody travelling.
+	 */
+	function logSubmit(after?: () => void): SubmitFunction {
+		return (input) =>
+			logOrQueue({
+				goalId: goal.id,
+				timeZone: data.timeZone,
+				onqueued: () => {
+					queued = true;
+					after?.();
+				},
+				onresult: async ({ update }) => {
+					queued = false;
+					await update();
+					after?.();
+				}
+			})(input);
+	}
 
 	/**
 	 * Every log re-renders this page, so the closing has to be spotted by
 	 * comparing what the browser saw last. Effects do not run on the server, so a
 	 * closed orbit that arrives in the first render is history, not a moment.
 	 */
-	$effect(() => noteOrbits([data.snapshot]));
+	$effect(() => noteOrbits([snapshot]));
 	const closing = $derived(celebrationFor(goal.id) !== null);
 
 	/**
@@ -120,15 +161,15 @@
 			<dl class="stats">
 				<div>
 					<dt>{archived ? 'Streak when archived' : 'Streak'}</dt>
-					<dd class:dd--ticked={closing}>{data.snapshot.streak}</dd>
+					<dd class:dd--ticked={closing}>{snapshot.streak}</dd>
 				</div>
 				<div>
 					<dt>Orbits closed</dt>
-					<dd>{data.snapshot.totalOrbits}</dd>
+					<dd>{snapshot.totalOrbits}</dd>
 				</div>
 				<div>
 					<dt>Lifetime</dt>
-					<dd>{formatAmount(data.snapshot.lifetimeLogged, goal.metric)}</dd>
+					<dd>{formatAmount(snapshot.lifetimeLogged, goal.metric)}</dd>
 				</div>
 			</dl>
 
@@ -153,10 +194,9 @@
 		<p class="notice panel">
 			This goal is parked. It is off the dashboard and no orbit is expected of it, but every entry
 			is still here.
-			{#if data.snapshot.streak > 0}
-				Its streak is frozen rather than broken — restore it and it carries on from {data.snapshot
-					.streak}
-				{data.snapshot.streak === 1 ? 'orbit' : 'orbits'}.
+			{#if snapshot.streak > 0}
+				Its streak is frozen rather than broken — restore it and it carries on from {snapshot.streak}
+				{snapshot.streak === 1 ? 'orbit' : 'orbits'}.
 			{:else}
 				Nothing it misses while parked counts against it.
 			{/if}
@@ -168,9 +208,9 @@
 				<li>Every entry stays exactly where it is.</li>
 				<li>The goal leaves the dashboard and stops asking for progress.</li>
 				<li>
-					{#if data.snapshot.streak > 0}
-						The streak freezes at {data.snapshot.streak} rather than breaking — the periods it spends
-						archived are not counted as missed.
+					{#if snapshot.streak > 0}
+						The streak freezes at {snapshot.streak} rather than breaking — the periods it spends archived
+						are not counted as missed.
 					{:else}
 						Periods it spends archived are never counted as missed, so a streak picks up where it
 						left off.
@@ -195,9 +235,13 @@
 			{#if form?.errors?.amount}<p class="error">{form.errors.amount}</p>{/if}
 			{#if form?.errors?.occurredAt}<p class="error">{form.errors.occurredAt}</p>{/if}
 
-			<p class="live" role="status">{orbitMessage}</p>
+			<p class="live" role="status">
+				{#if queued}
+					Saved on this device — it will sync when you are back online.
+				{:else}{orbitMessage}{/if}
+			</p>
 
-			<form class="quick" method="POST" action="?/log" use:enhance>
+			<form class="quick" method="POST" action="?/log" use:enhance={logSubmit()}>
 				{#each steps as step (step)}
 					<button class="chip tap" type="submit" name="amount" value={step}>
 						+{formatAmount(step, goal.metric)}
@@ -209,12 +253,10 @@
 				class="custom"
 				method="POST"
 				action="?/log"
-				use:enhance={() =>
-					async ({ update }) => {
-						await update();
-						whenDirty = false;
-						syncWhen();
-					}}
+				use:enhance={logSubmit(() => {
+					whenDirty = false;
+					syncWhen();
+				})}
 			>
 				<div class="field">
 					<label for="amount">
@@ -250,12 +292,7 @@
 
 	<section class="panel block">
 		<h2>Recent orbits</h2>
-		<OrbitHistory
-			history={data.snapshot.history}
-			tier={goal.tier}
-			goalId={goal.id}
-			color={goal.color}
-		/>
+		<OrbitHistory history={snapshot.history} tier={goal.tier} goalId={goal.id} color={goal.color} />
 	</section>
 
 	<section class="panel block" id="entries">

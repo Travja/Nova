@@ -20,7 +20,7 @@ pnpm is the package manager; Node 22.
 ```bash
 pnpm dev                 # dev server
 pnpm test                # unit tests (fast, no fixtures)
-pnpm e2e                 # Playwright journeys
+pnpm e2e                 # Playwright journeys (builds first — see below)
 pnpm check               # svelte-check, must be 0 errors
 pnpm lint                # prettier --check plus eslint
 pnpm db:generate         # after changing schema.ts
@@ -29,14 +29,22 @@ pnpm db:migrate          # apply migrations
 
 Before opening a pull request: `pnpm lint && pnpm check && pnpm test && pnpm e2e`.
 
+`pnpm e2e` runs two projects. `app` is the suite against the dev server on 4173;
+`offline` is `e2e/offline-logging.spec.ts` against a production build on 4174,
+because the service worker is not registered in dev and offline logging is
+mostly the service worker. That is why the script builds before it tests.
+
 ## The one architectural rule
 
 **`src/lib/domain/` never imports from `src/lib/server/` or from SvelteKit.**
 
 Tiers, period maths, orbit progress and validation are pure functions over plain
 data. That keeps them trivially testable and lets the same code run in the
-browser when offline logging lands (issue #5). Breaking this rule costs that, so
-don't.
+browser — which is what offline logging (#5) collects: `overlayQueued()` in
+`$domain/queue` computes an optimistic orbit from the queue with the same
+`buildOrbit` and `streakFrom` the server used. Breaking this rule costs that, so
+don't. The browser-only half of the queue — IndexedDB, retries, fetch — lives in
+`src/lib/offline/` and holds no maths of its own.
 
 Everything holding a secret or touching the database lives in `src/lib/server/`.
 Routes parse forms and render; they do not build queries.
@@ -61,6 +69,10 @@ Routes parse forms and render; they do not build queries.
 - **Migrations are committed and immutable.** Change `schema.ts`, run
   `pnpm db:generate`, commit the generated SQL. Never edit one that has shipped.
 - **Timestamps are UTC epoch milliseconds.** Nothing stores a local time.
+- **A log that can be retried carries a `clientId`.** `entries.client_id` is
+  unique per goal and `logEntry()` conflicts on it, which is what stops the
+  offline queue, the `online` listener and the service worker's replay from
+  counting one entry three times. Never swap that for a read-then-write check.
 
 ## Time zones are the sharp edge
 
