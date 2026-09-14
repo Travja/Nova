@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
+	import IosInstallHint from '$components/IosInstallHint.svelte';
 	import QuickAdd from '$components/QuickAdd.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import Starfield from '$components/Starfield.svelte';
@@ -33,6 +34,7 @@
 
 <div class="shell">
 	<UpdatePrompt />
+	<IosInstallHint />
 
 	<header class="masthead">
 		<a class="brand" href={resolve('/')}>
