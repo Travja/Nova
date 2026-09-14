@@ -108,11 +108,19 @@ test('goals can be reordered within a tier from the keyboard', async ({ page }) 
 	await page.goto('/');
 	await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Alpha', 'Beta']);
 
+	// Hydrated before the move, so `use:enhance` is attached and this is the
+	// keyboard route rather than a native post. The two announce differently —
+	// the enhanced one says where the goal landed, which the server's reply
+	// cannot know — and without this the test raced which of them it got.
+	await hydrated(page);
 	await page.getByRole('link', { name: 'Reorder' }).click();
 	await page.getByRole('button', { name: 'Move Beta up' }).click();
 
 	await expect(page.locator('ol.order a.title')).toHaveText(['Beta', 'Alpha']);
-	await expect(page.getByText('Beta moved within its tier.')).toBeVisible();
+	// Where it landed, not just that it moved: the server's reply never knew the
+	// position, so #7 moved the announcement into `GoalOrderList`, which does.
+	// "moved within its tier" is still what a move with no JavaScript says.
+	await expect(page.getByText('Beta moved to position 1 of 2 in Satellite.')).toBeVisible();
 
 	// The new order is the dashboard's order, and it survives a reload.
 	await page.goto('/');

@@ -96,7 +96,11 @@
 					<form method="POST" action="?/restore" use:enhance>
 						<input type="hidden" name="goalId" value={goal.id} />
 						<input type="hidden" name="title" value={goal.title} />
-						<button class="button" type="submit">Restore</button>
+						<!-- A list of buttons all called "Restore" is a list of buttons
+						     nobody can tell apart by name. -->
+						<button class="button" type="submit">
+							Restore <span class="visually-hidden">{goal.title}</span>
+						</button>
 					</form>
 				</li>
 			{/each}

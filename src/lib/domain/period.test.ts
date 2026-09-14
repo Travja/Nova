@@ -4,6 +4,8 @@ import {
 	parseLocalDateTime,
 	periodFor,
 	periodLabel,
+	periodName,
+	periodShortName,
 	previousPeriod,
 	recentPeriods,
 	toLocalDateTime,
@@ -165,5 +167,70 @@ describe('periodLabel', () => {
 		expect(periodLabel(periodFor(instant, 'month', utc), utc.timeZone)).toBe('September 2026');
 		expect(periodLabel(periodFor(instant, 'quarter', utc), utc.timeZone)).toBe('Q3 2026');
 		expect(periodLabel(periodFor(instant, 'year', utc), utc.timeZone)).toBe('2026');
+	});
+});
+
+/**
+ * The names the orbit history strip announces. They come off the key rather
+ * than off `period.start` and a time zone, because the key already carries the
+ * wall-clock date the user's own zone saw — which is exactly why the round trip
+ * below has to hold for every cadence, at a DST boundary, and for a week start
+ * other than Monday.
+ */
+describe('periodName', () => {
+	it('reads a key back as the date it was minted from', () => {
+		const instant = new Date('2026-09-12T18:00:00Z');
+		expect(periodName(periodFor(instant, 'day', utc).key)).toBe('Saturday 12 September 2026');
+		expect(periodName(periodFor(instant, 'week', utc).key)).toBe('Week of 7 September 2026');
+		expect(periodName(periodFor(instant, 'month', utc).key)).toBe('September 2026');
+		expect(periodName(periodFor(instant, 'quarter', utc).key)).toBe('Quarter 3 of 2026');
+		expect(periodName(periodFor(instant, 'year', utc).key)).toBe('2026');
+	});
+
+	it('names the day the orbit belongs to across a spring-forward transition', () => {
+		// The same instant that `periodLabel` calls "Sun 8 Mar" in Denver, where
+		// the day is 23 hours long. Read off the key, the answer cannot drift.
+		const period = periodFor(new Date('2026-03-08T18:00:00Z'), 'day', denver);
+		expect(period.key).toBe('day:2026-03-08');
+		expect(periodName(period.key)).toBe('Sunday 8 March 2026');
+	});
+
+	it('unpicks an ISO week number back to the Monday that opened it', () => {
+		// 2026 opens on a Thursday, so week 1 starts in December 2025 — the case
+		// a naive "first of January plus seven days a week" gets wrong.
+		expect(periodName('week:2026-W01')).toBe('Week of 29 December 2025');
+		expect(periodName('week:2026-W37')).toBe('Week of 7 September 2026');
+	});
+
+	it('reads a non-Monday week, which keys on its own opening date', () => {
+		const sunday = periodFor(new Date('2026-09-12T18:00:00Z'), 'week', {
+			timeZone: 'UTC',
+			weekStartsOn: 0
+		});
+		expect(sunday.key).toBe('week:2026-09-06');
+		expect(periodName(sunday.key)).toBe('Week of 6 September 2026');
+	});
+
+	it('hands back anything it cannot read rather than inventing a date', () => {
+		expect(periodName('week:nonsense')).toBe('week:nonsense');
+		expect(periodName('galaxy:2026')).toBe('galaxy:2026');
+	});
+});
+
+describe('periodShortName', () => {
+	it('says as much as fits under a 24px ring', () => {
+		const instant = new Date('2026-09-12T18:00:00Z');
+		expect(periodShortName(periodFor(instant, 'day', utc).key)).toBe('12 Sep');
+		expect(periodShortName(periodFor(instant, 'week', utc).key)).toBe('7 Sep');
+		expect(periodShortName(periodFor(instant, 'month', utc).key)).toBe('Sep');
+		expect(periodShortName(periodFor(instant, 'quarter', utc).key)).toBe('Q3');
+		expect(periodShortName(periodFor(instant, 'year', utc).key)).toBe('2026');
+	});
+
+	it('never shows the raw key, which is what it replaced', () => {
+		const instant = new Date('2026-09-12T18:00:00Z');
+		for (const cadence of ['day', 'week', 'month', 'quarter', 'year'] as const) {
+			expect(periodShortName(periodFor(instant, cadence, utc).key)).not.toContain(':');
+		}
 	});
 });
