@@ -6,7 +6,7 @@ export default defineConfig({
 	plugins: [
 		sveltekit(),
 		SvelteKitPWA({
-			registerType: 'autoUpdate',
+			registerType: 'prompt',
 			injectRegister: 'auto',
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}']
@@ -29,6 +29,47 @@ export default defineConfig({
 						sizes: '512x512',
 						type: 'image/png',
 						purpose: 'maskable'
+					}
+				],
+				shortcuts: [
+					{
+						name: 'Log progress',
+						short_name: 'Log',
+						description: 'Jump to what needs attention today and log against it.',
+						url: '/today',
+						icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }]
+					},
+					{
+						name: 'New goal',
+						short_name: 'New goal',
+						description: 'Launch a new goal to track.',
+						url: '/goals/new',
+						icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }]
+					}
+				],
+				share_target: {
+					action: '/share',
+					method: 'GET',
+					params: {
+						title: 'title',
+						text: 'text',
+						url: 'url'
+					}
+				},
+				screenshots: [
+					{
+						src: '/screenshots/narrow-today.png',
+						sizes: '390x844',
+						type: 'image/png',
+						form_factor: 'narrow',
+						label: 'Today, with the orbits that need attention'
+					},
+					{
+						src: '/screenshots/wide-dashboard.png',
+						sizes: '1280x800',
+						type: 'image/png',
+						form_factor: 'wide',
+						label: 'The dashboard, goals grouped by tier'
 					}
 				]
 			}
