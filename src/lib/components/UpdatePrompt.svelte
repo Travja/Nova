@@ -1,28 +1,71 @@
 <script lang="ts">
-	import { useRegisterSW } from 'virtual:pwa-register/svelte';
+	import { dev } from '$app/environment';
+	import { onMount } from 'svelte';
 
 	/**
 	 * Tells the user a new build is waiting rather than swapping it in under
-	 * them. `registerType: 'prompt'` (vite.config.ts) leaves the new service
-	 * worker in `waiting` until `updateServiceWorker()` sends it the skip; in
-	 * dev the virtual module is a stub whose `needRefresh` store never flips,
-	 * so this renders nothing there — no service worker, no prompt.
+	 * them. `registerType: 'prompt'` (vite.config.ts) leaves a newly installed
+	 * service worker in `registration.waiting` rather than activating it, so
+	 * this only has to notice that and, on accept, tell it to skip waiting.
+	 *
+	 * `virtual:pwa-register/svelte` would normally do this registration and
+	 * watching, but its production build imports `workbox-window`, a package
+	 * only `vite-plugin-pwa` itself depends on — pnpm's strict linking does
+	 * not expose it to this project's own bundling, so building with that
+	 * import fails outright (confirmed against CI, not just guessed). This is
+	 * the fallback the issue names for exactly that case: register by hand
+	 * and watch `waiting` and `updatefound` directly.
 	 */
 
-	const { needRefresh, updateServiceWorker } = useRegisterSW();
-
-	// Lives as long as the layout that mounts this once, so a dismissal
-	// survives client-side navigation instead of reappearing on the next route.
+	let needRefresh = $state(false);
 	let dismissed = $state(false);
+	let registration: ServiceWorkerRegistration | null = null;
+
+	function watch(reg: ServiceWorkerRegistration) {
+		registration = reg;
+		if (reg.waiting) needRefresh = true;
+
+		reg.addEventListener('updatefound', () => {
+			const installing = reg.installing;
+			installing?.addEventListener('statechange', () => {
+				// "installed" with an existing controller is an update sitting
+				// behind the page already open; the very first install of all has
+				// no controller yet and nothing to prompt about.
+				if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+					needRefresh = true;
+				}
+			});
+		});
+	}
+
+	onMount(() => {
+		if (dev || !('serviceWorker' in navigator)) return;
+
+		let reloaded = false;
+		navigator.serviceWorker.addEventListener('controllerchange', () => {
+			if (reloaded) return;
+			reloaded = true;
+			window.location.reload();
+		});
+
+		navigator.serviceWorker
+			.register('/sw.js', { updateViaCache: 'none' })
+			.then(watch)
+			.catch(() => {
+				// An unavailable worker only costs offline support; the app still runs.
+			});
+	});
+
+	function reload() {
+		registration?.waiting?.postMessage({ type: 'SKIP_WAITING' });
+	}
 </script>
 
-{#if $needRefresh && !dismissed}
+{#if needRefresh && !dismissed}
 	<div class="update-bar" role="status">
 		<p>Nova has been updated — reload to get it.</p>
 		<div class="actions">
-			<button class="reload tap" type="button" onclick={() => updateServiceWorker(true)}>
-				Reload
-			</button>
+			<button class="reload tap" type="button" onclick={reload}> Reload </button>
 			<button class="dismiss tap" type="button" onclick={() => (dismissed = true)}>
 				<span aria-hidden="true">✕</span>
 				<span class="visually-hidden">Dismiss</span>
