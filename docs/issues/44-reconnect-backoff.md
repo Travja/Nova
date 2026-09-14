@@ -44,6 +44,16 @@ from the offline attempt, the next try is booked 5 s out. Playwright's default
 This has **not** been reproduced under instrumentation. Confirm it before fixing
 — if the counter is not the cause, the diagnosis below is wrong too.
 
+**Confirmed.** Logging `retries` and the delay `scheduleRetry()` picks, and
+running the `offline` project until "announces what the queue is doing" failed,
+showed exactly this: the offline attempt failed with `retries=0`, booking a 2 s
+retry and leaving `retries=1`. `online` then fired `flush(true)`, and that
+attempt _also_ failed — the unroute race described above — inheriting
+`retries=1` and booking the next attempt at `RETRY_STEPS_MS[1]`, 5000 ms. The
+live region was still showing "1 entry waiting to sync." when the test's 5 s
+`expect` timed out; the entry synced roughly five seconds later, when the
+booked retry finally landed.
+
 ## Why it is a product bug and not only a test artifact
 
 A phone that comes out of a lift, or off a captive portal, has usually failed
@@ -57,9 +67,22 @@ backoff should follow the same reasoning.
 
 ## Build
 
-Reset `retries` to 0 when connectivity returns — in `onOnline`, alongside the
-existing `flush(true)`, rather than inside `flush` itself, so a focus-triggered
-flush during a genuine outage still backs off properly.
+Reset `retries` to 0 when connectivity returns, rather than inside `flush`
+itself, so a focus-triggered flush during a genuine outage still backs off
+properly.
+
+`startQueue()` binds the same handler to both `online` and `focus`:
+
+```ts
+const onOnline = () => flush(true);
+window.addEventListener('online', onOnline);
+window.addEventListener('focus', onOnline);
+```
+
+Resetting `retries` inside that shared handler would reset it on every focus
+too — exactly the case this is meant to protect. Split it: a real
+connectivity change (`online`) resets `retries` and restarts the attempt;
+`focus` keeps restarting the attempt without resetting the backoff.
 
 Then decide separately whether the test should assert with a timeout above the
 first backoff step, so it is not measuring the constant.

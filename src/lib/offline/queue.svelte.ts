@@ -357,16 +357,24 @@ export function startQueue(): () => void {
 		if (document.visibilityState === 'visible') flush();
 	};
 	// A connectivity change is the one trigger allowed to abandon an attempt in
-	// flight — that attempt was made against a network that no longer exists.
-	const onOnline = () => flush(true);
+	// flight — that attempt was made against a network that no longer exists —
+	// and the one trigger allowed to reset the backoff: the counter was earned
+	// against that same dead network. `focus` shares the abort-and-restart
+	// behaviour but must not share the reset, or a focus during a genuine
+	// outage would stop backing off.
+	const onOnline = () => {
+		retries = 0;
+		flush(true);
+	};
+	const onFocus = () => flush(true);
 
 	window.addEventListener('online', onOnline);
-	window.addEventListener('focus', onOnline);
+	window.addEventListener('focus', onFocus);
 	document.addEventListener('visibilitychange', onVisible);
 
 	return () => {
 		window.removeEventListener('online', onOnline);
-		window.removeEventListener('focus', onOnline);
+		window.removeEventListener('focus', onFocus);
 		document.removeEventListener('visibilitychange', onVisible);
 		stopRetrying();
 		started = false;
