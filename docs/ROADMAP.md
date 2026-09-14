@@ -33,6 +33,8 @@ The gaps that stand between "it works" and "I use it every day".
 | [#32](https://github.com/Travja/Nova/issues/32) | [Mobile density](issues/32-mobile-density.md)                   | A 390px screen shows about two goal cards                 |
 | [#33](https://github.com/Travja/Nova/issues/33) | [Floating quick-add](issues/33-floating-quick-add.md)           | The primary action sits where a thumb reaches last        |
 | [#8](https://github.com/Travja/Nova/issues/8)   | [Harden sign-in](issues/08-harden-signin.md)                    | No rate limiting, no password reset                       |
+| [#39](https://github.com/Travja/Nova/issues/39) | [Form error association](issues/39-form-error-association.md)   | An error nobody hears is an error nobody fixes            |
+| [#40](https://github.com/Travja/Nova/issues/40) | [Durable before promised](issues/40-durable-before-promised.md) | "Saved on this device" is said before it is true          |
 
 ## M2 — The fun part
 
@@ -47,6 +49,7 @@ The reason to open the app rather than a spreadsheet.
 | [#13](https://github.com/Travja/Nova/issues/13) | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app              |
 | [#14](https://github.com/Travja/Nova/issues/14) | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield              |
 | [#30](https://github.com/Travja/Nova/issues/30) | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app |
+| [#41](https://github.com/Travja/Nova/issues/41) | [Starfield viewport units](issues/41-starfield-viewport-units.md)     | `vmin` rebases when a mobile address bar hides     |
 
 ## M3 — Insight
 
