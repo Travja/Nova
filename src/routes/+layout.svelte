@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import IosInstallHint from '$components/IosInstallHint.svelte';
+	import OfflineQueue from '$components/OfflineQueue.svelte';
 	import QuickAdd from '$components/QuickAdd.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import Starfield from '$components/Starfield.svelte';
@@ -34,6 +35,11 @@
 
 <div class="shell">
 	<UpdatePrompt />
+	<!-- Signed out there is nothing to sync, and nothing that could be: an
+	     entry belongs to an account. -->
+	{#if data.user}
+		<OfflineQueue />
+	{/if}
 	<IosInstallHint />
 
 	<header class="masthead">

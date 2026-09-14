@@ -127,9 +127,28 @@ export const entries = sqliteTable(
 		note: text('note'),
 		/** When the work happened, which is not always when it was logged. */
 		occurredAt: timestamp('occurred_at').notNull(),
-		createdAt: timestamp('created_at').notNull()
+		createdAt: timestamp('created_at').notNull(),
+		/**
+		 * The id the browser gave this entry before it was ever sent — see
+		 * `$lib/offline/queue`. An entry logged offline is retried until it lands,
+		 * and a retry after a partial failure has no way of knowing whether the
+		 * first attempt was written, so the insert conflicts on this instead of
+		 * reading first and racing itself. Null for anything logged before the
+		 * queue existed, and for a server-side insert with nothing to be idempotent
+		 * about; SQLite counts each null as distinct, so those never collide.
+		 */
+		clientId: text('client_id')
 	},
-	(table) => [index('entries_goal_occurred_idx').on(table.goalId, table.occurredAt)]
+	(table) => [
+		index('entries_goal_occurred_idx').on(table.goalId, table.occurredAt),
+		/*
+		 * Scoped to the goal rather than global: the insert has already checked
+		 * that this user owns this goal, so a client id guessed or replayed from
+		 * somewhere else cannot silently swallow an entry that belongs to another
+		 * account's goal.
+		 */
+		uniqueIndex('entries_goal_client_unique').on(table.goalId, table.clientId)
+	]
 );
 
 export type UserRow = typeof users.$inferSelect;

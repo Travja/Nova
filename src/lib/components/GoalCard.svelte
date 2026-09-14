@@ -6,6 +6,9 @@
 	import type { GoalSnapshot } from '$domain/progress';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
+	import { logOrQueue } from '$lib/offline/enhance';
+	import { pendingFor } from '$lib/offline/queue.svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 
 	interface Props {
 		snapshot: GoalSnapshot;
@@ -27,6 +30,20 @@
 	const percent = $derived(Math.round(snapshot.current.fraction * 100));
 	/** True for the second or so after this goal closes an orbit. */
 	const closing = $derived(celebrationFor(goal.id) !== null);
+	/**
+	 * Entries logged against this goal that the server has not seen yet. The
+	 * dial above already counts them — the page overlays the queue onto the
+	 * snapshot before it draws — so this says why it reads high, rather than
+	 * leaving a number that disagrees with the server unexplained.
+	 */
+	const waiting = $derived(pendingFor(goal.id));
+
+	/**
+	 * Logs against the server when it can and into the offline queue when it
+	 * cannot. Built per submission so it reads the goal this card is drawing
+	 * now, rather than the one it was drawing when the action was set up.
+	 */
+	const logSubmit: SubmitFunction = (input) => logOrQueue({ goalId: goal.id })(input);
 </script>
 
 <article class="card panel" class:card--complete={snapshot.current.complete}>
@@ -63,6 +80,18 @@
 			</p>
 		</a>
 
+		<!-- Outside the heading link on purpose: that link names itself after the
+		     goal, and an `aria-label` takes everything inside it out of the
+		     reading. Pending has to be text in the card's own flow to be heard
+		     at all, and the live region in `OfflineQueue` announces the change. -->
+		{#if waiting > 0}
+			<p class="pending">
+				<span class="pending__dot" aria-hidden="true"></span>
+				{waiting}
+				{waiting === 1 ? 'entry' : 'entries'} waiting to sync
+			</p>
+		{/if}
+
 		<!-- The arc is the progress bar; this is the same value for anyone the
 		     dial is presentational to. -->
 		<div
@@ -90,7 +119,7 @@
 		</dl>
 	</div>
 
-	<form class="quick-log" method="POST" action={logAction} use:enhance>
+	<form class="quick-log" method="POST" action={logAction} use:enhance={logSubmit}>
 		<input type="hidden" name="goalId" value={goal.id} />
 		{#each steps as step (step)}
 			<button class="chip tap" type="submit" name="amount" value={step} disabled={pending}>
@@ -190,6 +219,40 @@
 		color: var(--text-bright);
 		font-weight: 620;
 		margin: 0;
+	}
+
+	/*
+	 * Pending is a state, not a decoration: the words carry it and the dot is
+	 * `aria-hidden` next to them. The pulse yields to `prefers-reduced-motion`
+	 * with everything else, handled globally in `app.css`, which is why the
+	 * colour has to say it too.
+	 */
+	.pending {
+		align-items: center;
+		color: var(--accent-warm);
+		display: flex;
+		font-size: var(--text-secondary);
+		gap: 0.4rem;
+		margin: 0;
+	}
+
+	.pending__dot {
+		animation: breathe 1.8s ease-in-out infinite;
+		background: currentColor;
+		border-radius: 50%;
+		flex: none;
+		height: 0.5rem;
+		width: 0.5rem;
+	}
+
+	@keyframes breathe {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+		50% {
+			opacity: 1;
+		}
 	}
 
 	/* The streak does not just change, it lands. */

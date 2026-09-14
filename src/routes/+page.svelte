@@ -7,13 +7,26 @@
 	import GoalOrderList from '$components/GoalOrderList.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import { noteOrbits } from '$lib/celebration.svelte';
+	import { overlayAll } from '$domain/queue';
+	import { queuedEntries } from '$lib/offline/queue.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
 	import { TIER_LIST } from '$domain/tiers';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
-	const snapshots = $derived(data.snapshots ?? []);
+	/**
+	 * The server's snapshots with the offline queue folded in, so a goal logged
+	 * without a network moves its dial here exactly as it will once the entry
+	 * lands. Same maths either way — `$domain/queue` runs `buildOrbit` and
+	 * `streakFrom` over the entries the browser is still carrying.
+	 */
+	const snapshots = $derived(
+		overlayAll(data.snapshots ?? [], queuedEntries(), {
+			timeZone: data.user?.timeZone ?? 'UTC',
+			weekStartsOn: data.user?.weekStartsOn
+		})
+	);
 	/** See the note in `/today`: compact is a different shape, not a token. */
 	const compact = $derived(data.user?.preferences.density === 'compact');
 

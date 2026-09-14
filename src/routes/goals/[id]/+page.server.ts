@@ -78,7 +78,8 @@ export const actions: Actions = {
 		).safeParse({
 			amount: form.get('amount'),
 			note: form.get('note') ?? undefined,
-			occurredAt: form.get('occurredAt') ?? undefined
+			occurredAt: form.get('occurredAt') ?? undefined,
+			clientId: form.get('clientId') ?? undefined
 		});
 		if (!parsed.success) return fail(400, { errors: fieldErrors(parsed.error) });
 

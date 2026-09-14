@@ -5,6 +5,8 @@
 	import GoalRow from '$components/GoalRow.svelte';
 	import Mascot from '$components/Mascot.svelte';
 	import { celebration, noteOrbits } from '$lib/celebration.svelte';
+	import { overlayAll } from '$domain/queue';
+	import { queuedEntries } from '$lib/offline/queue.svelte';
 	import type { FocusRow, GoalSnapshot } from '$domain/progress';
 	import { focusForToday, formatAmount, formatTimeLeft, periodElapsed } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
@@ -12,7 +14,17 @@
 
 	let { data, form }: PageProps = $props();
 
-	const snapshots = $derived(data.snapshots);
+	/**
+	 * The server's snapshots with the offline queue folded in. The ranking below
+	 * runs on the result, so a goal whose queued entry closed its orbit leaves
+	 * the at-risk list immediately rather than waiting for a network.
+	 */
+	const snapshots = $derived(
+		overlayAll(data.snapshots, queuedEntries(), {
+			timeZone: data.user?.timeZone ?? 'UTC',
+			weekStartsOn: data.user?.weekStartsOn
+		})
+	);
 	/** Ranked on the same clock the orbits were measured against. */
 	const focus = $derived(focusForToday(snapshots, data.now));
 	const logAction = $derived(`${resolve('/today')}?/log`);

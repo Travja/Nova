@@ -6,6 +6,7 @@
 	import type { GoalSnapshot } from '$domain/progress';
 	import { formatAmount } from '$domain/progress';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
+	import { logOrQueue } from '$lib/offline/enhance';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
 	/**
@@ -43,29 +44,43 @@
 	let error = $state('');
 	let pending = $state(false);
 
+	let queued = $state(false);
+
+	function clear() {
+		error = '';
+		amount = '';
+		note = '';
+	}
+
 	/**
 	 * The sheet stays put either way. A failure has to be readable here rather
 	 * than in the page's live region behind the backdrop, and a success refreshes
 	 * the page underneath so the dial in this very sheet sweeps round to its new
 	 * reading.
+	 *
+	 * Offline it goes to the queue instead, and the sheet says so where it says
+	 * everything else — the card behind it is already drawing the entry.
 	 */
-	const logCustom: SubmitFunction = () => {
-		pending = true;
-		return async ({ result, update }) => {
-			pending = false;
+	const logCustom: SubmitFunction = (input) =>
+		logOrQueue({
+			goalId: goal.id,
+			onbusy: (busy) => (pending = busy),
+			onqueued: () => {
+				clear();
+				queued = true;
+			},
+			onresult: async ({ result, update }) => {
+				if (result.type === 'failure') {
+					const errors = (result.data as { errors?: Record<string, string> } | undefined)?.errors;
+					error = errors?.amount ?? errors?.form ?? 'That did not log.';
+					return;
+				}
 
-			if (result.type === 'failure') {
-				const errors = (result.data as { errors?: Record<string, string> } | undefined)?.errors;
-				error = errors?.amount ?? errors?.form ?? 'That did not log.';
-				return;
+				clear();
+				queued = false;
+				await update({ reset: false });
 			}
-
-			error = '';
-			amount = '';
-			note = '';
-			await update({ reset: false });
-		};
-	};
+		})(input);
 </script>
 
 <div class="sheet__body">
@@ -104,6 +119,11 @@
 	</form>
 
 	<p class="error" role="alert">{error}</p>
+	{#if queued}
+		<p class="queued" role="status">
+			Saved on this device — it will sync when you are back online.
+		</p>
+	{/if}
 
 	<dl class="facts">
 		<div>
@@ -159,6 +179,12 @@
 
 	.error:empty {
 		display: none;
+	}
+
+	.queued {
+		color: var(--accent-warm);
+		font-size: var(--text-secondary);
+		margin: 0;
 	}
 
 	.facts {

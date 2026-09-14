@@ -20,8 +20,9 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "node scripts/migrate.mjs",
 		"db:studio": "drizzle-kit studio",
-		"e2e": "playwright test",
+		"e2e": "vite build && playwright test",
 		"db:reset:e2e": "node scripts/reset-e2e-db.mjs",
+		"db:reset:e2e:pwa": "node scripts/reset-e2e-db.mjs data/e2e-pwa.db",
 		"reset:password": "node scripts/reset-password.mjs",
 		"seed:issues": "node scripts/seed-issues.mjs"
 	},
