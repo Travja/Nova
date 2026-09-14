@@ -9,7 +9,7 @@
 	import { formatAmount, quickLogSteps } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import { overlayQueued } from '$domain/queue';
-	import { logOrQueue } from '$lib/offline/enhance';
+	import { logOrQueue, type QueuedState } from '$lib/offline/enhance';
 	import { queuedEntries } from '$lib/offline/queue.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageProps } from './$types';
@@ -42,7 +42,7 @@
 
 	let confirmingDelete = $state(false);
 	/** Set when a log went to the offline queue instead of to the server. */
-	let queued = $state(false);
+	let queued = $state<QueuedState | null>(null);
 
 	/**
 	 * Both log forms here go through the queue, and this one carries a `When`,
@@ -55,12 +55,12 @@
 			logOrQueue({
 				goalId: goal.id,
 				timeZone: data.timeZone,
-				onqueued: () => {
-					queued = true;
+				onqueued: (_entry, state) => {
+					queued = state;
 					after?.();
 				},
 				onresult: async ({ update }) => {
-					queued = false;
+					queued = null;
 					await update();
 					after?.();
 				}
@@ -241,8 +241,12 @@
 			{#if form?.errors?.occurredAt}<p class="error">{form.errors.occurredAt}</p>{/if}
 
 			<p class="live" role="status">
-				{#if queued}
+				{#if queued === 'stored'}
 					Saved on this device — it will sync when you are back online.
+				{:else if queued === 'unstored'}
+					Logged — this browser will not keep it if you reload.
+				{:else if queued === 'logged'}
+					Logged.
 				{:else}{orbitMessage}{/if}
 			</p>
 

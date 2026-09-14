@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
-	import { logOrQueue } from '$lib/offline/enhance';
+	import { logOrQueue, type QueuedState } from '$lib/offline/enhance';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -18,7 +18,7 @@
 	 * — sharing a note into Nova from a train is exactly the case #5 exists for
 	 * — so it queues rather than degrading to an error page.
 	 */
-	let queued = $state(false);
+	let queued = $state<QueuedState | null>(null);
 </script>
 
 <svelte:head>
@@ -33,8 +33,12 @@
 
 	{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
 	<p class="live" role="status">
-		{#if queued}
+		{#if queued === 'stored'}
 			Saved on this device — it will sync when you are back online.
+		{:else if queued === 'unstored'}
+			Logged — this browser will not keep it if you reload.
+		{:else if queued === 'logged'}
+			Logged.
 		{:else if form?.logged}Logged.{/if}
 	</p>
 
@@ -54,7 +58,10 @@
 					<form
 						method="POST"
 						action={logAction}
-						use:enhance={logOrQueue({ goalId: goal.id, onqueued: () => (queued = true) })}
+						use:enhance={logOrQueue({
+							goalId: goal.id,
+							onqueued: (_entry, state) => (queued = state)
+						})}
 					>
 						<input type="hidden" name="goalId" value={goal.id} />
 						<input type="hidden" name="note" value={note} />
