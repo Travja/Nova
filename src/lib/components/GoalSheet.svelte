@@ -8,7 +8,7 @@
 	import { formatAmount } from '$domain/progress';
 	import { metricFor } from '$domain/nesting';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
-	import { logOrQueue } from '$lib/offline/enhance';
+	import { logOrQueue, type QueuedState } from '$lib/offline/enhance';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
 	/**
@@ -49,7 +49,7 @@
 	let error = $state('');
 	let pending = $state(false);
 
-	let queued = $state(false);
+	let queued = $state<QueuedState | null>(null);
 
 	function clear() {
 		error = '';
@@ -70,9 +70,9 @@
 		logOrQueue({
 			goalId: goal.id,
 			onbusy: (busy) => (pending = busy),
-			onqueued: () => {
+			onqueued: (_entry, state) => {
 				clear();
-				queued = true;
+				queued = state;
 			},
 			onresult: async ({ result, update }) => {
 				if (result.type === 'failure') {
@@ -82,7 +82,7 @@
 				}
 
 				clear();
-				queued = false;
+				queued = null;
 				await update({ reset: false });
 			}
 		})(input);
@@ -129,7 +129,13 @@
 		<p class="error" role="alert">{error}</p>
 		{#if queued}
 			<p class="queued" role="status">
-				Saved on this device — it will sync when you are back online.
+				{#if queued === 'stored'}
+					Saved on this device — it will sync when you are back online.
+				{:else if queued === 'unstored'}
+					Logged — this browser will not keep it if you reload.
+				{:else}
+					Logged.
+				{/if}
 			</p>
 		{/if}
 	{/if}

@@ -22,6 +22,17 @@ import { enqueue, newEntryId } from './queue.svelte';
  *   top of whatever the user was doing. Queueing it instead is the whole point.
  */
 
+/**
+ * Where a queued entry stands, in the order the caller learns it:
+ *
+ * - `logged`: in the queue's memory and drawn on the dial. Durability is not
+ *   decided yet, so nothing here may say the entry is saved.
+ * - `stored`: `writeStored` confirmed it reached IndexedDB.
+ * - `unstored`: `writeStored` came back empty — this browser refused it, and
+ *   the entry survives only until reload.
+ */
+export type QueuedState = 'logged' | 'stored' | 'unstored';
+
 export interface LogQueueOptions {
 	/** The goal being logged against. Read here rather than from the form,
 	 *  because the goal page's action takes it from the route instead. */
@@ -30,8 +41,13 @@ export interface LogQueueOptions {
 	timeZone?: string;
 	/** Told when a submission starts and when it settles, for disabling controls. */
 	onbusy?: (busy: boolean) => void;
-	/** Called when the entry went to the queue rather than to the server. */
-	onqueued?: (entry: QueuedEntry) => void;
+	/**
+	 * Called when the entry went to the queue rather than to the server, and
+	 * again once its durability is known. `'logged'` fires the tick the dial
+	 * moves; `'stored'` or `'unstored'` follows once the write has answered —
+	 * never sooner, and never held up by the flush that comes after it.
+	 */
+	onqueued?: (entry: QueuedEntry, state: QueuedState) => void;
 	/** Handles a reply that did arrive. Defaults to SvelteKit's own handling. */
 	onresult?: Exclude<Awaited<ReturnType<SubmitFunction>>, void>;
 }
@@ -78,11 +94,17 @@ export function logOrQueue(options: LogQueueOptions): SubmitFunction {
 		options.onbusy?.(true);
 
 		const queue = (entry: QueuedEntry) => {
-			// Not awaited: the dial moves on the next tick from the queue's own
-			// state, while the write and the flush attempt carry on behind it.
-			void enqueue(entry);
 			options.onbusy?.(false);
-			options.onqueued?.(entry);
+			// Fires before the entry is even in IndexedDB: the dial has to move
+			// here, so nothing durable can be claimed yet either.
+			options.onqueued?.(entry, 'logged');
+			// enqueue() puts the entry in the queue's own state synchronously —
+			// that already happened by the time this line runs — and resolves
+			// once writeStored has answered, without waiting on the flush behind
+			// it. That resolution is the only honest moment to say "saved".
+			void enqueue(entry).then((stored) => {
+				options.onqueued?.(entry, stored ? 'stored' : 'unstored');
+			});
 		};
 
 		if (draft && typeof navigator !== 'undefined' && !navigator.onLine) {
