@@ -82,6 +82,28 @@ export function cadenceOf(tier: Tier): Cadence {
 	return TIER_DEFINITIONS[tier].cadence;
 }
 
+/**
+ * Cadences shortest first — the same order as the tier ladder, because the
+ * ladder is the order.
+ *
+ * Nesting reads this rather than comparing period lengths: a month is sometimes
+ * 28 days and a quarter is never three equal months, so "longer" has to be a
+ * fact about the ladder rather than a measurement that a February could flip.
+ */
+export const CADENCE_ORDER: readonly Cadence[] = TIERS.map(
+	(tier) => TIER_DEFINITIONS[tier].cadence
+);
+
+/** Where a cadence sits on the ladder; larger is longer. */
+export function cadenceRank(cadence: Cadence): number {
+	return CADENCE_ORDER.indexOf(cadence);
+}
+
+/** True when `outer` is strictly longer than `inner`, which is what nesting asks. */
+export function isLongerCadence(outer: Cadence, inner: Cadence): boolean {
+	return cadenceRank(outer) > cadenceRank(inner);
+}
+
 /** Human label for a single revolution in this tier, e.g. "this week". */
 export const CADENCE_LABEL: Record<Cadence, string> = {
 	day: 'today',

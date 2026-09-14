@@ -8,6 +8,7 @@
 	import { overlayAll } from '$domain/queue';
 	import { queuedEntries } from '$lib/offline/queue.svelte';
 	import type { FocusRow, GoalSnapshot } from '$domain/progress';
+	import { metricFor } from '$domain/nesting';
 	import { focusForToday, formatAmount, formatTimeLeft, periodElapsed } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
@@ -50,7 +51,9 @@
 
 	function standing(snapshot: GoalSnapshot): string {
 		const { goal, current } = snapshot;
-		return `${formatAmount(current.logged, goal.metric)} / ${formatAmount(goal.target, goal.metric)}`;
+		// Orbits rather than the goal's own metric once it has children.
+		const metric = metricFor(snapshot);
+		return `${formatAmount(current.logged, metric)} / ${formatAmount(goal.target, metric)}`;
 	}
 
 	function percent(fraction: number): number {

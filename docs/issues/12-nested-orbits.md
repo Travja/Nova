@@ -1,6 +1,6 @@
 ---
 title: 'Nested orbits: let small goals feed a bigger one'
-labels: [enhancement, needs-design]
+labels: [enhancement]
 milestone: 'M2 — The fun part'
 ---
 
@@ -81,6 +81,32 @@ been promising since the scaffold. Worth doing properly rather than as a label.
 - Aggregating beyond direct children.
 - A per-child contribution mode. One mode is simpler, and it is the mode that
   makes the tier ladder mean something.
+
+## As built
+
+The rules above are unchanged. Four things the implementation had to decide that
+the spec did not say, recorded here because each one is load-bearing:
+
+- **A closed child orbit is attributed by the child period's _last instant_, not
+  by `period.end`.** `end` is exclusive, so a week finishing on the last day of
+  October has an `end` of 1 November and reading it directly files that week
+  under the wrong month. Nothing fails when this is wrong; the orbit is just
+  quietly one out. `parentPeriodFor()` in `$domain/nesting` is the one place it
+  is decided, and `nesting.test.ts` pins it at `America/Denver` around 1
+  November 2026 — a Sunday, and the day daylight saving ends — from both sides.
+- **The cadence rule is enforced from above as well as below.** A child
+  declaring a parent is the obvious direction; a parent moving _down_ the ladder
+  while goals already feed it breaks the same rule from the other end, so
+  `tierProblem()` refuses that in the same write.
+- **A derived goal is measured in orbits**, whatever metric its row carries from
+  before it had children. `metricFor(snapshot)` is the only place that decides,
+  and the stored metric is kept rather than overwritten so the goal still has one
+  the day its last child leaves.
+- **What the offline queue closes reaches the goals counting it.** A child that
+  closes its own orbit while the phone has no signal moves the parent's dial too,
+  through `overlayAll` in `$domain/queue` — otherwise two dials on the same
+  screen disagree about the same fact. Same `parentPeriodFor` the server counted
+  with.
 
 ## Done when
 

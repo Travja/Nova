@@ -1,5 +1,5 @@
 import { entrySchema, fieldErrors, formError } from '$domain/validation';
-import { listGoalSnapshots, logEntry } from '$lib/server/goals';
+import { listGoalSnapshots, logEntry, LOG_REFUSAL_MESSAGE } from '$lib/server/goals';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -33,8 +33,12 @@ export const actions: Actions = {
 		if (!goalId) return fail(400, { errors: formError('Pick a goal to log against.') });
 		if (!parsed.success) return fail(400, { errors: fieldErrors(parsed.error) });
 
-		const entry = await logEntry(locals.user.id, goalId, parsed.data);
-		if (!entry) return fail(404, { errors: formError('That goal is no longer in orbit.') });
+		const logged = await logEntry(locals.user.id, goalId, parsed.data);
+		if (!logged.ok) {
+			return fail(logged.reason === 'missing' ? 404 : 409, {
+				errors: formError(LOG_REFUSAL_MESSAGE[logged.reason])
+			});
+		}
 
 		return { logged: true };
 	}

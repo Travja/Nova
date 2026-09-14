@@ -1,6 +1,7 @@
+import { parentPeriodFor } from './nesting';
 import type { PeriodOptions } from './period';
-import { bucketByPeriod, buildOrbit, streakFrom, type GoalSnapshot } from './progress';
-import { cadenceOf } from './tiers';
+import { bucketByPeriod, buildOrbit, streakFrom, type GoalSnapshot, type Orbit } from './progress';
+import { cadenceOf, cadenceRank } from './tiers';
 
 /**
  * What an entry logged offline looks like before the server has seen it, and
@@ -54,6 +55,13 @@ export function overlayQueued(
 	queued: readonly QueuedEntry[],
 	options: PeriodOptions
 ): GoalSnapshot {
+	// A derived goal counts its children's closed orbits and has no entries of
+	// its own — `logEntry()` refuses them — so anything queued against one is
+	// stale, and folding an amount into a count of orbits would be nonsense.
+	// What does reach it is what its children closed, which `overlayAll` below
+	// carries up because only it can see both ends of the edge.
+	if (snapshot.derived) return snapshot;
+
 	const mine = queuedFor(queued, snapshot.goal.id);
 	if (mine.length === 0) return snapshot;
 
@@ -82,12 +90,119 @@ export function overlayQueued(
 	};
 }
 
-/** The same, for a screen's worth of goals. */
+/**
+ * The same, for a screen's worth of goals, with what the queue closes carried
+ * up to the parents counting it.
+ *
+ * A goal logged offline can close its own orbit, and a closed orbit is exactly
+ * what a parent counts — so a Planet that closes its week while the phone has
+ * no signal has to move the Star System above it, or the two dials on the same
+ * screen disagree about the same fact. The maths is the domain's own:
+ * `parentPeriodFor` decides which of the parent's periods the closure lands in,
+ * the same function the server counted with.
+ *
+ * Goals are walked shortest cadence first, so a child is finished before the
+ * parent reading it — which is what makes a Satellite feeding a Planet feeding
+ * a Star System arrive all the way at the top in one pass.
+ */
 export function overlayAll(
 	snapshots: readonly GoalSnapshot[],
 	queued: readonly QueuedEntry[],
 	options: PeriodOptions
 ): GoalSnapshot[] {
 	if (queued.length === 0) return snapshots as GoalSnapshot[];
-	return snapshots.map((snapshot) => overlayQueued(snapshot, queued, options));
+
+	const overlaid = snapshots.map((snapshot) => overlayQueued(snapshot, queued, options));
+	if (!overlaid.some((snapshot) => snapshot.derived)) return overlaid;
+
+	const server = new Map(snapshots.map((snapshot) => [snapshot.goal.id, snapshot]));
+	const live = new Map(overlaid.map((snapshot) => [snapshot.goal.id, snapshot]));
+
+	const shortestFirst = [...overlaid].sort(
+		(a, b) => cadenceRank(cadenceOf(a.goal.tier)) - cadenceRank(cadenceOf(b.goal.tier))
+	);
+
+	for (const snapshot of shortestFirst) {
+		const child = live.get(snapshot.goal.id);
+		const parent = child?.goal.parentId ? live.get(child.goal.parentId) : undefined;
+		if (!child || !parent?.derived) continue;
+
+		const deltas = closureDeltas(
+			server.get(child.goal.id)?.history ?? [],
+			child.history,
+			cadenceOf(parent.goal.tier),
+			options
+		);
+		if (deltas.size > 0) live.set(parent.goal.id, withClosures(parent, child, deltas));
+	}
+
+	return overlaid.map((snapshot) => live.get(snapshot.goal.id) ?? snapshot);
+}
+
+/**
+ * Which of the parent's periods gained or lost a closed child orbit, once the
+ * queue is folded in. Orbits are compared position by position because both
+ * histories were built from the same `recentPeriods` walk.
+ */
+function closureDeltas(
+	before: readonly Orbit[],
+	after: readonly Orbit[],
+	parentCadence: ReturnType<typeof cadenceOf>,
+	options: PeriodOptions
+): Map<string, number> {
+	const deltas = new Map<string, number>();
+
+	after.forEach((orbit, index) => {
+		const was = before[index];
+		if (!was || was.complete === orbit.complete) return;
+		// A period the child spent archived never closed and never will.
+		if (orbit.dormant || was.dormant) return;
+
+		const { key } = parentPeriodFor(orbit.period, parentCadence, options);
+		deltas.set(key, (deltas.get(key) ?? 0) + (orbit.complete ? 1 : -1));
+	});
+
+	return deltas;
+}
+
+/** A parent's snapshot with one child's newly closed orbits counted into it. */
+function withClosures(
+	parent: GoalSnapshot,
+	child: GoalSnapshot,
+	deltas: Map<string, number>
+): GoalSnapshot {
+	let closedMore = 0;
+	const history = parent.history.map((orbit) => {
+		const delta = deltas.get(orbit.period.key);
+		if (!delta) return orbit;
+
+		const moved = buildOrbit(orbit.period, orbit.logged + delta, orbit.target, orbit.dormant);
+		if (moved.complete !== orbit.complete) closedMore += moved.complete ? 1 : -1;
+		return moved;
+	});
+
+	let queuedTotal = 0;
+	for (const delta of deltas.values()) queuedTotal += delta;
+
+	const currentKey = history[0].period.key;
+	const children = (parent.derived?.children ?? []).map((standing) =>
+		standing.goalId === child.goal.id
+			? {
+					...standing,
+					// The child's own body moves on the parent's dial too.
+					current: child.current,
+					closed: standing.closed + (deltas.get(currentKey) ?? 0)
+				}
+			: standing
+	);
+
+	return {
+		...parent,
+		current: history[0],
+		history,
+		streak: streakFrom(history),
+		totalOrbits: Math.max(0, parent.totalOrbits + closedMore),
+		lifetimeLogged: parent.lifetimeLogged + queuedTotal,
+		derived: { children }
+	};
 }

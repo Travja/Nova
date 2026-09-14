@@ -8,6 +8,7 @@ import {
 	getGoalDetail,
 	logEntry,
 	orbitAt,
+	LOG_REFUSAL_MESSAGE,
 	setGoalArchived,
 	updateEntry
 } from '$lib/server/goals';
@@ -83,14 +84,13 @@ export const actions: Actions = {
 		});
 		if (!parsed.success) return fail(400, { errors: fieldErrors(parsed.error) });
 
-		const entry = await logEntry(locals.user.id, params.id, parsed.data);
-		if (!entry) {
-			return fail(409, {
-				errors: formError('This goal is archived. Restore it before logging against it.')
-			});
-		}
+		const logged = await logEntry(locals.user.id, params.id, parsed.data);
+		if (!logged.ok) return fail(409, { errors: formError(LOG_REFUSAL_MESSAGE[logged.reason]) });
 
-		return { logged: true, orbit: await orbitReport(locals.user, goal, entry.occurredAt, now) };
+		return {
+			logged: true,
+			orbit: await orbitReport(locals.user, goal, logged.entry.occurredAt, now)
+		};
 	},
 
 	editEntry: async ({ request, locals, params }) => {

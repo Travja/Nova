@@ -68,6 +68,10 @@ Routes parse forms and render; they do not build queries.
   them for you.
 - **Migrations are committed and immutable.** Change `schema.ts`, run
   `pnpm db:generate`, commit the generated SQL. Never edit one that has shipped.
+- **A goal with children is derived.** Its orbit counts closed child orbits, it
+  cannot be logged against, and its amounts are in orbits — read the metric
+  through `metricFor(snapshot)`, never `goal.metric`. Tree maths lives in
+  `$domain/nesting`; the service loads the shape, the domain does the sums.
 - **Timestamps are UTC epoch milliseconds.** Nothing stores a local time.
 - **A log that can be retried carries a `clientId`.** `entries.client_id` is
   unique per goal and `logEntry()` conflicts on it, which is what stops the
@@ -82,6 +86,12 @@ tests assert exactly that.
 
 **When you touch `src/lib/domain/period.ts`, add a test with a real DST date.**
 The existing ones use `America/Denver` around 8 March and 1 November.
+
+Nesting has its own version of the same edge: a closed child orbit counts toward
+the parent period containing the child period's **end**, read as the last instant
+it covers rather than the exclusive `period.end`. Nothing fails when that is
+wrong — the orbit is quietly one out — so `nesting.test.ts` pins it at a week
+that straddles a month boundary with a DST transition inside it.
 
 Entries carry `occurredAt` separately from `createdAt` so work can be logged
 after the fact. Anything that groups entries must use `occurredAt`.

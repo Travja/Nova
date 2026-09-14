@@ -52,7 +52,21 @@ export const goalSchema = z
 		color: z
 			.string()
 			.default(DEFAULT_COLOR)
-			.refine(isPaletteColor, 'Pick one of the available colours.')
+			.refine(isPaletteColor, 'Pick one of the available colours.'),
+		/*
+		 * The goal this one feeds. Only its shape is checked here: whether it is
+		 * the user's own, whether its cadence is longer and whether the edge would
+		 * close a loop are all facts about the rest of the user's goals, so they
+		 * are settled in `$domain/nesting` against a loaded set — at write time,
+		 * never at read time.
+		 *
+		 * A `<select>` with nothing chosen posts an empty string, and JSON sends
+		 * null; both mean "no parent" and both land as null.
+		 */
+		parentId: z.preprocess(
+			(value) => (value === '' || value === null || value === undefined ? null : value),
+			z.string().trim().max(64).nullable().default(null)
+		)
 	})
 	.transform((value) => ({
 		...value,

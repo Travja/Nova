@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import ChildOrbits from '$components/ChildOrbits.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
 	import OrbitHistory from '$components/OrbitHistory.svelte';
 	import type { GoalSnapshot } from '$domain/progress';
 	import { formatAmount } from '$domain/progress';
+	import { metricFor } from '$domain/nesting';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
 	import { logOrQueue } from '$lib/offline/enhance';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -35,6 +37,9 @@
 
 	const goal = $derived(snapshot.goal);
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
+	/** Orbits rather than the goal's own metric, once it has children. */
+	const metric = $derived(metricFor(snapshot));
+	const nested = $derived(snapshot.derived ?? null);
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
 	/** Enough to read the run of form at a glance, not the whole year. */
 	const recent = $derived(snapshot.history.slice(0, 8));
@@ -86,43 +91,47 @@
 <div class="sheet__body">
 	<GoalCard {snapshot} {logAction} />
 
-	<form class="custom" method="POST" action={logAction} use:enhance={logCustom}>
-		<input type="hidden" name="goalId" value={goal.id} />
+	{#if nested}
+		<ChildOrbits children={nested.children} orbit={snapshot.current} />
+	{:else}
+		<form class="custom" method="POST" action={logAction} use:enhance={logCustom}>
+			<input type="hidden" name="goalId" value={goal.id} />
 
-		<div class="field">
-			<label for="sheet-amount-{goal.id}">
-				Amount {#if goal.metric.kind === 'duration'}<span class="muted">(minutes)</span>{/if}
-			</label>
-			<input
-				id="sheet-amount-{goal.id}"
-				name="amount"
-				type="number"
-				step="any"
-				inputmode="decimal"
-				bind:value={amount}
-				required
-			/>
-		</div>
+			<div class="field">
+				<label for="sheet-amount-{goal.id}">
+					Amount {#if metric.kind === 'duration'}<span class="muted">(minutes)</span>{/if}
+				</label>
+				<input
+					id="sheet-amount-{goal.id}"
+					name="amount"
+					type="number"
+					step="any"
+					inputmode="decimal"
+					bind:value={amount}
+					required
+				/>
+			</div>
 
-		<div class="field">
-			<label for="sheet-note-{goal.id}">Note</label>
-			<input
-				id="sheet-note-{goal.id}"
-				name="note"
-				maxlength="200"
-				placeholder="Optional"
-				bind:value={note}
-			/>
-		</div>
+			<div class="field">
+				<label for="sheet-note-{goal.id}">Note</label>
+				<input
+					id="sheet-note-{goal.id}"
+					name="note"
+					maxlength="200"
+					placeholder="Optional"
+					bind:value={note}
+				/>
+			</div>
 
-		<button class="button" type="submit" disabled={pending}>Log it</button>
-	</form>
+			<button class="button" type="submit" disabled={pending}>Log it</button>
+		</form>
 
-	<p class="error" role="alert">{error}</p>
-	{#if queued}
-		<p class="queued" role="status">
-			Saved on this device — it will sync when you are back online.
-		</p>
+		<p class="error" role="alert">{error}</p>
+		{#if queued}
+			<p class="queued" role="status">
+				Saved on this device — it will sync when you are back online.
+			</p>
+		{/if}
 	{/if}
 
 	<dl class="facts">
@@ -134,11 +143,11 @@
 		</div>
 		<div>
 			<dt>A full orbit</dt>
-			<dd>{formatAmount(goal.target, goal.metric)}</dd>
+			<dd>{formatAmount(goal.target, metric)}</dd>
 		</div>
 		<div>
-			<dt>Logged in all</dt>
-			<dd>{formatAmount(snapshot.lifetimeLogged, goal.metric)}</dd>
+			<dt>{nested ? 'Orbits fed in' : 'Logged in all'}</dt>
+			<dd>{formatAmount(snapshot.lifetimeLogged, metric)}</dd>
 		</div>
 	</dl>
 

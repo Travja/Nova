@@ -4,6 +4,7 @@
 	import Astronaut from '$components/Astronaut.svelte';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import { formatAmount } from '$domain/progress';
+	import { metricFor } from '$domain/nesting';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
 
@@ -51,6 +52,7 @@
 		<ul class="list">
 			{#each snapshots as snapshot (snapshot.goal.id)}
 				{@const goal = snapshot.goal}
+				{@const metric = metricFor(snapshot)}
 				<li class="card panel">
 					<OrbitDial
 						orbit={snapshot.current}
@@ -58,9 +60,10 @@
 						color={goal.color}
 						goalId={goal.id}
 						size={120}
-						caption="{formatAmount(snapshot.current.logged, goal.metric)} / {formatAmount(
+						satellites={snapshot.derived?.children ?? []}
+						caption="{formatAmount(snapshot.current.logged, metric)} / {formatAmount(
 							goal.target,
-							goal.metric
+							metric
 						)}"
 					/>
 
@@ -87,8 +90,8 @@
 								<dd>{snapshot.streak}</dd>
 							</div>
 							<div>
-								<dt>Lifetime</dt>
-								<dd>{formatAmount(snapshot.lifetimeLogged, goal.metric)}</dd>
+								<dt>{snapshot.derived ? 'Orbits fed in' : 'Lifetime'}</dt>
+								<dd>{formatAmount(snapshot.lifetimeLogged, metric)}</dd>
 							</div>
 						</dl>
 					</div>

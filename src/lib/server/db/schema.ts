@@ -1,4 +1,12 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+	index,
+	integer,
+	real,
+	sqliteTable,
+	text,
+	uniqueIndex,
+	type AnySQLiteColumn
+} from 'drizzle-orm/sqlite-core';
 
 /** Timestamps are stored as epoch milliseconds so they survive any time zone. */
 const timestamp = (name: string) => integer(name, { mode: 'timestamp_ms' });
@@ -89,9 +97,29 @@ export const goals = sqliteTable(
 		color: text('color').notNull(),
 		sortOrder: integer('sort_order').notNull().default(0),
 		createdAt: timestamp('created_at').notNull(),
-		archivedAt: timestamp('archived_at')
+		archivedAt: timestamp('archived_at'),
+		/**
+		 * The goal this one feeds, in a strictly longer tier — see
+		 * `$domain/nesting`. Null for a goal that stands alone, which is every
+		 * goal that existed before nesting did.
+		 *
+		 * `set null` rather than `cascade`: deleting a Star System must not take
+		 * the weekly habits under it with it. The children are orphaned and carry
+		 * on exactly as they were, which is also what makes deleting a parent a
+		 * recoverable mistake.
+		 *
+		 * The same-user, longer-cadence and acyclic rules are enforced at write
+		 * time in `$domain/nesting`, not here: SQLite can hold the reference but
+		 * has nothing to say about any of the three.
+		 */
+		parentId: text('parent_id').references((): AnySQLiteColumn => goals.id, {
+			onDelete: 'set null'
+		})
 	},
-	(table) => [index('goals_user_id_idx').on(table.userId)]
+	(table) => [
+		index('goals_user_id_idx').on(table.userId),
+		index('goals_parent_id_idx').on(table.parentId)
+	]
 );
 
 /**

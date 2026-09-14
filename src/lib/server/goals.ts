@@ -1,10 +1,12 @@
+import { buildOrbit, type DormantWindow, type GoalSnapshot, type Orbit } from '$domain/progress';
 import {
-	buildOrbit,
-	snapshotGoal,
-	type DormantWindow,
-	type GoalSnapshot,
-	type Orbit
-} from '$domain/progress';
+	childrenOf,
+	parentProblem,
+	snapshotWithChildren,
+	tierProblem,
+	type ChildInput,
+	type ParentProblem
+} from '$domain/nesting';
 import type { Goal, ProgressEntry } from '$domain/types';
 import type { GoalInput } from '$domain/validation';
 import { db } from '$lib/server/db';
@@ -18,7 +20,7 @@ import {
 import type { SessionUser } from '$lib/server/auth/session';
 import { newId } from '$lib/server/auth/session';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { cadenceOf, type Tier } from '$domain/tiers';
+import { cadenceOf, TIERS, type Tier } from '$domain/tiers';
 import type { MetricKind } from '$domain/types';
 import { periodFor, type Period } from '$domain/period';
 
@@ -34,7 +36,8 @@ function toGoal(row: GoalRow): Goal {
 		color: row.color,
 		sortOrder: row.sortOrder,
 		createdAt: row.createdAt,
-		archivedAt: row.archivedAt
+		archivedAt: row.archivedAt,
+		parentId: row.parentId
 	};
 }
 
@@ -72,6 +75,93 @@ async function dormantWindowsFor(goalIds: string[]): Promise<Map<string, Dormant
 	return byGoal;
 }
 
+/**
+ * Everything a user's goal trees are computed from, loaded once.
+ *
+ * Nesting is resolved over goals that are already in memory — `$domain/nesting`
+ * never reads a database — so the service's job is to load the shape and hand
+ * it over. Archived goals are included: a child parked last week still closed
+ * the weeks before it, and its dormant windows are what stop it counting for
+ * the weeks since.
+ */
+interface Forest {
+	goals: Goal[];
+	entriesByGoal: Map<string, ProgressEntry[]>;
+	dormantByGoal: Map<string, DormantWindow[]>;
+}
+
+function bucketEntries(rows: EntryRow[]): Map<string, ProgressEntry[]> {
+	const byGoal = new Map<string, ProgressEntry[]>();
+	for (const row of rows) {
+		const entry = toEntry(row);
+		const bucket = byGoal.get(entry.goalId);
+		if (bucket) bucket.push(entry);
+		else byGoal.set(entry.goalId, [entry]);
+	}
+	return byGoal;
+}
+
+/** Every goal the user owns, with its entries and dormant windows. */
+async function loadForest(userId: string): Promise<Forest> {
+	const all = await listGoals(userId, true);
+	if (all.length === 0) {
+		return { goals: [], entriesByGoal: new Map(), dormantByGoal: new Map() };
+	}
+
+	const ids = all.map((goal) => goal.id);
+	const rows = await db.select().from(entries).where(inArray(entries.goalId, ids));
+
+	return {
+		goals: all,
+		entriesByGoal: bucketEntries(rows),
+		dormantByGoal: await dormantWindowsFor(ids)
+	};
+}
+
+/**
+ * The ladder is five tiers and every edge is strictly longer than the one
+ * below, so a chain cannot be longer than five. Validation refuses a cycle at
+ * write time; this is the belt that means a database which somehow holds one
+ * still renders a page rather than overflowing a stack.
+ */
+const MAX_TREE_DEPTH = TIERS.length;
+
+/** One goal's direct children, and theirs, as the domain wants them. */
+function childInputs(goalId: string, forest: Forest, depth = 0): ChildInput[] {
+	if (depth >= MAX_TREE_DEPTH) return [];
+	return childrenOf(goalId, forest.goals).map((child) => ({
+		goal: child,
+		entries: forest.entriesByGoal.get(child.id) ?? [],
+		dormantWindows: forest.dormantByGoal.get(child.id) ?? [],
+		children: childInputs(child.id, forest, depth + 1)
+	}));
+}
+
+/**
+ * A goal's snapshot from a loaded forest — derived when it has children, and
+ * exactly what `snapshotGoal()` always gave when it does not.
+ *
+ * Every screen goes through here rather than calling either one directly, which
+ * is what keeps "having children is what makes a goal derived" a single fact.
+ */
+function snapshotFromForest(
+	goal: Goal,
+	forest: Forest,
+	user: SessionUser,
+	now: Date
+): GoalSnapshot {
+	return snapshotWithChildren(
+		goal,
+		forest.entriesByGoal.get(goal.id) ?? [],
+		childInputs(goal.id, forest),
+		{
+			...periodOptions(user),
+			now,
+			dormantWindows: forest.dormantByGoal.get(goal.id) ?? []
+		}
+	);
+}
+
 export async function listGoals(userId: string, includeArchived = false): Promise<Goal[]> {
 	const rows = await db
 		.select()
@@ -95,36 +185,12 @@ export async function listGoalSnapshots(
 	user: SessionUser,
 	now = new Date()
 ): Promise<GoalSnapshot[]> {
-	const owned = await listGoals(user.id);
-	if (owned.length === 0) return [];
-
-	const rows = await db
-		.select()
-		.from(entries)
-		.where(
-			inArray(
-				entries.goalId,
-				owned.map((goal) => goal.id)
-			)
-		);
-
-	const byGoal = new Map<string, ProgressEntry[]>();
-	for (const row of rows) {
-		const entry = toEntry(row);
-		const bucket = byGoal.get(entry.goalId);
-		if (bucket) bucket.push(entry);
-		else byGoal.set(entry.goalId, [entry]);
-	}
-
-	const dormant = await dormantWindowsFor(owned.map((goal) => goal.id));
-
-	return owned.map((goal) =>
-		snapshotGoal(goal, byGoal.get(goal.id) ?? [], {
-			...periodOptions(user),
-			now,
-			dormantWindows: dormant.get(goal.id) ?? []
-		})
-	);
+	const forest = await loadForest(user.id);
+	// Archived goals are loaded because a parent counts what its children closed
+	// before they were parked; they are not listed.
+	return forest.goals
+		.filter((goal) => goal.archivedAt === null)
+		.map((goal) => snapshotFromForest(goal, forest, user, now));
 }
 
 /**
@@ -135,41 +201,11 @@ export async function listGoalSnapshots(
  * never awake for.
  */
 export async function listArchivedSnapshots(user: SessionUser): Promise<GoalSnapshot[]> {
-	const rows = await db
-		.select()
-		.from(goals)
-		.where(and(eq(goals.userId, user.id), isNotNull(goals.archivedAt)))
-		.orderBy(desc(goals.archivedAt));
-	const archived = rows.map(toGoal);
-	if (archived.length === 0) return [];
-
-	const entryRows = await db
-		.select()
-		.from(entries)
-		.where(
-			inArray(
-				entries.goalId,
-				archived.map((goal) => goal.id)
-			)
-		);
-
-	const byGoal = new Map<string, ProgressEntry[]>();
-	for (const row of entryRows) {
-		const entry = toEntry(row);
-		const bucket = byGoal.get(entry.goalId);
-		if (bucket) bucket.push(entry);
-		else byGoal.set(entry.goalId, [entry]);
-	}
-
-	const dormant = await dormantWindowsFor(archived.map((goal) => goal.id));
-
-	return archived.map((goal) =>
-		snapshotGoal(goal, byGoal.get(goal.id) ?? [], {
-			...periodOptions(user),
-			now: goal.archivedAt ?? new Date(),
-			dormantWindows: dormant.get(goal.id) ?? []
-		})
-	);
+	const forest = await loadForest(user.id);
+	return forest.goals
+		.filter((goal) => goal.archivedAt !== null)
+		.sort((a, b) => (b.archivedAt?.getTime() ?? 0) - (a.archivedAt?.getTime() ?? 0))
+		.map((goal) => snapshotFromForest(goal, forest, user, goal.archivedAt ?? new Date()));
 }
 
 export async function getGoal(userId: string, goalId: string): Promise<Goal | null> {
@@ -189,21 +225,14 @@ export async function getGoalDetail(
 	const goal = await getGoal(user.id, goalId);
 	if (!goal) return null;
 
-	const rows = await db.select().from(entries).where(eq(entries.goalId, goalId));
-	const all = rows.map(toEntry);
-	const recentEntries = [...all]
+	const forest = await loadForest(user.id);
+	const recentEntries = [...(forest.entriesByGoal.get(goal.id) ?? [])]
 		.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
 		.slice(0, 50);
 
-	const dormant = await dormantWindowsFor([goal.id]);
-
 	return {
-		snapshot: snapshotGoal(goal, all, {
-			...periodOptions(user),
-			// An archived goal is frozen at the moment it was archived.
-			now: goal.archivedAt ?? now,
-			dormantWindows: dormant.get(goal.id) ?? []
-		}),
+		// An archived goal is frozen at the moment it was archived.
+		snapshot: snapshotFromForest(goal, forest, user, goal.archivedAt ?? now),
 		recentEntries
 	};
 }
@@ -237,7 +266,49 @@ export async function orbitAt(
 	return { orbit: buildOrbit(period, logged, goal.target), period };
 }
 
-export async function createGoal(userId: string, input: GoalInput): Promise<Goal> {
+/**
+ * What a write refused, when it refused one.
+ *
+ * `parent` carries the reason the edge was rejected — see
+ * `PARENT_PROBLEM_MESSAGE` — and `tier` means the goal's own tier no longer
+ * clears the children already feeding it.
+ */
+export type GoalWriteProblem = { kind: 'parent'; problem: ParentProblem } | { kind: 'tier' };
+
+export type GoalWriteResult =
+	| { ok: true; goal: Goal }
+	| { ok: false; missing: true }
+	| { ok: false; missing?: false; problem: GoalWriteProblem };
+
+/**
+ * Every nesting rule, checked here rather than in the route.
+ *
+ * Same reason `logEntry()` re-reads the goal under the user's id: the caller's
+ * own goals are the only ones a parent may be picked from, so the check needs
+ * the user, and every caller should get the guarantee without asking for it.
+ * `parentProblem()` reports a goal that is not in that set as `unknown`, which
+ * is how "somebody else's goal" is refused without saying whether it exists.
+ */
+async function nestingProblem(
+	userId: string,
+	goal: { id?: string | null; tier: Tier },
+	parentId: string | null
+): Promise<GoalWriteProblem | null> {
+	const owned = await listGoals(userId, true);
+
+	const problem = parentProblem(goal, parentId, owned);
+	if (problem) return { kind: 'parent', problem };
+
+	// Moving down the ladder can break the rule from the other side.
+	if (goal.id && tierProblem(goal.id, goal.tier, owned)) return { kind: 'tier' };
+
+	return null;
+}
+
+export async function createGoal(userId: string, input: GoalInput): Promise<GoalWriteResult> {
+	const problem = await nestingProblem(userId, { tier: input.tier }, input.parentId);
+	if (problem) return { ok: false, problem };
+
 	const [{ nextOrder }] = await db
 		.select({ nextOrder: sql<number>`coalesce(max(${goals.sortOrder}), -1) + 1` })
 		.from(goals)
@@ -255,17 +326,26 @@ export async function createGoal(userId: string, input: GoalInput): Promise<Goal
 		color: input.color,
 		sortOrder: nextOrder,
 		createdAt: new Date(),
-		archivedAt: null
+		archivedAt: null,
+		parentId: input.parentId
 	};
 	await db.insert(goals).values(row);
-	return toGoal(row);
+	return { ok: true, goal: toGoal(row) };
 }
 
 export async function updateGoal(
 	userId: string,
 	goalId: string,
 	input: GoalInput
-): Promise<boolean> {
+): Promise<GoalWriteResult> {
+	const existing = await getGoal(userId, goalId);
+	if (!existing) return { ok: false, missing: true };
+
+	// The tier being saved, not the one on the row: an edit can move a goal up
+	// or down the ladder in the same submit that picks its parent.
+	const problem = await nestingProblem(userId, { id: goalId, tier: input.tier }, input.parentId);
+	if (problem) return { ok: false, problem };
+
 	const result = await db
 		.update(goals)
 		.set({
@@ -275,10 +355,25 @@ export async function updateGoal(
 			metricKind: input.metricKind,
 			metricUnit: input.metricUnit,
 			target: input.target,
-			color: input.color
+			color: input.color,
+			parentId: input.parentId
 		})
 		.where(and(eq(goals.id, goalId), eq(goals.userId, userId)));
-	return result.changes > 0;
+	if (result.changes === 0) return { ok: false, missing: true };
+
+	return {
+		ok: true,
+		goal: {
+			...existing,
+			title: input.title,
+			description: input.description,
+			tier: input.tier,
+			metric: { kind: input.metricKind, unit: input.metricUnit },
+			target: input.target,
+			color: input.color,
+			parentId: input.parentId
+		}
+	};
 }
 
 /**
@@ -371,6 +466,28 @@ export async function deleteGoal(userId: string, goalId: string): Promise<boolea
 	return result.changes > 0;
 }
 
+/** Why a log was refused. */
+export type LogRefusal = 'missing' | 'archived' | 'derived';
+
+export type LogResult = { ok: true; entry: ProgressEntry } | { ok: false; reason: LogRefusal };
+
+export const LOG_REFUSAL_MESSAGE: Record<LogRefusal, string> = {
+	missing: 'That goal is no longer in orbit.',
+	archived: 'This goal is archived. Restore it before logging against it.',
+	derived:
+		'This goal counts the orbits its children close, so nothing is logged against it directly.'
+};
+
+/** Whether anything feeds this goal, which is what makes it derived. */
+async function hasChildren(userId: string, goalId: string): Promise<boolean> {
+	const [row] = await db
+		.select({ id: goals.id })
+		.from(goals)
+		.where(and(eq(goals.userId, userId), eq(goals.parentId, goalId)))
+		.limit(1);
+	return row !== undefined;
+}
+
 /**
  * Record an entry against a goal the user owns.
  *
@@ -389,10 +506,16 @@ export async function logEntry(
 	userId: string,
 	goalId: string,
 	input: { amount: number; note: string | null; occurredAt?: Date; clientId?: string }
-): Promise<ProgressEntry | null> {
+): Promise<LogResult> {
 	// An archived goal is dormant: restoring it is the way back to logging.
 	const goal = await getGoal(userId, goalId);
-	if (!goal || goal.archivedAt) return null;
+	if (!goal) return { ok: false, reason: 'missing' };
+	if (goal.archivedAt) return { ok: false, reason: 'archived' };
+	// A goal with children counts their closed orbits, so there is nothing an
+	// entry here could mean. Refused at write time rather than ignored at read
+	// time, so a queued entry against a goal that has since become a parent gets
+	// a reason it can stop retrying on.
+	if (await hasChildren(userId, goalId)) return { ok: false, reason: 'derived' };
 
 	const clientId = input.clientId ?? null;
 	const row = {
@@ -407,14 +530,14 @@ export async function logEntry(
 
 	if (!clientId) {
 		await db.insert(entries).values(row);
-		return toEntry(row);
+		return { ok: true, entry: toEntry(row) };
 	}
 
 	const result = await db
 		.insert(entries)
 		.values(row)
 		.onConflictDoNothing({ target: [entries.goalId, entries.clientId] });
-	if (result.changes > 0) return toEntry(row);
+	if (result.changes > 0) return { ok: true, entry: toEntry(row) };
 
 	// The entry landed on an earlier attempt whose answer never arrived. Hand
 	// back what was written then, so the caller sees a success rather than
@@ -424,7 +547,7 @@ export async function logEntry(
 		.from(entries)
 		.where(and(eq(entries.goalId, goalId), eq(entries.clientId, clientId)))
 		.limit(1);
-	return existing ? toEntry(existing) : null;
+	return existing ? { ok: true, entry: toEntry(existing) } : { ok: false, reason: 'missing' };
 }
 
 /**
@@ -441,6 +564,7 @@ export async function updateEntry(
 ): Promise<ProgressEntry | null> {
 	const goal = await getGoal(userId, goalId);
 	if (!goal || goal.archivedAt) return null;
+	if (await hasChildren(userId, goalId)) return null;
 
 	const [existing] = await db
 		.select()
