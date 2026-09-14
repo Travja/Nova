@@ -1,8 +1,35 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import { focusTarget } from '$lib/focus';
+	import { tick } from 'svelte';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
+
+	/**
+	 * Revoking removes the row the button was in, and it is the one row on this
+	 * page a user is guaranteed to be standing on when it goes. Unenhanced the
+	 * post reloads the page, focus restarts at the top of the document a long way
+	 * back from where they were, and nothing says what happened — so the forms
+	 * are enhanced, the live region below announces the count, and focus lands on
+	 * the list the row left.
+	 *
+	 * The list rather than the next row: which row is "next" after a revoke is a
+	 * guess, and the last row in the list has no next at all. The list is always
+	 * there, it is named, and it is one Tab from whatever is to be done about the
+	 * sessions that are left.
+	 */
+	let sessionList: HTMLUListElement | null = $state(null);
+
+	const revoking: SubmitFunction = () => {
+		return async ({ update }) => {
+			await update();
+			await tick();
+			focusTarget(sessionList);
+		};
+	};
 
 	const sessions = $derived(data.sessions);
 	const others = $derived(sessions.filter((session) => !session.current).length);
@@ -117,7 +144,9 @@
 			session, never the key itself, so nothing here can be used to sign in.
 		</p>
 
-		<ul class="sessions" aria-label="Active sessions">
+		<!-- `tabindex="-1"` so a revoke can hand focus to something that is still
+		     on the page. Never in the tab order itself. -->
+		<ul bind:this={sessionList} class="sessions" tabindex="-1" aria-label="Active sessions">
 			{#each sessions as session (session.id)}
 				<li class="session" class:session--current={session.current}>
 					<div class="session__what">
@@ -131,10 +160,12 @@
 
 					{#if session.current}
 						<form method="POST" action={resolve('/logout')}>
-							<button class="button button--ghost" type="submit">Sign out</button>
+							<button class="button button--ghost" type="submit">
+								Sign out <span class="visually-hidden">this device</span>
+							</button>
 						</form>
 					{:else}
-						<form method="POST" action="?/revoke">
+						<form method="POST" action="?/revoke" use:enhance={revoking}>
 							<input type="hidden" name="id" value={session.id} />
 							<button class="button button--danger" type="submit">
 								Sign out <span class="visually-hidden">{session.device}</span>
@@ -146,7 +177,7 @@
 		</ul>
 
 		{#if others > 0}
-			<form method="POST" action="?/revokeOthers">
+			<form method="POST" action="?/revokeOthers" use:enhance={revoking}>
 				<button class="button button--danger" type="submit">
 					Sign out all other sessions ({others})
 				</button>
@@ -191,6 +222,12 @@
 
 	.form h2 {
 		margin: 0;
+	}
+
+	/* Focused only as a recovery after a revoke; an outline round the whole list
+	   would read as a selection rather than as a landing place. */
+	.sessions:focus {
+		outline: none;
 	}
 
 	.sessions {

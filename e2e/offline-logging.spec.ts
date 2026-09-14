@@ -15,6 +15,32 @@ import { hydrated } from './helpers';
  * stubbed: no fake `navigator.onLine`, no intercepted form posts.
  */
 
+const SHORT_MONTHS = [
+	'Jan',
+	'Feb',
+	'Mar',
+	'Apr',
+	'May',
+	'Jun',
+	'Jul',
+	'Aug',
+	'Sep',
+	'Oct',
+	'Nov',
+	'Dec'
+];
+
+/**
+ * The label the history strip draws under a daily ring — `13 Sep`.
+ *
+ * Spelled out rather than formatted through `Intl`, which says "Sept" for
+ * September in current ICU while `periodShortName` says "Sep". This project
+ * pins the browser's zone to UTC, so the date parts are read in UTC too.
+ */
+function shortLabel(date: Date): string {
+	return `${date.getUTCDate()} ${SHORT_MONTHS[date.getUTCMonth()]}`;
+}
+
 /** The production server's own database, so a test can age a row the UI cannot. */
 const DB_FILE = 'data/e2e-pwa.db';
 
@@ -184,9 +210,19 @@ test('an entry logged offline lands in the orbit it happened in, not the one it 
 	await expect(page.getByRole('heading', { name: title })).toBeVisible();
 	await controlled(page);
 
-	const history = page.getByRole('img', { name: new RegExp(`^${day(yesterday)}:`) });
-	const today = page.getByRole('img', { name: new RegExp(`^${day(new Date())}:`) });
-	await expect(history).toHaveAttribute('aria-label', `${day(yesterday)}: 0%`);
+	/*
+	 * The history strip reads by date rather than by period key now, and its
+	 * rings are decorative with the orbit in a text node beside them (#7). Same
+	 * two facts as before — yesterday's ring and today's, and what each says —
+	 * asked of the text the strip actually offers.
+	 */
+	const ring = (date: Date) =>
+		page.locator('.history li').filter({
+			has: page.locator('.label', { hasText: new RegExp(`^${shortLabel(date)}$`) })
+		});
+	const history = ring(yesterday);
+	const today = ring(new Date());
+	await expect(history).toContainText('0% of target logged');
 
 	await goOffline(context);
 
@@ -198,13 +234,13 @@ test('an entry logged offline lands in the orbit it happened in, not the one it 
 
 	// Yesterday's orbit closes; the one in flight is untouched. An entry stamped
 	// with the time it flushed would have done the opposite.
-	await expect(history).toHaveAttribute('aria-label', `${day(yesterday)}: 100%`);
-	await expect(today).toHaveAttribute('aria-label', `${day(new Date())}: 0%`);
+	await expect(history).toContainText('orbit closed, 100% of target logged');
+	await expect(today).toContainText('0% of target logged');
 
 	await page.reload();
 	await hydrated(page);
-	await expect(history).toHaveAttribute('aria-label', `${day(yesterday)}: 100%`);
-	await expect(today).toHaveAttribute('aria-label', `${day(new Date())}: 0%`);
+	await expect(history).toContainText('orbit closed, 100% of target logged');
+	await expect(today).toContainText('0% of target logged');
 
 	await goOnline(context);
 	await expect(page.locator('.queue-bar')).toBeHidden();
@@ -214,8 +250,8 @@ test('an entry logged offline lands in the orbit it happened in, not the one it 
 
 	// The server agrees, which it only can if nothing restamped the entry on the
 	// way through the queue, the flush or the insert.
-	await expect(history).toHaveAttribute('aria-label', `${day(yesterday)}: 100%`);
-	await expect(today).toHaveAttribute('aria-label', `${day(new Date())}: 0%`);
+	await expect(history).toContainText('orbit closed, 100% of target logged');
+	await expect(today).toContainText('0% of target logged');
 
 	const stored = storedEntries(title);
 	expect(stored).toHaveLength(1);
@@ -246,6 +282,83 @@ test('announces what the queue is doing, for anyone not looking at it', async ({
 	await goOnline(context);
 	await expect(live).toHaveText(/1 entry synced\./);
 	await expect(card.getByText('10 pages left today')).toBeVisible();
+});
+
+test('the queue is heard twice when it happens twice', async ({ page, context }) => {
+	const title = `Twice pages ${Date.now()}`;
+	await register(page);
+	await launchGoal(page, title, '20');
+
+	await page.goto('/');
+	await controlled(page);
+
+	const card = page.getByRole('article').filter({ hasText: title });
+
+	/**
+	 * Every value the live region takes, in order.
+	 *
+	 * A live region only speaks when its contents change, so "1 entry synced."
+	 * twice running is one announcement unless something makes the second a
+	 * change — and nothing about the rendered page shows whether it did. The
+	 * region's history does: emptied between the two, it was said twice.
+	 */
+	await page.evaluate(() => {
+		const region = document.querySelector('.queue-live');
+		const said: string[] = [];
+		(window as unknown as { said: string[] }).said = said;
+		if (!region) return;
+		new MutationObserver(() => said.push(region.textContent ?? '')).observe(region, {
+			characterData: true,
+			childList: true,
+			subtree: true
+		});
+	});
+
+	for (const step of ['+5 pages', '+5 pages']) {
+		await goOffline(context);
+		await card.getByRole('button', { name: step }).click();
+		await expect(page.locator('.queue-live')).toHaveText(/1 entry waiting to sync\./);
+
+		await goOnline(context);
+		await expect(page.locator('.queue-live')).toHaveText(/1 entry synced\./);
+	}
+
+	await expect(card.getByText('10 pages left today')).toBeVisible();
+
+	const said = await page.evaluate(() => (window as unknown as { said: string[] }).said);
+	// Two separate announcements of the same sentence, each preceded by the
+	// region being cleared — which is what turns a repeat into news.
+	const synced = said.filter((line) => /1 entry synced\./.test(line));
+	expect(synced.length, `the live region only ever said: ${JSON.stringify(said)}`).toBe(2);
+	expect(said.filter((line) => line === '').length).toBeGreaterThanOrEqual(2);
+});
+
+test('syncing from the bar leaves focus in the page rather than on the body', async ({
+	page,
+	context
+}) => {
+	const title = `Focus pages ${Date.now()}`;
+	await register(page);
+	await launchGoal(page, title, '20');
+
+	await page.goto('/');
+	await controlled(page);
+
+	const card = page.getByRole('article').filter({ hasText: title });
+	await goOffline(context);
+	await card.getByRole('button', { name: '+5 pages' }).click();
+
+	const sync = page.getByRole('button', { name: /Sync now|Syncing/ });
+	await sync.focus();
+	await expect(sync).toBeFocused();
+
+	// The connection coming back flushes the queue on its own, which empties the
+	// bar out from under the button — the case no click handler would ever hear
+	// about, and the reason the bar watches itself rather than its actions.
+	await goOnline(context);
+	await expect(page.locator('.queue-bar')).toBeHidden();
+	const landed = await page.evaluate(() => document.activeElement?.id ?? '');
+	expect(landed, 'focus was dropped when the queue bar went away').toBe('main-content');
 });
 
 test('an entry the server refuses is reported rather than silently dropped', async ({

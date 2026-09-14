@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { dev } from '$app/environment';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { focusMain, holdsFocus } from '$lib/focus';
 
 	/**
 	 * Tells the user a new build is waiting rather than swapping it in under
@@ -15,11 +16,33 @@
 	 * import fails outright (confirmed against CI, not just guessed). This is
 	 * the fallback the issue names for exactly that case: register by hand
 	 * and watch `waiting` and `updatefound` directly.
+	 *
+	 * It appears without the user having asked for anything, so it has to be
+	 * heard once and only once. The bar itself is not the live region — a region
+	 * that arrives already full is a region browsers are free to say nothing
+	 * about — so an empty `role="status"` is mounted from the first render and
+	 * filled when the update lands. `needRefresh` only ever goes false→true, so
+	 * the sentence is written once however many times the component re-renders.
 	 */
 
 	let needRefresh = $state(false);
 	let dismissed = $state(false);
 	let registration: ServiceWorkerRegistration | null = null;
+	let bar: HTMLElement | null = $state(null);
+
+	/** Empty until there is an update, then said once. */
+	const announcement = $derived(
+		needRefresh && !dismissed ? 'Nova has been updated. Reload to get the new version.' : ''
+	);
+
+	/** Dismissing removes the button that was dismissed; focus has to go on. */
+	async function dismiss() {
+		const held = holdsFocus(bar);
+		dismissed = true;
+		if (!held) return;
+		await tick();
+		focusMain();
+	}
 
 	function watch(reg: ServiceWorkerRegistration) {
 		registration = reg;
@@ -61,14 +84,18 @@
 	}
 </script>
 
+<!-- Mounted from the first render and empty until there is something to say,
+     which is what makes the announcement land when it finally arrives. -->
+<p class="visually-hidden" role="status">{announcement}</p>
+
 {#if needRefresh && !dismissed}
-	<div class="update-bar" role="status">
+	<div bind:this={bar} class="update-bar">
 		<p>Nova has been updated — reload to get it.</p>
 		<div class="actions">
 			<button class="reload tap" type="button" onclick={reload}> Reload </button>
-			<button class="dismiss tap" type="button" onclick={() => (dismissed = true)}>
+			<button class="dismiss tap" type="button" onclick={dismiss}>
 				<span aria-hidden="true">✕</span>
-				<span class="visually-hidden">Dismiss</span>
+				<span class="visually-hidden">Dismiss the update notice</span>
 			</button>
 		</div>
 	</div>

@@ -115,10 +115,27 @@
  * High contrast: legibility in bright sunlight, not a new theme.
  *
  * Panels go nearly opaque instead of letting the starfield bleed through a
- * blur, and text goes ivory-white. Measured against `--space-void`, body text
- * on `--space-surface` clears 4.5:1 comfortably in every combination here —
- * text-dim is the tightest at ~14.2:1 even blended over a bright bleed-through
- * behind a blurred panel, more than 3x the floor #7 flagged.
+ * blur, and text goes ivory-white.
+ *
+ * #7 measured both palettes rather than trusting either. On a panel over the
+ * page, against a 4.5:1 floor for normal text:
+ *
+ *                   default   high contrast
+ *   --text-bright    16.47      19.75
+ *   --text           11.94      17.99
+ *   --text-dim        6.05      14.84
+ *   --accent          6.52       7.26
+ *
+ * Two things that correction turned up. The default palette is not close to
+ * the line — `--text-dim`, the token #7 flagged and #32 shrank, sits at 6.05:1
+ * on a panel over the page and 5.07:1 on one over the brightest part of the
+ * nebula, which is the lightest ground anywhere behind a panel. And the claim
+ * this block used to carry named `--text-dim` as the tightest ink here, which
+ * it is not: `--accent` is, at 7.26:1, because high contrast restates the text
+ * tokens and leaves the accents alone. Still well clear, but it was the one
+ * number nobody had checked.
+ *
+ * `contrast.test.ts` holds all of it, for both palettes, on every ground.
  */
 :root[data-contrast='high'] {
 	--space-surface: rgba(8, 10, 22, 0.94);
@@ -185,6 +202,23 @@ a {
 }
 
 a:hover {
+	text-decoration: underline;
+}
+
+/*
+ * A link inside running text has to be told apart from the text around it by
+ * something other than its colour — WCAG 1.4.1, which axe reports as
+ * `link-in-text-block`. Nova's links are `--accent` and its prose is `--text`
+ * or `--text-dim`; neither pairing reaches the 3:1 that would let colour carry
+ * it alone, so the underline does.
+ *
+ * A paragraph is the marker, rather than the link. Every link Nova sets in
+ * prose is inside a `<p>`, and nothing that is a control wearing a link's
+ * markup is: `.button`, `.chip`, `.nav-link`, the quick-add, a compact row and
+ * a goal card's heading are all block-level shapes, and the card's heading puts
+ * its paragraph inside the link rather than the other way round.
+ */
+p a {
 	text-decoration: underline;
 }
 

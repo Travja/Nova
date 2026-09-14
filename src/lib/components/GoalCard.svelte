@@ -27,7 +27,6 @@
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
 	const steps = $derived(quickLogSteps(goal.metric, goal.target));
-	const percent = $derived(Math.round(snapshot.current.fraction * 100));
 	/** True for the second or so after this goal closes an orbit. */
 	const closing = $derived(celebrationFor(goal.id) !== null);
 	/**
@@ -47,13 +46,19 @@
 </script>
 
 <article class="card panel" class:card--complete={snapshot.current.complete}>
-	<a class="dial-link" href={goalHref} aria-label="Open {goal.title}">
+	<!-- Named by what is inside it rather than by an `aria-label`, which would
+	     take the dial's own text equivalent out of the reading and leave the
+	     card's largest element saying nothing at all. `label` gives the dial the
+	     goal it is drawing, so the link lands as "Daily reading, Satellite: 62%
+	     of target logged" rather than as a percentage attached to nothing. -->
+	<a class="dial-link" href={goalHref}>
 		<OrbitDial
 			orbit={snapshot.current}
 			tier={goal.tier}
 			color={goal.color}
 			size={120}
 			goalId={goal.id}
+			label={goal.title}
 		/>
 	</a>
 
@@ -71,7 +76,8 @@
 			<h3>{goal.title}</h3>
 			<p class="muted status">
 				{#if snapshot.current.complete}
-					Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]} ✦
+					Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]}
+					<span aria-hidden="true">✦</span>
 				{:else}
 					{formatAmount(snapshot.current.remaining, goal.metric)} left {CADENCE_LABEL[
 						snapshot.current.period.cadence
@@ -91,17 +97,6 @@
 				{waiting === 1 ? 'entry' : 'entries'} waiting to sync
 			</p>
 		{/if}
-
-		<!-- The arc is the progress bar; this is the same value for anyone the
-		     dial is presentational to. -->
-		<div
-			class="visually-hidden"
-			role="progressbar"
-			aria-valuenow={percent}
-			aria-valuemin="0"
-			aria-valuemax="100"
-			aria-label="{goal.title} progress"
-		></div>
 
 		<dl class="stats">
 			<div>
