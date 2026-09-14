@@ -1,4 +1,4 @@
-import { fieldErrors, formError, loginSchema } from '$domain/validation';
+import { fieldErrors, formError, loginSchema, safeNextPath } from '$domain/validation';
 import { createSession, setSessionCookie } from '$lib/server/auth/session';
 import { addressOf, loginThrottle } from '$lib/server/auth/login-throttle';
 import { formatRetryAfter } from '$lib/server/rate-limit';
@@ -62,7 +62,6 @@ export const actions: Actions = {
 		const { token, expiresAt } = await createSession(user.id, request.headers.get('user-agent'));
 		setSessionCookie(cookies, token, expiresAt);
 
-		const next = url.searchParams.get('next');
-		redirect(303, next?.startsWith('/') ? next : '/');
+		redirect(303, safeNextPath(url.searchParams.get('next')));
 	}
 };

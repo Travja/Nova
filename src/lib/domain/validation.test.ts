@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLOCK_SKEW_MS, entrySchemaFor, occurredAtBounds } from './validation';
+import { CLOCK_SKEW_MS, entrySchemaFor, occurredAtBounds, safeNextPath } from './validation';
 
 const now = new Date('2026-09-12T18:00:00Z');
 const utc = { timeZone: 'UTC' };
@@ -78,5 +78,52 @@ describe('entrySchemaFor', () => {
 
 	it('parses without bounds, which is what quick-logging needs', () => {
 		expect(entrySchemaFor().parse({ amount: '5' })).toMatchObject({ amount: 5, note: null });
+	});
+});
+
+describe('safeNextPath', () => {
+	it('keeps an ordinary in-site path', () => {
+		expect(safeNextPath('/today')).toBe('/today');
+		expect(safeNextPath('/goals/abc/edit')).toBe('/goals/abc/edit');
+		expect(safeNextPath('/share?text=hello%20there')).toBe('/share?text=hello%20there');
+	});
+
+	it('falls back when there is nothing to go back to', () => {
+		expect(safeNextPath(null)).toBe('/');
+		expect(safeNextPath(undefined)).toBe('/');
+		expect(safeNextPath('')).toBe('/');
+	});
+
+	it('refuses a protocol-relative URL', () => {
+		// The bug this exists for: `//evil.com` starts with a slash, and a
+		// browser reads it as another origin entirely.
+		expect(safeNextPath('//evil.com')).toBe('/');
+		expect(safeNextPath('//evil.com/login')).toBe('/');
+		expect(safeNextPath('///evil.com')).toBe('/');
+	});
+
+	it('refuses a backslash standing in for a slash', () => {
+		// Browsers normalise `\` to `/` before parsing the authority.
+		expect(safeNextPath('/\\evil.com')).toBe('/');
+		expect(safeNextPath('\\\\evil.com')).toBe('/');
+		expect(safeNextPath('\\/evil.com')).toBe('/');
+	});
+
+	it('refuses an authority smuggled past the check with stripped characters', () => {
+		// Tabs and newlines are removed before a URL is parsed, so these become
+		// protocol-relative the moment the browser sees them.
+		expect(safeNextPath('/\t/evil.com')).toBe('/');
+		expect(safeNextPath('/\n/evil.com')).toBe('/');
+		expect(safeNextPath('/\r/evil.com')).toBe('/');
+	});
+
+	it('refuses anything that is not a path at all', () => {
+		expect(safeNextPath('https://evil.com')).toBe('/');
+		expect(safeNextPath('javascript:alert(1)')).toBe('/');
+		expect(safeNextPath('today')).toBe('/');
+	});
+
+	it('honours an explicit fallback', () => {
+		expect(safeNextPath('//evil.com', '/today')).toBe('/today');
 	});
 });

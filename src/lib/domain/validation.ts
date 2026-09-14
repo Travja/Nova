@@ -137,6 +137,29 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type GoalInput = z.infer<typeof goalSchema>;
 export type EntryInput = z.infer<typeof entrySchema>;
 
+/**
+ * Resolve a `?next=` value to a path that can only land back on this site.
+ *
+ * `value.startsWith('/')` is not enough on its own: `//evil.com` satisfies it
+ * and browsers read it as protocol-relative, so signing in would hand the user
+ * straight to somebody else's page — a good place to ask them to re-enter the
+ * password they just typed.
+ *
+ * Two more things browsers do before parsing a URL have to be undone first:
+ * they strip tabs and newlines, and they treat a backslash as a slash. Both
+ * turn an apparently safe value into an authority.
+ */
+export function safeNextPath(value: string | null | undefined, fallback = '/'): string {
+	if (!value) return fallback;
+
+	const normalized = value.replace(/[\t\n\r]/g, '').replace(/\\/g, '/');
+
+	if (!normalized.startsWith('/')) return fallback;
+	if (normalized.startsWith('//')) return fallback;
+
+	return normalized;
+}
+
 /** Field name to message, with `form` reserved for errors that belong to the whole form. */
 export type FormErrors = Record<string, string>;
 
