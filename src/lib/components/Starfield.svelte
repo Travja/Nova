@@ -53,7 +53,7 @@
 	<div class="nebula nebula--violet"></div>
 	<div class="nebula nebula--teal"></div>
 	{#each layers as { stars, drift, opacity }, index (index)}
-		<div class="layer" style="--drift: {drift}s; --layer-opacity: {opacity}">
+		<div class="layer" data-layer={index} style="--drift: {drift}s; --layer-opacity: {opacity}">
 			{#each stars as star, starIndex (starIndex)}
 				<span
 					class="star"
