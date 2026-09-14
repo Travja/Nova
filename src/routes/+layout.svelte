@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { dev } from '$app/environment';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import QuickAdd from '$components/QuickAdd.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import Starfield from '$components/Starfield.svelte';
+	import UpdatePrompt from '$components/UpdatePrompt.svelte';
 	import '$lib/styles/app.css';
 	import type { LayoutProps } from './$types';
 
@@ -20,13 +20,6 @@
 		// takes over, typing into a bound field is undone by hydration. Styling
 		// and the end-to-end tests both need to know when that has happened.
 		document.documentElement.dataset.hydrated = 'true';
-
-		// Workbox generates `sw.js` at build time and it updates itself, so a
-		// plain registration is all the PWA needs. There is no worker in dev.
-		if (dev || !('serviceWorker' in navigator)) return;
-		navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {
-			// An unavailable worker only costs offline support; the app still runs.
-		});
 	});
 </script>
 
@@ -39,6 +32,8 @@
 <Starfield />
 
 <div class="shell">
+	<UpdatePrompt />
+
 	<header class="masthead">
 		<a class="brand" href={resolve('/')}>
 			<Rocket size={30} />
