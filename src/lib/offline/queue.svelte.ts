@@ -127,10 +127,16 @@ export function dismissRejected(): void {
 /**
  * Take an entry the server could not be told about.
  *
- * Written down before anything else: a log that is only in memory does not
- * survive the reload that a flaky connection tends to come with.
+ * Resolves with whether it reached IndexedDB — once it has, not merely once it
+ * is in memory. That resolution is what a caller should hang a durability
+ * promise on; the entry itself is already in `items` by the time this is
+ * called, synchronously, which is what moves the dial.
+ *
+ * `flush()` is deliberately not awaited here: offline it can sit on a fetch
+ * for up to `ATTEMPT_TIMEOUT_MS`, and nothing waiting on this promise should
+ * have to sit with it.
  */
-export async function enqueue(entry: QueuedEntry): Promise<void> {
+export async function enqueue(entry: QueuedEntry): Promise<boolean> {
 	items = [...items, { ...entry, status: 'pending' }];
 	const stored = await writeStored(entry);
 	if (!stored) durable = false;
@@ -142,7 +148,8 @@ export async function enqueue(entry: QueuedEntry): Promise<void> {
 			: `Saved for now — this browser will not keep it if you reload. ${entries(total)} waiting to sync.`
 	);
 
-	await flush();
+	void flush();
+	return stored;
 }
 
 interface FlushResult {
