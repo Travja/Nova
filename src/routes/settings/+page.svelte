@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import { PREFERENCE_KEYS, PREFERENCE_SPECS } from '$domain/preferences';
+	import { PREFERENCE_KEYS, specFor } from '$domain/preferences';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -9,6 +11,27 @@
 	const detected =
 		typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
 	const zones = $derived([...new Set([data.profile.timeZone, detected, 'UTC'])]);
+
+	/**
+	 * `app.html` is a static file, so `<html>`'s preference attributes only come
+	 * from the server on a real navigation. A save here goes through `enhance`
+	 * instead — no navigation happens at all — so once the account's new values
+	 * are confirmed saved, stamp them on `<html>` by hand. That is what makes a
+	 * preference apply immediately rather than on the next page load.
+	 */
+	const submitPreferences: SubmitFunction = ({ formData }) => {
+		return async ({ result, update }) => {
+			if (result.type === 'success') {
+				for (const key of PREFERENCE_KEYS) {
+					const value = formData.get(key);
+					if (typeof value === 'string') {
+						document.documentElement.setAttribute(specFor(key).attribute, value);
+					}
+				}
+			}
+			await update();
+		};
+	};
 </script>
 
 <svelte:head><title>Settings · Nova</title></svelte:head>
@@ -22,7 +45,7 @@
 		</p>
 	</header>
 
-	<form class="panel form" method="POST">
+	<form class="panel form" method="POST" use:enhance={submitPreferences}>
 		{#if form?.saved}<p class="saved">Saved.</p>{/if}
 
 		<div class="field">
@@ -59,7 +82,7 @@
 		<!-- Driven off the preference table, so #14's motion and palette settings
 		     appear here the moment they are declared. -->
 		{#each PREFERENCE_KEYS as key (key)}
-			{@const spec = PREFERENCE_SPECS[key]}
+			{@const spec = specFor(key)}
 			<div class="field">
 				<label for={key}>{spec.label}</label>
 				<select id={key} name={key}>

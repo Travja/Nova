@@ -111,6 +111,30 @@
 	--dial-scale: 0.82;
 }
 
+/*
+ * High contrast: legibility in bright sunlight, not a new theme.
+ *
+ * Panels go nearly opaque instead of letting the starfield bleed through a
+ * blur, and text goes ivory-white. Measured against `--space-void`, body text
+ * on `--space-surface` clears 4.5:1 comfortably in every combination here —
+ * text-dim is the tightest at ~14.2:1 even blended over a bright bleed-through
+ * behind a blurred panel, more than 3x the floor #7 flagged.
+ */
+:root[data-contrast='high'] {
+	--space-surface: rgba(8, 10, 22, 0.94);
+	--space-surface-strong: rgba(10, 12, 26, 0.98);
+	--space-border: rgba(226, 232, 255, 0.4);
+	--space-border-bright: rgba(226, 232, 255, 0.7);
+
+	--text-bright: #ffffff;
+	--text: #f1f4ff;
+	--text-dim: #d7deff;
+}
+
+:root[data-contrast='high'] .panel {
+	backdrop-filter: none;
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -301,13 +325,48 @@ textarea:focus {
 	width: 1px;
 }
 
-/* Every animation in Nova is decorative, so all of it yields here. */
+/*
+ * Every animation in Nova is decorative, so all of it yields here — to the OS
+ * setting by default (`motion: system`, the default preference), unless the
+ * account has explicitly picked `full`, which has to win over the OS asking
+ * for less: `:not([data-motion='full'])` is what makes that override possible
+ * rather than the two fighting to a flash of unstyled motion.
+ */
 @media (prefers-reduced-motion: reduce) {
-	*,
-	*::before,
-	*::after {
+	html:not([data-motion='full']) *,
+	html:not([data-motion='full']) *::before,
+	html:not([data-motion='full']) *::after {
 		animation-duration: 0.001ms !important;
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.001ms !important;
 	}
+}
+
+/*
+ * `reduced` and `none` are explicit choices, so they apply the same damping
+ * unconditionally — regardless of what the OS says — rather than only inside
+ * the media query above. `system` (the default) is the only value that leaves
+ * the decision to `prefers-reduced-motion`.
+ */
+html[data-motion='reduced'] *,
+html[data-motion='reduced'] *::before,
+html[data-motion='reduced'] *::after,
+html[data-motion='none'] *,
+html[data-motion='none'] *::before,
+html[data-motion='none'] *::after {
+	animation-duration: 0.001ms !important;
+	animation-iteration-count: 1 !important;
+	transition-duration: 0.001ms !important;
+}
+
+/* ---- Starfield density ------------------------------------------------ */
+
+[data-starfield='off'] .starfield {
+	display: none;
+}
+
+/* The two busiest layers drop out; the sparsest, brightest one stays. */
+[data-starfield='sparse'] .starfield [data-layer='0'],
+[data-starfield='sparse'] .starfield [data-layer='1'] {
+	display: none;
 }

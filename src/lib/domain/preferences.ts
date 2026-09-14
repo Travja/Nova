@@ -8,9 +8,10 @@
  * page as data attributes on `<html>`, so CSS does the work and nothing has to
  * re-render for a preference to apply.
  *
- * Adding one — #14 wants motion, starfield density and a high-contrast palette —
- * is an entry below plus a block in `app.css`. The schema, the layout and the
- * settings form are all driven off this table and need no change.
+ * Adding one is an entry below plus a block in `app.css`. The schema, the
+ * layout and the settings form are all driven off this table and need no
+ * change — motion, starfield density and the high-contrast palette (#14) are
+ * ordinary entries, same as density.
  */
 
 interface PreferenceSpec {
@@ -36,10 +37,52 @@ export const PREFERENCE_SPECS = {
 			compact: 'Compact — smaller dials, tighter rows, streak only'
 		},
 		hint: 'Compact fits more on a phone screen. Buttons and chips stay the same size in both.'
+	},
+	motion: {
+		attribute: 'data-motion',
+		label: 'Motion',
+		values: ['system', 'full', 'reduced', 'none'],
+		options: {
+			system: 'Match system',
+			full: 'Full — every orbit animates',
+			reduced: 'Reduced — same as your OS setting',
+			none: 'None — no animation anywhere'
+		},
+		hint: 'System follows your OS setting. Full and reduced each override it, in either direction.'
+	},
+	starfield: {
+		attribute: 'data-starfield',
+		label: 'Starfield',
+		values: ['default', 'sparse', 'off'],
+		options: {
+			default: 'Default',
+			sparse: 'Sparse — fewer, brighter stars',
+			off: 'Off'
+		}
+	},
+	contrast: {
+		attribute: 'data-contrast',
+		label: 'Contrast',
+		values: ['default', 'high'],
+		options: {
+			default: 'Default',
+			high: 'High — for bright sunlight'
+		},
+		hint: 'Solid panels and brighter text, for reading a dial outdoors.'
 	}
 } as const satisfies Record<string, PreferenceSpec>;
 
 export type PreferenceKey = keyof typeof PREFERENCE_SPECS;
+
+/**
+ * A spec by key, typed uniformly rather than as the literal union
+ * `PREFERENCE_SPECS[key]` produces when `key` is a generic `PreferenceKey` —
+ * that union only has `attribute` in common, which breaks indexing `options`
+ * or reading `hint` from a loop over every preference at once.
+ */
+export function specFor<K extends PreferenceKey>(key: K): PreferenceSpec {
+	return PREFERENCE_SPECS[key];
+}
 
 export type PreferenceValue<K extends PreferenceKey> =
 	(typeof PREFERENCE_SPECS)[K]['values'][number];

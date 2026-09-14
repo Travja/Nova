@@ -9,6 +9,7 @@ import {
 	preferenceAttributeString,
 	preferenceAttributes,
 	readPreferences,
+	specFor,
 	writePreferences
 } from './preferences';
 
@@ -37,8 +38,8 @@ describe('reading a stored blob', () => {
 
 	it('drops a preference this build no longer knows about', () => {
 		const stored = writePreferences({ ...DEFAULT_PREFERENCES, density: 'compact' });
-		const withExtra = JSON.stringify({ ...JSON.parse(stored), starfield: 'off' });
-		expect(readPreferences(withExtra)).toEqual({ density: 'compact' });
+		const withExtra = JSON.stringify({ ...JSON.parse(stored), wallpaper: 'nebula' });
+		expect(readPreferences(withExtra)).toEqual({ ...DEFAULT_PREFERENCES, density: 'compact' });
 	});
 
 	it('round-trips through storage', () => {
@@ -53,23 +54,26 @@ describe('merging a submitted form', () => {
 	});
 
 	it('leaves a preference the form omitted alone', () => {
-		const stored = { density: 'compact' } as const;
+		const stored = { ...DEFAULT_PREFERENCES, density: 'compact' } as const;
 		expect(mergePreferences(stored, {})).toEqual(stored);
 	});
 
 	it('refuses a value that is not on offer rather than storing it', () => {
-		const stored = { density: 'compact' } as const;
+		const stored = { ...DEFAULT_PREFERENCES, density: 'compact' } as const;
 		expect(mergePreferences(stored, { density: 'tiny' })).toEqual(stored);
 	});
 });
 
 describe('reaching the page', () => {
 	it('names an attribute per preference', () => {
-		expect(preferenceAttributes({ density: 'compact' })).toEqual({ 'data-density': 'compact' });
+		expect(preferenceAttributes({ ...DEFAULT_PREFERENCES, density: 'compact' })).toEqual({
+			...preferenceAttributes(DEFAULT_PREFERENCES),
+			'data-density': 'compact'
+		});
 	});
 
 	it('renders attributes for the html tag', () => {
-		expect(preferenceAttributeString({ density: 'compact' })).toBe('data-density="compact"');
+		expect(preferenceAttributeString(DEFAULT_PREFERENCES)).toContain('data-density="default"');
 	});
 
 	it('has a block of CSS behind every non-default value', () => {
@@ -86,7 +90,7 @@ describe('reaching the page', () => {
 
 	it('labels every value it offers', () => {
 		for (const key of PREFERENCE_KEYS) {
-			const spec = PREFERENCE_SPECS[key];
+			const spec = specFor(key);
 			for (const value of spec.values) {
 				expect(spec.options[value], `${key}: ${value} has no label`).toBeTruthy();
 			}
