@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
+	import GoalRow from '$components/GoalRow.svelte';
 	import GoalOrderList from '$components/GoalOrderList.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import { noteOrbits } from '$lib/celebration.svelte';
@@ -13,6 +14,8 @@
 	let { data, form }: PageProps = $props();
 
 	const snapshots = $derived(data.snapshots ?? []);
+	/** See the note in `/today`: compact is a different shape, not a token. */
+	const compact = $derived(data.user?.preferences.density === 'compact');
 
 	/** Tiers in orbital order, keeping only the ones that have goals. */
 	const sections = $derived(
@@ -165,9 +168,13 @@
 						onannounce={(message) => (dragAnnouncement = message)}
 					/>
 				{:else}
-					<div class="grid">
+					<div class="grid" class:grid--rows={compact}>
 						{#each section.goals as snapshot (snapshot.goal.id)}
-							<GoalCard {snapshot} />
+							{#if compact}
+								<GoalRow {snapshot} />
+							{:else}
+								<GoalCard {snapshot} />
+							{/if}
 						{/each}
 					</div>
 				{/if}
@@ -238,15 +245,15 @@
 
 	.empty {
 		display: grid;
-		gap: 1rem;
+		gap: var(--gap-block);
 		justify-items: center;
-		padding: 3rem 1.5rem;
+		padding: 2.5rem 1.25rem;
 		text-align: center;
 	}
 
 	.dashboard {
 		display: grid;
-		gap: 2.25rem;
+		gap: 1.5rem;
 	}
 
 	.dashboard__head {
@@ -264,8 +271,8 @@
 	}
 
 	.reorder-hint {
-		font-size: 0.9rem;
-		margin: -1.25rem 0 0;
+		font-size: var(--text-secondary);
+		margin: -0.9rem 0 0;
 		max-width: 60ch;
 	}
 
@@ -275,17 +282,17 @@
 
 	.live {
 		color: var(--success);
-		font-size: 0.9rem;
-		margin: -1.5rem 0 0;
+		font-size: var(--text-secondary);
+		margin: -1rem 0 0;
 	}
 
 	.archive-link {
-		font-size: 0.88rem;
+		font-size: var(--text-secondary);
 	}
 
 	.tier {
 		display: grid;
-		gap: 0.9rem;
+		gap: var(--gap-list);
 	}
 
 	.tier__head {
@@ -294,17 +301,23 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
-		padding-bottom: 0.5rem;
+		padding-bottom: 0.35rem;
 	}
 
 	.tier__head span {
-		font-size: 0.88rem;
+		font-size: var(--text-secondary);
 	}
 
 	.grid {
 		display: grid;
-		gap: 1rem;
+		gap: var(--gap-list);
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
+	}
+
+	/* Rows want the full width and each other's company, not a card grid. */
+	.grid--rows {
+		gap: 0.35rem;
+		grid-template-columns: 1fr;
 	}
 
 	@media (max-width: 52rem) {

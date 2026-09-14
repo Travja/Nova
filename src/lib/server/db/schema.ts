@@ -13,6 +13,13 @@ export const users = sqliteTable(
 		timeZone: text('time_zone').notNull().default('UTC'),
 		/** 0 = Sunday … 6 = Saturday. */
 		weekStartsOn: integer('week_starts_on').notNull().default(1),
+		/**
+		 * How the app is drawn for this account, as one JSON object — see
+		 * `$domain/preferences`. A blob rather than a column per setting so
+		 * adding the next preference is not another migration; null for rows
+		 * that predate it, which `readPreferences()` reads as the defaults.
+		 */
+		preferences: text('preferences'),
 		createdAt: timestamp('created_at').notNull()
 	},
 	(table) => [uniqueIndex('users_email_unique').on(table.email)]

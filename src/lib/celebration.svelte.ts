@@ -1,4 +1,5 @@
 import {
+	SWEEP_MS,
 	celebrationShape,
 	isFreshClosing,
 	type CelebrationShape,
@@ -31,8 +32,20 @@ export interface Celebration {
 }
 
 let current = $state<Celebration | null>(null);
+/** Counting down the sweep the closing is waiting for. */
+let arriving: ReturnType<typeof setTimeout> | undefined;
 let clearing: ReturnType<typeof setTimeout> | undefined;
 let stamps = 0;
+
+/** A moment on the end, so nothing is mid-fade when it goes. */
+const TAIL_MS = 120;
+
+function raise(celebration: Celebration): void {
+	current = celebration;
+	// Long enough for the animation to finish, and then gone: nothing about a
+	// closing should still be on screen when the next page is.
+	clearing = setTimeout(() => (current = null), celebration.shape.ms + TAIL_MS);
+}
 
 /**
  * Record what each goal's orbit looks like now, and raise a celebration for any
@@ -40,6 +53,11 @@ let stamps = 0;
  *
  * Several can close at once — a backdated entry, or two quick logs — and the
  * newest wins, because a second burst on top of the first is noise.
+ *
+ * Nothing is raised for `SWEEP_MS`: the dial spends that travelling its body
+ * round to the arc it just filled, and the whole moment — the burst, the streak
+ * landing, the line that says which goal it was — belongs at the end of that
+ * journey rather than at the start of it.
  */
 export function noteOrbits(snapshots: readonly GoalSnapshot[]): void {
 	for (const snapshot of snapshots) {
@@ -54,7 +72,7 @@ export function noteOrbits(snapshots: readonly GoalSnapshot[]): void {
 
 		const shape = celebrationShape(snapshot.goal.tier);
 		stamps += 1;
-		current = {
+		const closing: Celebration = {
 			goalId: snapshot.goal.id,
 			title: snapshot.goal.title,
 			tier: snapshot.goal.tier,
@@ -62,10 +80,13 @@ export function noteOrbits(snapshots: readonly GoalSnapshot[]): void {
 			stamp: stamps
 		};
 
+		// A closing that lands while the last one is still on screen takes it
+		// down and waits out its own sweep, rather than inheriting the tail of
+		// somebody else's.
+		clearTimeout(arriving);
 		clearTimeout(clearing);
-		// Long enough for the animation to finish, and then gone: nothing about a
-		// closing should still be on screen when the next page is.
-		clearing = setTimeout(() => (current = null), shape.ms + 120);
+		current = null;
+		arriving = setTimeout(() => raise(closing), SWEEP_MS);
 	}
 }
 

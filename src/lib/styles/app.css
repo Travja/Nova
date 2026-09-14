@@ -24,12 +24,91 @@
 	--radius: 0.9rem;
 	--radius-lg: 1.4rem;
 
+	/* ---- Density ------------------------------------------------------
+	 *
+	 * The whole spacing scale, in one place. Components consume these and
+	 * declare no spacing of their own that density should reach, so the next
+	 * adjustment is an edit here rather than a sweep through a hundred files.
+	 *
+	 * The baseline below is already the tightened one — #32's first half was
+	 * to stop laying the app out for a desktop and then shipping it on a
+	 * phone. `[data-density='compact']` further down is the stored preference,
+	 * and #14's motion and palette settings hang off the same attribute.
+	 */
+
+	/* Between the top-level sections of a view. */
+	--gap-view: 1.15rem;
+	/* Between the rows inside a panel. */
+	--gap-block: 0.6rem;
+	/* Between items of a list of cards. */
+	--gap-list: 0.9rem;
+	/* Between a card's dial and its body. */
+	--gap-card: 0.85rem;
+
+	--pad-card: 0.85rem;
+	--pad-panel: 1.1rem;
+	/* The detail page's hero, which is the one panel that carries a full dial. */
+	--pad-hero: 1.25rem;
+
+	/* Secondary text: statuses, captions, hints — everything that is not a
+	   heading and not a number. */
+	--text-secondary: 0.85rem;
+	/* Field and stat labels. Small-caps at 11px is already the floor of
+	   readable, so this one does NOT shrink with density. */
+	--text-label: 0.7rem;
+
+	/* Multiplies every dial. See MIN_DIAL_SCALE in $domain/preferences —
+	   OrbitDial decides on body detail against the smallest this can be. */
+	--dial-scale: 1;
+
+	/*
+	 * The touch floor: 44px, in every density, no exceptions.
+	 *
+	 * Compact buys its space from padding and type, never from the size of a
+	 * control — more on screen is worthless if the quick-log chips, the
+	 * most-tapped thing in the app, become something you have to aim at. No
+	 * density block below restates this, and a test asserts that.
+	 *
+	 * It applies to controls. A link inside a sentence is exempt, as WCAG
+	 * 2.5.8 exempts it: boxing one out to 44px would wreck the paragraph
+	 * around it to no one's benefit.
+	 */
+	--tap-min: 2.75rem;
+
+	/* The floating quick-add, and what the shell leaves clear for it. Declared
+	   here so its size and that clearance cannot drift apart. */
+	--fab-size: 3.5rem;
+
 	--shadow-lift: 0 18px 40px -24px rgba(0, 0, 0, 0.9);
 	--ring-glow: 0 0 24px -4px currentColor;
 
 	--font-body:
 		ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+}
+
+/*
+ * Compact: more on screen, for people who want it.
+ *
+ * Only the spacing scale and the dial move. `--tap-min` and `--text-label` are
+ * deliberately absent — the first is the floor, and shrinking an 11px
+ * letter-spaced label is buying a few pixels with the one bit of type that can
+ * least afford them. What compact actually removes is the secondary stats on a
+ * goal card, which is handled in `GoalCard` against this same attribute.
+ */
+:root[data-density='compact'] {
+	--gap-view: 0.85rem;
+	--gap-block: 0.45rem;
+	--gap-list: 0.65rem;
+	--gap-card: 0.65rem;
+
+	--pad-card: 0.65rem;
+	--pad-panel: 0.85rem;
+	--pad-hero: 0.95rem;
+
+	--text-secondary: 0.82rem;
+
+	--dial-scale: 0.82;
 }
 
 * {
@@ -113,7 +192,7 @@ a:hover {
 	font-weight: 620;
 	gap: 0.5rem;
 	justify-content: center;
-	min-height: 2.75rem;
+	min-height: var(--tap-min);
 	padding: 0.55rem 1.35rem;
 	transition:
 		transform 140ms ease,
@@ -159,7 +238,7 @@ a:hover {
 
 .field > label {
 	color: var(--text-dim);
-	font-size: 0.82rem;
+	font-size: var(--text-secondary);
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
@@ -173,7 +252,7 @@ textarea {
 	border-radius: var(--radius);
 	color: var(--text-bright);
 	font: inherit;
-	min-height: 2.75rem;
+	min-height: var(--tap-min);
 	padding: 0.6rem 0.85rem;
 	width: 100%;
 }
@@ -192,7 +271,20 @@ textarea:focus {
 
 .error {
 	color: var(--danger);
-	font-size: 0.85rem;
+	font-size: var(--text-secondary);
+}
+
+/*
+ * A control that is not a `.button`: a quick-log chip, a disclosure, a row
+ * action. Carries the touch floor so nothing has to remember it, and centres
+ * its label so the extra height does not push the text off-centre.
+ */
+.tap {
+	align-items: center;
+	display: inline-flex;
+	justify-content: center;
+	min-height: var(--tap-min);
+	min-width: var(--tap-min);
 }
 
 .muted {

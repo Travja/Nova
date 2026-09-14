@@ -3,6 +3,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { Actions, PageServerLoad } from './$types';
 import { fieldErrors } from '$domain/validation';
+import { mergePreferences } from '$domain/preferences';
 
 const profileSchema = z.object({
 	displayName: z.string().trim().min(1, 'What should we call you?').max(64),
@@ -36,7 +37,12 @@ export const actions: Actions = {
 		const parsed = profileSchema.safeParse(Object.fromEntries(form));
 		if (!parsed.success) return fail(400, { errors: fieldErrors(parsed.error) });
 
-		await updateProfile(locals.user.id, parsed.data);
+		// Preferences are validated by the preference table itself rather than by
+		// the schema above: anything it does not recognise falls back to what is
+		// already stored, so an unknown value is ignored rather than rejected.
+		const preferences = mergePreferences(locals.user.preferences, Object.fromEntries(form));
+
+		await updateProfile(locals.user.id, { ...parsed.data, preferences });
 		return { saved: true };
 	}
 };

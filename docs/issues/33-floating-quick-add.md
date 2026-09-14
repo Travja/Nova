@@ -25,6 +25,17 @@ Move it to a floating button: bottom-right, above the content, one tap to
   narrow screens where the floating button is present, keep it on desktop where
   the header has room and a floating control looks out of place.
 
+  **Settled** as recommended, at 40rem — the same width `/` already uses to
+  decide a phone lands on Today. Exactly one of the two is ever on screen. It is
+  a pill carrying the words `New goal` rather than a bare `+` circle: it is
+  replacing a labelled nav item, and a visible label is also the honest way to
+  give it an accessible name.
+
+  The clearance is taken on the shell rather than on each of the three lists, so
+  the footer clears it too and the next list does not have to remember. Measuring
+  only `main` is not enough to prove it — the footer's own padding satisfies that
+  with no clearance at all.
+
 ## Open question
 
 Whether it should expand into a small menu once asteroids (#30) land — "new goal"

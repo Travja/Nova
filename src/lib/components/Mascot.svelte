@@ -120,7 +120,7 @@
 		</div>
 
 		<button
-			class="link-button dismiss"
+			class="link-button dismiss tap"
 			type="button"
 			aria-label="Hide the pilot"
 			title="Hide the pilot"
@@ -139,17 +139,30 @@
 		/* The sprite gives up width before the copy does, so the panel works on a
 		   phone without a second layout. */
 		grid-template-columns: clamp(112px, 38%, var(--size, 160px)) 1fr;
-		padding: 1rem 1.1rem;
+		padding: var(--pad-panel);
 		position: relative;
+	}
+
+	/*
+	 * Compact asked for more goals on screen, and the pilot was taking a fifth
+	 * of it. Narrowing its column is enough on its own: the astronaut is drawn
+	 * to fit the space it is given, so it comes down with it.
+	 */
+	:global(html[data-density='compact']) .mascot {
+		gap: 0.75rem;
+		grid-template-columns: clamp(68px, 22%, 96px) 1fr;
 	}
 
 	.copy {
 		display: grid;
 		gap: 0.3rem;
 		min-width: 0;
-		/* Room for the dismiss control, which the headline would otherwise run
-		   underneath when it wraps. */
-		padding-right: 1.25rem;
+		/* Room for the dismiss glyph, which the headline would otherwise run
+		   underneath when it wraps — the glyph, not the 44px hit area around it.
+		   That area overhangs the copy invisibly, which costs nothing: there is
+		   nothing interactive under it, and the top-right corner of a panel you
+		   can dismiss is where a dismiss is expected to be. */
+		padding-right: 2rem;
 	}
 
 	.copy h2 {
@@ -177,7 +190,7 @@
 		color: var(--text-dim);
 		cursor: pointer;
 		font: inherit;
-		font-size: 0.78rem;
+		font-size: var(--text-secondary);
 		padding: 0.25rem;
 	}
 
@@ -185,12 +198,15 @@
 		color: var(--text-bright);
 	}
 
+	/* Sized by `.tap`: a ✕ glyph is about 20px of ink, and a control you dismiss
+	   by accident is worse than one you cannot find. Pulled tight against the
+	   corner so the larger hit area does not push the panel around. */
 	.dismiss {
 		font-size: 0.9rem;
 		line-height: 1;
 		position: absolute;
-		right: 0.5rem;
-		top: 0.45rem;
+		right: 0;
+		top: 0;
 	}
 
 	.recall {
