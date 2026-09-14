@@ -70,14 +70,27 @@ test('a goal reorders from the keyboard, says where it landed, and keeps focus',
 	await page.goto('/?reorder=1');
 	await hydrated(page);
 
+	const order = page.locator('ol.order a.title');
+	await expect(order).toHaveText(['First light', 'Second wind', 'Third rail']);
+
 	// Reached by tabbing, not by clicking: the arrows are the keyboard route.
 	const down = page.getByRole('button', { name: 'Move First light down' });
 	await down.focus();
 	await expect(down).toBeFocused();
 	await page.keyboard.press('Enter');
 
-	// The live region says the position, not just that something moved. The
-	// server's own reply cannot — it never knew where the goal ended up.
+	/*
+	 * The list first, then what was said about it.
+	 *
+	 * The announcement goes out ahead of the re-render on purpose — see
+	 * `GoalOrderList` — so waiting on it is not waiting for the move to land.
+	 * The order is the thing that only changes once the server has answered and
+	 * the page has taken the answer, which makes it the barrier before pressing
+	 * again.
+	 */
+	await expect(order).toHaveText(['Second wind', 'First light', 'Third rail']);
+	// The position, not just that something moved: the server's own reply cannot
+	// say where the goal ended up, because it never knew.
 	await expect(liveRegion(page)).toContainText(
 		'First light moved to position 2 of 3 in Satellite.'
 	);
@@ -86,6 +99,7 @@ test('a goal reorders from the keyboard, says where it landed, and keeps focus',
 	// same goal again rather than starting the tab order over.
 	await expect(down).toBeFocused();
 	await page.keyboard.press('Enter');
+	await expect(order).toHaveText(['Second wind', 'Third rail', 'First light']);
 	await expect(liveRegion(page)).toContainText('position 3 of 3');
 
 	// At the end of the list "down" disables itself, so focus is handed to the

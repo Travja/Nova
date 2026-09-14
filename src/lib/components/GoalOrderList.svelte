@@ -20,6 +20,13 @@
 	 * then silence. And the button pressed can be the button that disables itself
 	 * by working: moving a goal to the top takes "up" away, so focus is handed to
 	 * the other arrow on the same goal, which is where the next move is anyway.
+	 *
+	 * The announcement goes out off `result`, before `update()` applies it. That
+	 * ordering is the whole of it: `update()` is what puts `form.moved` on the
+	 * page, and the page falls back to the server's weaker sentence whenever this
+	 * component has not spoken yet. Announce afterwards and a live region gets two
+	 * changes for one keypress — "Beta moved within its tier", then the real one —
+	 * which is either read twice or read wrong depending on the timing.
 	 */
 	interface Props {
 		tier: TierDefinition;
@@ -58,23 +65,19 @@
 	}
 
 	/**
-	 * Announce and re-focus after a move the server has applied.
+	 * Where one step in a direction puts a row, clamped to the ends.
 	 *
-	 * `from` is the row's index as it was when the button was pressed, captured
-	 * in the template: by the time this runs the list has already re-rendered in
-	 * the new order, so reading the index back would be reading the answer and
-	 * moving it a second time.
+	 * Worked out from the index the row had when the button was pressed, captured
+	 * in the template. Reading it back afterwards would be reading the answer —
+	 * the list has already re-rendered in the new order by then — and moving it a
+	 * second time.
 	 */
-	async function afterMove(
-		goalId: string,
-		title: string,
-		direction: 'up' | 'down',
-		from: number,
-		total: number
-	) {
-		const to = Math.min(Math.max(from + (direction === 'up' ? -1 : 1), 0), total - 1);
-		onannounce?.(placement(title, to + 1, total));
+	function landedAt(from: number, direction: 'up' | 'down', total: number): number {
+		return Math.min(Math.max(from + (direction === 'up' ? -1 : 1), 0), total - 1);
+	}
 
+	/** Put focus back on the row that just moved, once it has re-rendered. */
+	async function restoreFocus(goalId: string, direction: 'up' | 'down') {
 		await tick();
 		const pressed = arrows[arrowKey(goalId, direction)];
 		// Reaching an end disables the arrow that got you there; the other one on
@@ -137,11 +140,27 @@
 				action="?/move&reorder=1"
 				use:enhance={({ formData }) => {
 					const direction = formData.get('direction') === 'up' ? 'up' : 'down';
-					const from = index;
+					// Read off `goals` rather than the each-block's `index`. The submit
+					// function is built once, when the action attaches, and the row it
+					// belongs to moves under it on every reorder — so a second press on
+					// the same arrow was still announcing the first press's position.
+					// The prop is live and the goal's id is not, which makes this the
+					// pair that cannot go stale.
+					const from = goals.findIndex((snapshot) => snapshot.goal.id === goal.id);
 					const total = goals.length;
-					return async ({ update }) => {
+					return async ({ result, update }) => {
+						// Before `update()`, so the server's fallback sentence never
+						// reaches the live region — see the note at the top.
+						if (result.type === 'success' && from >= 0) {
+							onannounce?.(placement(goal.title, landedAt(from, direction, total) + 1, total));
+						} else {
+							// A move the server refused renders its own error, and a
+							// stale "moved to position 2" sitting above it would be the
+							// page disagreeing with itself.
+							onannounce?.('');
+						}
 						await update();
-						await afterMove(goal.id, goal.title, direction, from, total);
+						await restoreFocus(goal.id, direction);
 					};
 				}}
 			>
