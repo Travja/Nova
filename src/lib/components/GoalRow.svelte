@@ -22,10 +22,11 @@
 	 * amount and the goal's details around it — so the row gives up its chips to
 	 * something that carries more than the card it replaced, not less.
 	 *
-	 * No `role="progressbar"` here, unlike the card: the dial is presentational
-	 * and #7 asks for an equivalent text node beside it, which is exactly what
-	 * the status line is. A second telling would only muddy the row's name, and
-	 * the sheet carries the precise figure anyway.
+	 * The dial follows the same convention it does everywhere else — decorative,
+	 * with `orbitStanding()` beside it — and that text lands inside the row's own
+	 * link along with the title and the status. No `label` is passed: the title
+	 * is already in the same name, and repeating it would have the row announce
+	 * the goal twice before saying anything about it.
 	 */
 
 	interface Props {
@@ -92,7 +93,8 @@
 		<span class="title">{goal.title}</span>
 		<span class="status muted">
 			{#if snapshot.current.complete}
-				Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]} ✦
+				Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]}
+				<span aria-hidden="true">✦</span>
 			{:else}
 				{formatAmount(snapshot.current.remaining, metric)} left {CADENCE_LABEL[
 					snapshot.current.period.cadence
@@ -121,7 +123,13 @@
 	{/if}
 </a>
 
-<dialog bind:this={sheet} class="sheet" onclose={() => (open = false)} onclick={maybeDismiss}>
+<dialog
+	bind:this={sheet}
+	class="sheet"
+	aria-label="{goal.title} — log and details"
+	onclose={() => (open = false)}
+	onclick={maybeDismiss}
+>
 	{#if open}
 		<div class="sheet__inner">
 			<GoalSheet {snapshot} {logAction} onclose={() => sheet?.close()} />

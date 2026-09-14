@@ -8,6 +8,7 @@
 	import Rocket from '$components/Rocket.svelte';
 	import Starfield from '$components/Starfield.svelte';
 	import UpdatePrompt from '$components/UpdatePrompt.svelte';
+	import { MAIN_ID } from '$lib/focus';
 	import '$lib/styles/app.css';
 	import type { LayoutProps } from './$types';
 
@@ -63,7 +64,25 @@
 		</nav>
 	</header>
 
-	<main>
+	<!--
+		In the flow right after the nav it replaces on a narrow screen, rather than
+		at the very end of the document. It is `position: fixed` either way, so
+		this changes nothing about where it is drawn and everything about where it
+		is reached: the primary action arriving after the footer is not "somewhere
+		sensible" for the one control a phone user is most likely to want.
+	-->
+	{#if showQuickAdd}
+		<QuickAdd />
+	{/if}
+
+	<!--
+		`tabindex="-1"` makes this scriptable focus, never tabbable focus: it is
+		where `$lib/focus` sends the user when the control they were standing on
+		is taken off the screen. The three bars above are the ones that do that,
+		and `<main>` is forward of all of them, so tabbing on from here carries
+		them into the page rather than back out through the masthead.
+	-->
+	<main id={MAIN_ID} tabindex="-1">
 		{@render children()}
 	</main>
 
@@ -71,10 +90,6 @@
 		<span>Nova — track goals as orbits.</span>
 	</footer>
 </div>
-
-{#if showQuickAdd}
-	<QuickAdd />
-{/if}
 
 <style>
 	.shell {
@@ -164,6 +179,14 @@
 
 	main {
 		flex: 1;
+	}
+
+	/* Focus lands here only as a recovery, and outlining the entire page would
+	   say something much louder than "carry on from here". The screen reader
+	   still announces the landmark; a sighted keyboard user sees the next Tab
+	   pick up inside the content, which is the whole point. */
+	main:focus {
+		outline: none;
 	}
 
 	.footer {

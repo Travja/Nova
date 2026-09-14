@@ -106,6 +106,11 @@
 		minute: '2-digit'
 	});
 
+	/** Which entry a row's Edit and Remove are about, for their names. */
+	function entryName(entry: { amount: number; occurredAt: Date }): string {
+		return `${formatAmount(entry.amount, goal.metric)} on ${dateFormatter.format(entry.occurredAt)}`;
+	}
+
 	let whenInput: HTMLInputElement | null = $state(null);
 	/** Set once the pilot picks their own time, so we stop moving it. */
 	let whenDirty = $state(false);
@@ -369,11 +374,16 @@
 							{#if entry.note}<span class="entry__note muted">{entry.note}</span>{/if}
 							{#if !archived && !nested}
 								<span class="entry__actions">
-									<a class="link-button tap" href="{goalHref}?edit={entry.id}#entries">Edit</a>
+									<!-- Every row carried the same two names, so a screen reader read a
+									     list of "Edit, Remove, Edit, Remove" with nothing to say which
+									     entry each belonged to. The entry itself is the distinguisher. -->
+									<a class="link-button tap" href="{goalHref}?edit={entry.id}#entries">
+										Edit <span class="visually-hidden">{entryName(entry)}</span>
+									</a>
 									<form method="POST" action="?/deleteEntry" use:enhance>
 										<input type="hidden" name="entryId" value={entry.id} />
-										<button class="link-button tap" type="submit" aria-label="Delete entry">
-											Remove
+										<button class="link-button tap" type="submit">
+											Remove <span class="visually-hidden">{entryName(entry)}</span>
 										</button>
 									</form>
 								</span>

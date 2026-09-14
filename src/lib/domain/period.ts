@@ -321,3 +321,121 @@ export function recentPeriods(
 	}
 	return periods;
 }
+
+const MONTHS = [
+	'January',
+	'February',
+	'March',
+	'April',
+	'May',
+	'June',
+	'July',
+	'August',
+	'September',
+	'October',
+	'November',
+	'December'
+];
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** The Monday that opens ISO week `week` of `year`, as a UTC calendar date. */
+function isoWeekStart(year: number, week: number): Date {
+	// 4 January is always in ISO week 1, whatever day it falls on.
+	const jan4 = Date.UTC(year, 0, 4);
+	const dayOfWeek = (new Date(jan4).getUTCDay() + 6) % 7;
+	return new Date(jan4 - dayOfWeek * 86_400_000 + (week - 1) * 7 * 86_400_000);
+}
+
+/**
+ * A period key read back as the calendar date it was minted from, in UTC.
+ *
+ * The key already carries wall-clock parts as the user's own zone saw them —
+ * `day:2026-09-14` is the fourteenth wherever they were standing — so reading
+ * it back needs no zone and cannot disagree with the key it came from. That is
+ * the whole reason the names below are derived from the key rather than
+ * formatted from `period.start`, which would need a zone threaded through four
+ * components that have no business knowing one.
+ */
+function keyDate(cadence: Cadence, value: string): Date | null {
+	const parts = value.split('-');
+	switch (cadence) {
+		case 'day': {
+			const [year, month, day] = parts.map(Number);
+			return Number.isFinite(day) ? new Date(Date.UTC(year, month - 1, day)) : null;
+		}
+		case 'week': {
+			// Monday-start weeks key on an ISO week number; every other start
+			// keys on the week's own opening date, which needs no unpicking.
+			const week = /^W(\d{2})$/.exec(parts[1] ?? '');
+			if (week) return isoWeekStart(Number(parts[0]), Number(week[1]));
+			const [year, month, day] = parts.map(Number);
+			return Number.isFinite(day) ? new Date(Date.UTC(year, month - 1, day)) : null;
+		}
+		case 'month': {
+			const [year, month] = parts.map(Number);
+			return Number.isFinite(month) ? new Date(Date.UTC(year, month - 1, 1)) : null;
+		}
+		default:
+			return null;
+	}
+}
+
+/**
+ * What a period is called, worked out from its key alone.
+ *
+ * `periodLabel` above says the same thing for a `Period` in hand and is what
+ * copy uses. This is for the places that hold a key and nothing else — the
+ * orbit history strip, whose rings were announcing `week:2026-W37` at anyone
+ * listening to them.
+ */
+export function periodName(key: string): string {
+	const [cadence, value] = key.split(':');
+	const date = keyDate(cadence as Cadence, value ?? '');
+
+	switch (cadence) {
+		case 'day':
+			return date
+				? `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+				: key;
+		case 'week':
+			return date
+				? `Week of ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+				: key;
+		case 'month':
+			return date ? `${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}` : key;
+		case 'quarter': {
+			const [year, quarter] = (value ?? '').split('-Q');
+			return quarter ? `Quarter ${quarter} of ${year}` : key;
+		}
+		case 'year':
+			return value ?? key;
+		default:
+			return key;
+	}
+}
+
+/**
+ * The same period at the width a 24px ring can carry underneath it — `7 Sep`
+ * rather than `Week of 7 September 2026`. The long form goes in the text node
+ * beside it, so nothing is lost by shortening what is drawn.
+ */
+export function periodShortName(key: string): string {
+	const [cadence, value] = key.split(':');
+	const date = keyDate(cadence as Cadence, value ?? '');
+	const short = (at: Date) => `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()].slice(0, 3)}`;
+
+	switch (cadence) {
+		case 'day':
+		case 'week':
+			return date ? short(date) : (value ?? key);
+		case 'month':
+			return date ? MONTHS[date.getUTCMonth()].slice(0, 3) : (value ?? key);
+		case 'quarter':
+			return (value ?? key).split('-')[1] ?? value ?? key;
+		case 'year':
+			return value ?? key;
+		default:
+			return value ?? key;
+	}
+}

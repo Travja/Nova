@@ -217,7 +217,7 @@
 				{#each PALETTE as swatch (swatch.value)}
 					<label class="swatch" class:swatch--active={color === swatch.value} title={swatch.name}>
 						<input type="radio" name="color" value={swatch.value} bind:group={color} />
-						<span style="background: {swatch.value}"></span>
+						<span aria-hidden="true" style="background: {swatch.value}"></span>
 						<span class="visually-hidden">{swatch.name}</span>
 					</label>
 				{/each}
@@ -241,6 +241,9 @@
 			size={170}
 			caption={formatAmount(Number(target) || 0, previewMetric)}
 		/>
+		<!-- The preview redraws on every keystroke in the form, and a live region
+		     would narrate the lot. It is not one: the copy below is ordinary text,
+		     read when the user reaches it. -->
 		<p class="muted preview__copy">
 			{#if nested}
 				{title || 'This goal'} closes one orbit when
@@ -311,6 +314,7 @@
 
 	.tier-option {
 		align-items: center;
+		min-height: var(--tap-min);
 		background: rgba(6, 9, 26, 0.55);
 		border: 1px solid var(--space-border);
 		border-radius: var(--radius);
@@ -326,12 +330,26 @@
 		border-color: var(--space-border-bright);
 	}
 
+	/*
+	 * The radio itself is hidden and the label is the control you see, which is
+	 * fine right up until somebody tabs into the group: the focus ring is drawn
+	 * on a 1px transparent input nobody can find. Both radio groups here do it,
+	 * so both forward the ring to the thing that is actually on screen.
+	 *
+	 * `:focus-visible` on the input rather than `:focus`, so a pointer click does
+	 * not leave a ring behind — the same rule the rest of the app follows.
+	 */
 	.tier-option input {
 		height: 1px;
 		margin: 0;
 		opacity: 0;
 		position: absolute;
 		width: 1px;
+	}
+
+	.tier-option:has(input:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
 	}
 
 	.tier-option__label {
@@ -381,6 +399,11 @@
 		opacity: 0;
 		position: absolute;
 		width: 1px;
+	}
+
+	.swatch:has(input:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 
 	.swatch > span:first-of-type {

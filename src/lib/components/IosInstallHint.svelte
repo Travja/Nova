@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { focusMain, holdsFocus } from '$lib/focus';
 
 	/**
 	 * iOS fires no `beforeinstallprompt`, so the only way anyone finds "Add to
@@ -11,10 +12,28 @@
 	 * The check is UA and `matchMedia`, both unavailable during SSR, so this
 	 * starts hidden and only ever reveals itself after mount. That costs a
 	 * one-frame delay, not a hydration mismatch.
+	 *
+	 * Informative, not decorative: it is the only route to installing Nova on
+	 * iOS, so it announces itself the same way `UpdatePrompt` does — an empty
+	 * `role="status"` mounted up front and filled once, rather than a region that
+	 * arrives already full and may say nothing at all.
 	 */
 
 	let show = $state(false);
 	let dismissed = $state(false);
+	let hint: HTMLElement | null = $state(null);
+
+	const announcement = $derived(
+		show && !dismissed ? 'Nova can be installed: tap Share, then Add to Home Screen.' : ''
+	);
+
+	async function dismiss() {
+		const held = holdsFocus(hint);
+		dismissed = true;
+		if (!held) return;
+		await tick();
+		focusMain();
+	}
 
 	onMount(() => {
 		const ua = navigator.userAgent;
@@ -33,12 +52,14 @@
 	});
 </script>
 
+<p class="visually-hidden" role="status">{announcement}</p>
+
 {#if show && !dismissed}
-	<div class="ios-hint" role="status">
+	<div bind:this={hint} class="ios-hint">
 		<p>Install Nova: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>
-		<button class="dismiss tap" type="button" onclick={() => (dismissed = true)}>
+		<button class="dismiss tap" type="button" onclick={dismiss}>
 			<span aria-hidden="true">✕</span>
-			<span class="visually-hidden">Dismiss</span>
+			<span class="visually-hidden">Dismiss the install hint</span>
 		</button>
 	</div>
 {/if}

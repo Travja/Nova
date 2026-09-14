@@ -84,10 +84,15 @@
 		goto(resolve('/today'), { replaceState: true });
 	});
 
-	/** Set by a drag; the move buttons are announced from the server's reply instead. */
-	let dragAnnouncement = $state('');
+	/**
+	 * Set by `GoalOrderList` for every move it makes, dragged or keyed — it says
+	 * where the goal landed, which the server's own reply cannot. The fallback is
+	 * for a move made with no JavaScript at all, where the page has navigated and
+	 * there is nothing client-side left to have said anything.
+	 */
+	let moveAnnouncement = $state('');
 	const announcement = $derived(
-		dragAnnouncement || (form?.moved ? `${form.moved} moved within its tier.` : '')
+		moveAnnouncement || (form?.moved ? `${form.moved} moved within its tier.` : '')
 	);
 </script>
 
@@ -178,7 +183,7 @@
 					<GoalOrderList
 						tier={section.tier}
 						goals={section.goals}
-						onannounce={(message) => (dragAnnouncement = message)}
+						onannounce={(message) => (moveAnnouncement = message)}
 					/>
 				{:else}
 					<div class="grid" class:grid--rows={compact}>

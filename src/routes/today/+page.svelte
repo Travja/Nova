@@ -107,7 +107,7 @@
 
 	<p class="live" role="status">
 		{#if closed}
-			{closed.title} closed its orbit ✦
+			{closed.title} closed its orbit <span aria-hidden="true">✦</span>
 		{:else if form?.logged}
 			Logged.
 		{/if}
@@ -158,10 +158,19 @@
 		</ul>
 	{/if}
 
+	<!--
+		Native `<details>`/`<summary>` rather than a button plus `aria-expanded`:
+		the element already maps to a disclosure whose state is announced and
+		which opens from the keyboard, and every ARIA role worth putting on a
+		`<summary>` replaces that mapping with a worse one. The one thing it does
+		get wrong is the star, which a screen reader reads out as "black
+		four-pointed star" in the middle of a count — so that is hidden, here and
+		everywhere else it is used as punctuation.
+	-->
 	{#if focus.closed.length > 0}
 		<details class="fold" open>
 			<summary>
-				Closed ({focus.closed.length}) ✦
+				Closed ({focus.closed.length}) <span aria-hidden="true">✦</span>
 			</summary>
 			<ul class="compact">
 				{#each focus.closed as snapshot (snapshot.goal.id)}

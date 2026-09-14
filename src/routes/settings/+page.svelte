@@ -46,7 +46,10 @@
 	</header>
 
 	<form class="panel form" method="POST" use:enhance={submitPreferences}>
-		{#if form?.saved}<p class="saved">Saved.</p>{/if}
+		<!-- The save never navigates, so nothing else would say it happened. The
+		     region is mounted from the first render and empty until it is, which
+		     is what makes the word land when it arrives. -->
+		<p class="saved" role="status">{form?.saved ? 'Saved.' : ''}</p>
 
 		<div class="field">
 			<label for="displayName">Name</label>
@@ -85,14 +88,17 @@
 			{@const spec = specFor(key)}
 			<div class="field">
 				<label for={key}>{spec.label}</label>
-				<select id={key} name={key}>
+				<!-- The hint is the sentence that says what the setting costs, and a
+				     screen reader reaching the control by name alone never hears it.
+				     `aria-describedby` attaches it to the control it is about. -->
+				<select id={key} name={key} aria-describedby={spec.hint ? `${key}-hint` : undefined}>
 					{#each spec.values as value (value)}
 						<option {value} selected={value === data.profile.preferences[key]}>
 							{spec.options[value]}
 						</option>
 					{/each}
 				</select>
-				{#if spec.hint}<p class="muted hint">{spec.hint}</p>{/if}
+				{#if spec.hint}<p id="{key}-hint" class="muted hint">{spec.hint}</p>{/if}
 			</div>
 		{/each}
 
@@ -121,6 +127,10 @@
 		display: grid;
 		gap: 1rem;
 		padding: var(--pad-panel);
+	}
+
+	.saved:empty {
+		display: none;
 	}
 
 	.saved {

@@ -81,3 +81,31 @@ carries the orbit's meaning, since the body stops moving.
   reset, quick-add, offline queue, preferences — is completable from the keyboard
   alone.
 - The contrast figures are measured and written down, for both palettes.
+
+## Decided
+
+**The dial is decorative, and the text beside it is the orbit.** Of the two ways
+this spec offered, Nova takes the second and applies it everywhere: the `<svg>`
+in `OrbitDial` is `aria-hidden`, and the component always emits
+`orbitStanding()` as an adjacent text node — as the hidden half of the caption
+where one is drawn, and on its own where one is not. `OrbitHistory` follows the
+same rule with its own rings.
+
+Naming the dial was the tempting option and it does not survive the sizes. The
+same dial is drawn at 24, 52, 120, 170 and 200px; `TierBody` drops to a
+silhouette below about eleven pixels, the caption is only drawn where there is
+room, and a card wraps the whole thing in a link. A name computed from any of
+that varies with the size. The sentence does not, so the sentence is the
+contract — and no call site is free to solve it its own way.
+
+The figures live where they can go stale loudly rather than quietly:
+`src/lib/styles/app.css` carries the table for both palettes above the
+high-contrast block, and `src/lib/domain/contrast.test.ts` measures every ink on
+every ground — including a panel over the brightest part of the nebula, which is
+the honest worst case rather than the flattering one — and holds the named
+numbers to a tenth.
+
+Automated cover is `e2e/accessibility.spec.ts` (axe over every route, signed in
+and out, in each display preference and with a compact row's sheet open) and
+`e2e/keyboard-and-focus.spec.ts` (the flows that remove the control the user is
+standing on). Both run in `pnpm e2e`, which is a CI step.

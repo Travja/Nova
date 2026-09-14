@@ -345,6 +345,23 @@ function byUrgency(rows: FocusRow[]): FocusRow[] {
 	);
 }
 
+/**
+ * An orbit in words — the text equivalent that stands in for the dial.
+ *
+ * Every orbit visual in Nova is decorative (see `OrbitDial`), so whatever draws
+ * one puts this next to it instead. It lives here rather than in a component so
+ * the 24px ring in the history strip and the 230px dial on a goal page cannot
+ * drift into saying different things, and so the dormant case — a period the
+ * goal spent archived, which the drawing distinguishes only by going cold — is
+ * spelled out in one place rather than left to a colour.
+ */
+export function orbitStanding(orbit: Orbit): string {
+	if (orbit.dormant) return 'archived for this period, no orbit expected';
+	const percent = Math.round(orbit.ratio * 100);
+	if (orbit.complete) return `orbit closed, ${percent}% of target logged`;
+	return `${percent}% of target logged`;
+}
+
 /** How long a period has left, in the coarsest unit that still says something. */
 export function formatTimeLeft(period: Period, now: Date = new Date()): string {
 	const minutes = Math.floor((period.end.getTime() - now.getTime()) / 60_000);

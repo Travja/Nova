@@ -5,7 +5,8 @@
 	import { formatAmount, formatTimeLeft, type TodayFocus } from '$domain/progress';
 	import { metricFor } from '$domain/nesting';
 	import { celebration } from '$lib/celebration.svelte';
-	import { onMount } from 'svelte';
+	import { focusTarget } from '$lib/focus';
+	import { onMount, tick } from 'svelte';
 
 	/**
 	 * The pilot, reacting to the week.
@@ -13,6 +14,15 @@
 	 * The mood comes from `mascotFor`, which reads the same split the focused
 	 * view is drawn from, so the drawing and the list can never disagree. The
 	 * copy is warm on purpose: a missed orbit is information, not a telling-off.
+	 *
+	 * #7 asked whether this is decorative or informative, and the answer is both,
+	 * split down the middle. The *panel* is informative: the heading and the
+	 * sentence under it are the only place Today says what the week as a whole
+	 * looks like, and they are ordinary text. The *drawing* is decorative — the
+	 * astronaut is `aria-hidden` inside `Astronaut.svelte`, and the mood it is
+	 * drawn in is already spelled out in the copy beside it and never carried by
+	 * the sprite or the panel's border alone. So: no `aria-label`, no `role`,
+	 * nothing to announce twice.
 	 */
 	interface Props {
 		focus: TodayFocus;
@@ -45,6 +55,13 @@
 	 */
 	const STORAGE_KEY = 'nova:mascot-hidden';
 	let hidden = $state(false);
+	/**
+	 * Hiding the pilot removes the button that hid it and shows another in its
+	 * place, and the same in reverse — so each hands focus to its replacement
+	 * rather than letting it fall to `<body>`.
+	 */
+	let dismissButton: HTMLButtonElement | null = $state(null);
+	let recallButton: HTMLButtonElement | null = $state(null);
 
 	onMount(() => {
 		try {
@@ -54,19 +71,26 @@
 		}
 	});
 
-	function setHidden(value: boolean) {
+	async function setHidden(value: boolean) {
 		hidden = value;
 		try {
 			localStorage.setItem(STORAGE_KEY, value ? '1' : '0');
 		} catch {
 			// Nothing to fall back to, and nothing that breaks without it.
 		}
+		await tick();
+		focusTarget(value ? recallButton : dismissButton);
 	}
 </script>
 
 {#if hidden}
 	<p class="recall">
-		<button class="link-button" type="button" onclick={() => setHidden(false)}>
+		<button
+			bind:this={recallButton}
+			class="link-button tap"
+			type="button"
+			onclick={() => setHidden(false)}
+		>
 			Bring the pilot back
 		</button>
 	</p>
@@ -76,7 +100,7 @@
 
 		<div class="copy">
 			{#if closing}
-				<h2>{closing.title} closed its orbit ✦</h2>
+				<h2>{closing.title} closed its orbit <span aria-hidden="true">✦</span></h2>
 				<p class="muted">That is one more revolution on the board.</p>
 			{:else if pilot.mood === 'resting'}
 				<h2>{pilot.closed > 0 ? 'Nothing owed' : 'Nothing in flight'}</h2>
@@ -121,13 +145,14 @@
 		</div>
 
 		<button
+			bind:this={dismissButton}
 			class="link-button dismiss tap"
 			type="button"
 			aria-label="Hide the pilot"
 			title="Hide the pilot"
 			onclick={() => setHidden(true)}
 		>
-			✕
+			<span aria-hidden="true">✕</span>
 		</button>
 	</section>
 {/if}

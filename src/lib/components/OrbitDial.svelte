@@ -5,6 +5,7 @@
 	import { MIN_DIAL_SCALE } from '$domain/preferences';
 	import { SWEEP_MS, rayAngles } from '$domain/celebration';
 	import type { ChildStanding, Orbit } from '$domain/progress';
+	import { orbitStanding } from '$domain/progress';
 	import type { Tier } from '$domain/tiers';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
 
@@ -14,6 +15,24 @@
 	 * The arc is how much of the target is logged; the body sits at the matching
 	 * point on the ring. A closed orbit keeps travelling, because a habit you
 	 * have already hit should look alive rather than finished.
+	 *
+	 * ## The drawing is decorative; the text beside it is the orbit
+	 *
+	 * #7 offered two ways to settle this — name and value the dial, or mark it
+	 * decorative and guarantee an equivalent text node next to it. Nova takes the
+	 * second, everywhere, and this component is where the guarantee lives: the
+	 * `<svg>` is `aria-hidden`, and the dial always emits `orbitStanding()` as an
+	 * adjacent text node whether or not a caption is drawn.
+	 *
+	 * Naming the dial was the tempting option and it does not survive the sizes.
+	 * The same dial is drawn at 24, 52, 120, 170 and 200px; `TierBody` drops a
+	 * body to its silhouette below about eleven pixels, the caption is only drawn
+	 * where there is room for it, and a card wraps the whole thing in a link. A
+	 * name computed from any of that varies with the size, and a satellite is a
+	 * satellite at 24px and at 230px. What does not vary is the sentence, so the
+	 * sentence is the contract — and it holds on a row, a card, the form preview
+	 * and the goal page identically, with no call site free to solve it its own
+	 * way.
 	 *
 	 * ## Nested orbits
 	 *
@@ -27,6 +46,10 @@
 	 * Everything about a child is drawn inside the counter-rotated group that
 	 * keeps the parent's body level, so a moon does not swing round the planet
 	 * just because the planet moved along its year.
+	 *
+	 * The moons need no convention of their own: they are drawn inside the same
+	 * `aria-hidden` `<svg>`, so they are decorative with everything else in it,
+	 * and `ChildOrbits` beside the dial carries what they say as ordinary text.
 	 */
 
 	interface Props {
@@ -45,6 +68,14 @@
 		 */
 		goalId?: string;
 		/**
+		 * What this dial is drawing, for the text node beside it — normally the
+		 * goal's title. Left out where the surrounding copy already names the
+		 * subject within the same reading, as the goal page's `<h1>` does; passed
+		 * where the dial is its own link and would otherwise be a percentage with
+		 * nothing to attach it to.
+		 */
+		label?: string;
+		/**
 		 * The children this goal counts, each drawn orbiting its body. Empty for
 		 * every goal that is not derived, which is every goal that can be logged
 		 * against.
@@ -59,6 +90,7 @@
 		size = 180,
 		caption = '',
 		goalId = '',
+		label = '',
 		satellites = []
 	}: Props = $props();
 
@@ -122,6 +154,16 @@
 	/** Set for as long as this goal's closing is being celebrated. */
 	const closing = $derived(goalId ? celebrationFor(goalId) : null);
 	const rays = $derived(closing ? rayAngles(closing.shape.rays) : []);
+
+	/**
+	 * The dial in words. Under `motion: none` and `reduced` the body stops
+	 * travelling and the arc stops sweeping, so the drawing is down to position
+	 * and fill alone — this says the same thing in a form no amount of damping
+	 * can take away.
+	 */
+	const standing = $derived(
+		`${label ? `${label}, ` : ''}${tierDef.label}: ${orbitStanding(orbit)}`
+	);
 </script>
 
 <div
@@ -130,7 +172,10 @@
 	class:dial--dormant={orbit.dormant}
 	style="--size: calc({size}px * var(--dial-scale)); --color: {color}; --accent: {tierDef.accent}; --orbit-seconds: {orbitSeconds}s; --sweep-ms: {SWEEP_MS}ms"
 >
-	<svg viewBox="0 0 100 100" role="presentation">
+	<!-- Decorative: everything it says is said again in the text below it.
+	     `aria-hidden` rather than `role="presentation"`, which is not inherited
+	     and would leave the body's own markup in the tree. -->
+	<svg viewBox="0 0 100 100" aria-hidden="true">
 		<defs>
 			<radialGradient id="core-{tier}">
 				<stop offset="0%" stop-color="#fffbe8" />
@@ -274,7 +319,12 @@
 		<div class="caption">
 			<span class="caption__value">{captionText}</span>
 			<span class="caption__tier">{tierDef.label}</span>
+			<!-- The caption carries the amounts; this carries the reading the arc
+			     was making of them, which is the half a caption cannot show. -->
+			<span class="visually-hidden">{orbitStanding(orbit)}</span>
 		</div>
+	{:else}
+		<span class="visually-hidden">{standing}</span>
 	{/if}
 </div>
 

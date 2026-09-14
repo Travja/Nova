@@ -60,7 +60,10 @@ test('a pilot can see their sessions and sign other devices out', async ({ brows
 
 	await page.goto('/settings/security');
 	await expect(sessionRows(page)).toHaveCount(3);
-	await expect(page.getByText('This device')).toBeVisible();
+	// Exactly, because the current row's sign-out now carries "this device" in
+	// its own name — a page of buttons all called "Sign out" is a page of
+	// buttons nobody can tell apart. The badge is still what this asserts.
+	await expect(page.getByText('This device', { exact: true })).toBeVisible();
 
 	// Ending one device leaves the other two alone.
 	await sessionRows(page)
@@ -75,7 +78,7 @@ test('a pilot can see their sessions and sign other devices out', async ({ brows
 	await page.getByRole('button', { name: 'Sign out all other sessions (1)' }).click();
 	await expect(announcement(page)).toHaveText('One session has been signed out.');
 	await expect(sessionRows(page)).toHaveCount(1);
-	await expect(page.getByText('This device')).toBeVisible();
+	await expect(page.getByText('This device', { exact: true })).toBeVisible();
 
 	// Both other browsers are now anonymous; this one is still flying.
 	for (const other of [second, third]) {

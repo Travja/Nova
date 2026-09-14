@@ -39,10 +39,26 @@ interface QueueItem extends QueuedEntry {
 
 let items = $state<QueueItem[]>([]);
 let announcement = $state('');
+/**
+ * Bumped on every announcement, including one identical to the last.
+ *
+ * A live region only speaks when its contents change, and "1 entry synced."
+ * twice running is an ordinary afternoon on a bad connection — the second
+ * sync would be silent without something for the component to notice. See
+ * `OfflineQueue`, which clears the region and refills it off this.
+ */
+let announcementStamp = $state(0);
+
 let syncing = $state(false);
 /** False once a browser has refused to store the queue, so the UI can say so. */
 let durable = $state(true);
 let started = false;
+
+/** Say something, and make sure it is heard even if it was said a moment ago. */
+function say(text: string): void {
+	announcement = text;
+	announcementStamp += 1;
+}
 
 function count(total: number, one: string, many: string): string {
 	return `${total} ${total === 1 ? one : many}`;
@@ -87,6 +103,11 @@ export function queueAnnouncement(): string {
 	return announcement;
 }
 
+/** How many things have been said, so a repeat still counts as news. */
+export function queueAnnouncementStamp(): number {
+	return announcementStamp;
+}
+
 /** True while a flush is in flight, so the bar can say it is trying. */
 export function isSyncing(): boolean {
 	return syncing;
@@ -100,7 +121,7 @@ export function isDurable(): boolean {
 /** Stop reporting entries the server refused, once they have been read. */
 export function dismissRejected(): void {
 	items = items.filter((item) => item.status !== 'failed');
-	announcement = '';
+	say('');
 }
 
 /**
@@ -115,9 +136,11 @@ export async function enqueue(entry: QueuedEntry): Promise<void> {
 	if (!stored) durable = false;
 
 	const total = waiting();
-	announcement = durable
-		? `Saved on this device. ${entries(total)} waiting to sync.`
-		: `Saved for now — this browser will not keep it if you reload. ${entries(total)} waiting to sync.`;
+	say(
+		durable
+			? `Saved on this device. ${entries(total)} waiting to sync.`
+			: `Saved for now — this browser will not keep it if you reload. ${entries(total)} waiting to sync.`
+	);
 
 	await flush();
 }
@@ -196,7 +219,7 @@ async function send(signal: AbortSignal): Promise<void> {
 	retries = 0;
 
 	if (response.status === 401) {
-		announcement = `Sign in again to sync ${entries(batch.length)}.`;
+		say(`Sign in again to sync ${entries(batch.length)}.`);
 		return;
 	}
 	// Server trouble rather than a refusal. The entries stay queued.
@@ -229,7 +252,7 @@ async function send(signal: AbortSignal): Promise<void> {
 		const synced = landed > 0 ? `${entries(landed)} synced.` : '';
 		const lost =
 			refused.length > 0 ? ` ${entries(refused.length)} could not be synced: ${refused[0]}` : '';
-		announcement = `${synced}${lost}`.trim();
+		say(`${synced}${lost}`.trim());
 	}
 }
 
@@ -318,7 +341,7 @@ export function startQueue(): () => void {
 			.map((entry): QueueItem => ({ ...entry, status: 'pending' }));
 		if (restored.length > 0) {
 			items = [...restored, ...items];
-			announcement = `${entries(restored.length)} logged offline, waiting to sync.`;
+			say(`${entries(restored.length)} logged offline, waiting to sync.`);
 		}
 		return flush();
 	});

@@ -114,6 +114,12 @@ test('the floating button never sits on the last row of a list', async ({ page }
 		const lowest = await page.evaluate(() => {
 			let bottom = 0;
 			for (const element of document.querySelectorAll('.shell *')) {
+				// The button itself lives in the shell now — #7 moved it there so it
+				// sits in the focus order after the nav it replaces rather than after
+				// the footer. It is fixed to the viewport either way, so it is still
+				// floating over the content; it is just no longer outside the thing
+				// being measured, and measuring it against itself always fails.
+				if (element.closest('.quick-add')) continue;
 				const box = element.getBoundingClientRect();
 				if (box.width > 0 && box.height > 0) bottom = Math.max(bottom, box.bottom);
 			}

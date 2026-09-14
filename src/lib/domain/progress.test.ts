@@ -9,6 +9,7 @@ import {
 	formatTimeLeft,
 	isBehindPace,
 	isClosing,
+	orbitStanding,
 	paceDeficit,
 	periodElapsed,
 	quickLogSteps,
@@ -534,5 +535,39 @@ describe('quickLogSteps', () => {
 	it('a check-in is one check-in', () => {
 		expect(quickLogSteps({ kind: 'checkin', unit: '' }, 1)).toEqual([1]);
 		expect(quickLogSteps({ kind: 'checkin', unit: '' }, 30)).toEqual([1]);
+	});
+});
+
+/**
+ * The text equivalent every orbit visual stands behind. `OrbitDial` and
+ * `OrbitHistory` both draw decorative SVG and put this beside it, so what it
+ * says is the whole of what a screen reader gets — including the dormant case,
+ * which the drawing only tells apart by going cold.
+ */
+describe('orbitStanding', () => {
+	const period = periodFor(new Date('2026-09-12T18:00:00Z'), 'week', { timeZone: 'UTC' });
+
+	it('says how much of the target is in', () => {
+		expect(orbitStanding(buildOrbit(period, 45, 120))).toBe('38% of target logged');
+	});
+
+	it('says an orbit is closed rather than leaving it at 100%', () => {
+		expect(orbitStanding(buildOrbit(period, 120, 120))).toBe('orbit closed, 100% of target logged');
+	});
+
+	it('keeps the overshoot, which the arc has no way to draw', () => {
+		expect(orbitStanding(buildOrbit(period, 168, 120))).toBe('orbit closed, 140% of target logged');
+	});
+
+	it('reads a dormant period as archived rather than as a miss', () => {
+		// The whole of #7's "not by colour alone": an archived period is drawn
+		// grey and still, and nothing else about it says so.
+		expect(orbitStanding(buildOrbit(period, 0, 120, true))).toBe(
+			'archived for this period, no orbit expected'
+		);
+	});
+
+	it('does not call an empty period dormant', () => {
+		expect(orbitStanding(buildOrbit(period, 0, 120))).toBe('0% of target logged');
 	});
 });
