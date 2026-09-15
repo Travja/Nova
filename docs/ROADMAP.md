@@ -19,39 +19,46 @@ of truth and link to it from the issue when the two drift.
 
 ## M1 — Daily driver
 
+_12 of 13 done._
+
 The gaps that stand between "it works" and "I use it every day".
 
-| #                                               | Issue                                                           | Why it matters                                            |
-| ----------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------- |
-| [#1](https://github.com/Travja/Nova/issues/1)   | [Today view](issues/01-today-view.md)                           | The tiered dashboard is the wrong first screen on a phone |
-| [#2](https://github.com/Travja/Nova/issues/2)   | [Archive and restore](issues/02-archive-restore.md)             | Archiving works; nothing can see or undo it               |
-| [#3](https://github.com/Travja/Nova/issues/3)   | [Edit and backdate entries](issues/03-edit-backdate-entries.md) | Forgetting to log on Sunday should not cost the week      |
-| [#4](https://github.com/Travja/Nova/issues/4)   | [Reorder goals](issues/04-reorder-goals.md)                     | `sortOrder` exists with no UI                             |
-| [#5](https://github.com/Travja/Nova/issues/5)   | [Offline logging](issues/05-offline-logging.md)                 | You log where the signal is worst                         |
-| [#6](https://github.com/Travja/Nova/issues/6)   | [Update prompt](issues/06-update-prompt.md)                     | Versions currently swap silently                          |
-| [#7](https://github.com/Travja/Nova/issues/7)   | [Accessibility pass](issues/07-accessibility-pass.md)           | The dial carries the meaning and does not expose it       |
-| [#32](https://github.com/Travja/Nova/issues/32) | [Mobile density](issues/32-mobile-density.md)                   | A 390px screen shows about two goal cards                 |
-| [#33](https://github.com/Travja/Nova/issues/33) | [Floating quick-add](issues/33-floating-quick-add.md)           | The primary action sits where a thumb reaches last        |
-| [#8](https://github.com/Travja/Nova/issues/8)   | [Harden sign-in](issues/08-harden-signin.md)                    | No rate limiting, no password reset                       |
-| [#39](https://github.com/Travja/Nova/issues/39) | [Form error association](issues/39-form-error-association.md)   | An error nobody hears is an error nobody fixes            |
-| [#40](https://github.com/Travja/Nova/issues/40) | [Durable before promised](issues/40-durable-before-promised.md) | "Saved on this device" is said before it is true          |
+| #                                                 | Issue                                                           | Why it matters                                                  |
+| ------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| [#1](https://github.com/Travja/Nova/issues/1) ✓   | [Today view](issues/01-today-view.md)                           | The tiered dashboard is the wrong first screen on a phone       |
+| [#2](https://github.com/Travja/Nova/issues/2) ✓   | [Archive and restore](issues/02-archive-restore.md)             | Archiving works; nothing can see or undo it                     |
+| [#3](https://github.com/Travja/Nova/issues/3) ✓   | [Edit and backdate entries](issues/03-edit-backdate-entries.md) | Forgetting to log on Sunday should not cost the week            |
+| [#4](https://github.com/Travja/Nova/issues/4) ✓   | [Reorder goals](issues/04-reorder-goals.md)                     | `sortOrder` exists with no UI                                   |
+| [#5](https://github.com/Travja/Nova/issues/5) ✓   | [Offline logging](issues/05-offline-logging.md)                 | You log where the signal is worst                               |
+| [#6](https://github.com/Travja/Nova/issues/6) ✓   | [Update prompt](issues/06-update-prompt.md)                     | Versions currently swap silently                                |
+| [#7](https://github.com/Travja/Nova/issues/7) ✓   | [Accessibility pass](issues/07-accessibility-pass.md)           | The dial carries the meaning and does not expose it             |
+| [#32](https://github.com/Travja/Nova/issues/32) ✓ | [Mobile density](issues/32-mobile-density.md)                   | A 390px screen shows about two goal cards                       |
+| [#33](https://github.com/Travja/Nova/issues/33) ✓ | [Floating quick-add](issues/33-floating-quick-add.md)           | The primary action sits where a thumb reaches last              |
+| [#8](https://github.com/Travja/Nova/issues/8) ✓   | [Harden sign-in](issues/08-harden-signin.md)                    | No rate limiting, no password reset                             |
+| [#39](https://github.com/Travja/Nova/issues/39)   | [Form error association](issues/39-form-error-association.md)   | An error nobody hears is an error nobody fixes                  |
+| [#40](https://github.com/Travja/Nova/issues/40) ✓ | [Durable before promised](issues/40-durable-before-promised.md) | "Saved on this device" is said before it is true                |
+| [#44](https://github.com/Travja/Nova/issues/44) ✓ | [Reconnect backoff](issues/44-reconnect-backoff.md)             | A reconnect waited out failures against a network that was gone |
 
 ## M2 — The fun part
 
+_5 of 8 done._
+
 The reason to open the app rather than a spreadsheet.
 
-| #                                               | Issue                                                                 | Why it matters                                     |
-| ----------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
-| [#9](https://github.com/Travja/Nova/issues/9)   | [Celebrate a closed orbit](issues/09-celebrate-closed-orbit.md)       | The best moment currently passes unnoticed         |
-| [#10](https://github.com/Travja/Nova/issues/10) | [A body per tier](issues/10-tier-bodies.md)                           | Every tier draws the same circle today             |
-| [#11](https://github.com/Travja/Nova/issues/11) | [Solar-system view](issues/11-system-view.md)                         | One sky instead of a grid of dials                 |
-| [#12](https://github.com/Travja/Nova/issues/12) | [Nested orbits](issues/12-nested-orbits.md)                           | Makes the tier ladder mean something mechanically  |
-| [#13](https://github.com/Travja/Nova/issues/13) | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app              |
-| [#14](https://github.com/Travja/Nova/issues/14) | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield              |
-| [#30](https://github.com/Travja/Nova/issues/30) | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app |
-| [#41](https://github.com/Travja/Nova/issues/41) | [Starfield viewport units](issues/41-starfield-viewport-units.md)     | `vmin` rebases when a mobile address bar hides     |
+| #                                                 | Issue                                                                 | Why it matters                                     |
+| ------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
+| [#9](https://github.com/Travja/Nova/issues/9) ✓   | [Celebrate a closed orbit](issues/09-celebrate-closed-orbit.md)       | The best moment currently passes unnoticed         |
+| [#10](https://github.com/Travja/Nova/issues/10) ✓ | [A body per tier](issues/10-tier-bodies.md)                           | Every tier draws the same circle today             |
+| [#11](https://github.com/Travja/Nova/issues/11)   | [Solar-system view](issues/11-system-view.md)                         | One sky instead of a grid of dials                 |
+| [#12](https://github.com/Travja/Nova/issues/12) ✓ | [Nested orbits](issues/12-nested-orbits.md)                           | Makes the tier ladder mean something mechanically  |
+| [#13](https://github.com/Travja/Nova/issues/13) ✓ | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app              |
+| [#14](https://github.com/Travja/Nova/issues/14) ✓ | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield              |
+| [#30](https://github.com/Travja/Nova/issues/30)   | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app |
+| [#41](https://github.com/Travja/Nova/issues/41)   | [Starfield viewport units](issues/41-starfield-viewport-units.md)     | `vmin` rebases when a mobile address bar hides     |
 
 ## M3 — Insight
+
+_0 of 4 done._
 
 Turning a log into something you learn from.
 
@@ -64,17 +71,19 @@ Turning a log into something you learn from.
 
 ## M4 — Reach and operations
 
+_4 of 7 done._
+
 Making it dependable, and making it speak up.
 
-| #                                               | Issue                                                 | Why it matters                                    |
-| ----------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------- |
-| [#19](https://github.com/Travja/Nova/issues/19) | [Push reminders](issues/19-push-reminders.md)         | An app that never speaks up is easy to forget     |
-| [#20](https://github.com/Travja/Nova/issues/20) | [PWA polish](issues/20-install-and-shortcuts.md)      | Shortcuts, share target, iOS install guidance     |
-| [#21](https://github.com/Travja/Nova/issues/21) | [Orbit rollups](issues/21-orbit-rollups.md)           | Dashboard cost scales with lifetime entries today |
-| [#22](https://github.com/Travja/Nova/issues/22) | [Logging and errors](issues/22-logging-and-errors.md) | Debugging a self-hosted instance is guesswork     |
-| [#23](https://github.com/Travja/Nova/issues/23) | [Automated backups](issues/23-backups.md)             | Years of history in one file                      |
-| [#24](https://github.com/Travja/Nova/issues/24) | [Deployment guide](issues/24-deployment-guide.md)     | PWAs need HTTPS and an exact `ORIGIN`             |
-| [#29](https://github.com/Travja/Nova/issues/29) | [Backup catch-up](issues/29-backup-catch-up.md)       | A rebooting host can miss every snapshot          |
+| #                                                 | Issue                                                 | Why it matters                                    |
+| ------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------- |
+| [#19](https://github.com/Travja/Nova/issues/19)   | [Push reminders](issues/19-push-reminders.md)         | An app that never speaks up is easy to forget     |
+| [#20](https://github.com/Travja/Nova/issues/20) ✓ | [PWA polish](issues/20-install-and-shortcuts.md)      | Shortcuts, share target, iOS install guidance     |
+| [#21](https://github.com/Travja/Nova/issues/21)   | [Orbit rollups](issues/21-orbit-rollups.md)           | Dashboard cost scales with lifetime entries today |
+| [#22](https://github.com/Travja/Nova/issues/22) ✓ | [Logging and errors](issues/22-logging-and-errors.md) | Debugging a self-hosted instance is guesswork     |
+| [#23](https://github.com/Travja/Nova/issues/23) ✓ | [Automated backups](issues/23-backups.md)             | Years of history in one file                      |
+| [#24](https://github.com/Travja/Nova/issues/24) ✓ | [Deployment guide](issues/24-deployment-guide.md)     | PWAs need HTTPS and an exact `ORIGIN`             |
+| [#29](https://github.com/Travja/Nova/issues/29)   | [Backup catch-up](issues/29-backup-catch-up.md)       | A rebooting host can miss every snapshot          |
 
 ## Deliberately not planned
 
