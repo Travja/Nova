@@ -107,6 +107,7 @@ function signedInRoutes(goalHref: string): string[] {
 		'/',
 		'/?reorder=1',
 		'/today',
+		'/stats',
 		'/goals/new',
 		goalPath,
 		`${goalPath}?confirm=archive`,
