@@ -124,6 +124,18 @@ position and fill say the same thing twice.
 - Playwright can reuse a preinstalled browser via
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE`; CI installs its own.
 
+## Session start
+
+`.claude/hooks/session-start.sh` runs before the agent does. It installs
+dependencies so a test run works first try, and prints a generated index of
+every exported function in `$domain` and `$lib/server` — which module holds
+which symbol.
+
+**Use that index instead of grepping for where something lives.** It is
+regenerated on every start, so it cannot go stale, and it exists because
+sessions were rebuilding the same map by reading whole modules to find one
+function.
+
 ## Where the work is
 
 Work is tracked as GitHub issues, grouped into four milestones. The original
