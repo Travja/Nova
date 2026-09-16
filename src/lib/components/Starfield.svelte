@@ -104,21 +104,27 @@
 		position: absolute;
 	}
 
+	/*
+	 * Percentages of `.starfield`, which is `position: fixed; inset: 0` — not
+	 * `vmin`, which rebases when a mobile address bar hides mid-scroll. That is
+	 * the bug that sent the comet jumping (see `.shooting-star` below); these
+	 * blobs have no edge to show it, which is the only reason it went unnoticed.
+	 */
 	.nebula--violet {
 		background: radial-gradient(circle, rgba(124, 92, 240, 0.3), transparent 70%);
-		height: 60vmin;
-		left: -10vmin;
-		top: -8vmin;
-		width: 60vmin;
+		height: 60%;
+		left: -10%;
+		top: -8%;
+		width: 60%;
 		animation: breathe 26s ease-in-out infinite;
 	}
 
 	.nebula--teal {
 		background: radial-gradient(circle, rgba(45, 212, 191, 0.14), transparent 70%);
-		bottom: -14vmin;
-		height: 52vmin;
-		right: -12vmin;
-		width: 52vmin;
+		bottom: -14%;
+		height: 52%;
+		right: -12%;
+		width: 52%;
 		animation: breathe 34s ease-in-out infinite reverse;
 	}
 
