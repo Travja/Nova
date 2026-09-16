@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import ChildOrbits from '$components/ChildOrbits.svelte';
+	import FieldError from '$components/FieldError.svelte';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import OrbitHistory from '$components/OrbitHistory.svelte';
 	import { celebrationFor, noteOrbits } from '$lib/celebration.svelte';
@@ -11,6 +12,7 @@
 	import { metricFor } from '$domain/nesting';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import { overlayQueued } from '$domain/queue';
+	import { describedBy } from '$domain/validation';
 	import { logOrQueue, type QueuedState } from '$lib/offline/enhance';
 	import { queuedEntries } from '$lib/offline/queue.svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -257,8 +259,6 @@
 			<h2>Log progress</h2>
 
 			{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
-			{#if form?.errors?.amount}<p class="error">{form.errors.amount}</p>{/if}
-			{#if form?.errors?.occurredAt}<p class="error">{form.errors.occurredAt}</p>{/if}
 
 			<p class="live" role="status">
 				{#if queued === 'stored'}
@@ -291,7 +291,15 @@
 					<label for="amount">
 						Amount {#if goal.metric.kind === 'duration'}<span class="muted">(minutes)</span>{/if}
 					</label>
-					<input id="amount" name="amount" type="number" step="any" required />
+					<input
+						id="amount"
+						name="amount"
+						type="number"
+						step="any"
+						required
+						{...describedBy(form?.errors?.amount, 'amount')}
+					/>
+					<FieldError id="amount" message={form?.errors?.amount} />
 				</div>
 				<div class="field">
 					<label for="occurredAt">When</label>
@@ -304,7 +312,9 @@
 						min={data.occurredAt.min}
 						max={data.occurredAt.max}
 						oninput={() => (whenDirty = true)}
+						{...describedBy(form?.errors?.occurredAt, 'occurredAt')}
 					/>
+					<FieldError id="occurredAt" message={form?.errors?.occurredAt} />
 				</div>
 				<div class="field">
 					<label for="note">Note</label>

@@ -157,6 +157,44 @@ test('revoking a session lands focus somewhere deliberate', async ({ page, brows
 });
 
 /**
+ * What the browser's own accessibility tree says about a form field: its
+ * computed description (what `aria-describedby` resolves to) and whether it
+ * is marked invalid.
+ *
+ * Reading `node.description` rather than the error paragraph's text directly
+ * is the point — `aria-describedby` can point at any id, or at none, and only
+ * the browser's own resolution proves the two are actually wired together.
+ * CDP, so Chromium-only, matching `disclosure()` above.
+ */
+async function accessibleField(page: Page, context: BrowserContext, role: string, name: string) {
+	const cdp = await context.newCDPSession(page);
+	await cdp.send('Accessibility.enable');
+	const { nodes } = (await cdp.send('Accessibility.getFullAXTree')) as {
+		nodes: Array<{
+			role?: { value?: string };
+			name?: { value?: string };
+			description?: { value?: string };
+			properties?: Array<{ name: string; value: { value?: unknown } }>;
+		}>;
+	};
+	await cdp.detach();
+
+	// Matched on role as well as name: the label's own text is a node too, and
+	// shares the control's name. Case-insensitively, since a label styled
+	// `text-transform: uppercase` computes an accessible name in that case.
+	const node = nodes.find(
+		(candidate) =>
+			candidate.role?.value === role &&
+			candidate.name?.value?.trim().toLowerCase() === name.toLowerCase()
+	);
+	if (!node) return null;
+	return {
+		description: node.description?.value ?? '',
+		invalid: node.properties?.find((entry) => entry.name === 'invalid')?.value.value
+	};
+}
+
+/**
  * What the browser's own accessibility tree says about a disclosure.
  *
  * Playwright's role engine follows ARIA-in-HTML, where `<summary>` has no
@@ -281,4 +319,40 @@ test('the goal form tabs in order, and both hidden radio groups show focus', asy
 			`the ${group} picker's focus ring has no width`
 		).toBeGreaterThan(0);
 	}
+});
+
+/**
+ * #39: a field's error is wired to its control, not left as a sibling
+ * paragraph nothing points at.
+ *
+ * Asserting from the DOM (`toHaveAttribute('aria-describedby', ...)`) would
+ * only prove the two elements carry matching strings — it says nothing about
+ * whether the browser actually resolves that into a description a screen
+ * reader announces. `accessibleField` reads Chromium's own computation
+ * instead, over CDP.
+ */
+test('a logged amount of zero announces its error on the control, and a clean field carries neither attribute', async ({
+	page,
+	context
+}) => {
+	await register(page, freshEmail());
+	await launchGoal(page, 'First light');
+	await hydrated(page);
+
+	// Clean before anything is submitted: no description, no invalid state.
+	// (Chromium reports `invalid: "false"` on any control with a native
+	// constraint to satisfy, `required` here — a string, and a truthy one, so
+	// the assertion below is `not.toBe('true')` rather than `toBeFalsy()`.)
+	const clean = await accessibleField(page, context, 'spinbutton', 'Amount');
+	expect(clean?.description).toBe('');
+	expect(clean?.invalid).not.toBe('true');
+
+	await page.getByLabel('Amount').fill('0');
+	await page.getByRole('button', { name: 'Log it' }).click();
+
+	await expect(page.getByText('Log something other than zero.')).toBeVisible();
+
+	const errored = await accessibleField(page, context, 'spinbutton', 'Amount');
+	expect(errored?.description).toBe('Log something other than zero.');
+	expect(errored?.invalid).toBe('true');
 });

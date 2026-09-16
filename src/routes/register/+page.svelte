@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import FieldError from '$components/FieldError.svelte';
 	import Rocket from '$components/Rocket.svelte';
+	import { describedBy } from '$domain/validation';
 	import type { PageProps } from './$types';
 
 	let { form }: PageProps = $props();
@@ -31,8 +33,9 @@
 				required
 				maxlength="64"
 				defaultValue={form?.displayName ?? ''}
+				{...describedBy(form?.errors?.displayName, 'displayName')}
 			/>
-			{#if form?.errors?.displayName}<p class="error">{form.errors.displayName}</p>{/if}
+			<FieldError id="displayName" message={form?.errors?.displayName} />
 		</div>
 
 		<div class="field">
@@ -44,8 +47,9 @@
 				autocomplete="email"
 				required
 				defaultValue={form?.email ?? ''}
+				{...describedBy(form?.errors?.email, 'email')}
 			/>
-			{#if form?.errors?.email}<p class="error">{form.errors.email}</p>{/if}
+			<FieldError id="email" message={form?.errors?.email} />
 		</div>
 
 		<div class="field">
@@ -57,8 +61,9 @@
 				autocomplete="new-password"
 				minlength="8"
 				required
+				{...describedBy(form?.errors?.password, 'password')}
 			/>
-			{#if form?.errors?.password}<p class="error">{form.errors.password}</p>{/if}
+			<FieldError id="password" message={form?.errors?.password} />
 		</div>
 
 		<div class="field">

@@ -4,10 +4,11 @@
 	import { eligibleParents, ORBIT_METRIC, type ParentCandidate } from '$domain/nesting';
 	import { TIER_DEFINITIONS, TIER_LIST } from '$domain/tiers';
 	import OrbitDial from '$components/OrbitDial.svelte';
+	import FieldError from '$components/FieldError.svelte';
 	import { buildOrbit, formatAmount } from '$domain/progress';
 	import { resolve } from '$app/paths';
 	import { periodFor } from '$domain/period';
-	import type { FormErrors } from '$domain/validation';
+	import { describedBy, type FormErrors } from '$domain/validation';
 
 	interface Props {
 		goal?: Goal | null;
@@ -92,8 +93,15 @@
 	<form class="panel form" method="POST">
 		<div class="field">
 			<label for="title">What is the goal?</label>
-			<input id="title" name="title" bind:value={title} maxlength="80" required />
-			{#if errors?.title}<p class="error">{errors.title}</p>{/if}
+			<input
+				id="title"
+				name="title"
+				bind:value={title}
+				maxlength="80"
+				required
+				{...describedBy(errors?.title, 'title')}
+			/>
+			<FieldError id="title" message={errors?.title} />
 		</div>
 
 		<div class="field">
@@ -103,7 +111,9 @@
 			>
 		</div>
 
-		<fieldset class="field">
+		<!-- A radio group announces as one control via its legend, so the
+		     description belongs on the fieldset rather than on any one radio. -->
+		<fieldset class="field" {...describedBy(errors?.tier, 'tier')}>
 			<legend>Tier</legend>
 			<div class="tiers">
 				{#each TIER_LIST as entry (entry.id)}
@@ -115,7 +125,7 @@
 					</label>
 				{/each}
 			</div>
-			{#if errors?.tier}<p class="error">{errors.tier}</p>{/if}
+			<FieldError id="tier" message={errors?.tier} />
 		</fieldset>
 
 		{#if nested}
@@ -133,8 +143,9 @@
 					step="1"
 					bind:value={target}
 					required
+					{...describedBy(errors?.target, 'target')}
 				/>
-				{#if errors?.target}<p class="error">{errors.target}</p>{/if}
+				<FieldError id="target" message={errors?.target} />
 				<p class="muted note">
 					{children.length}
 					{children.length === 1 ? 'goal feeds' : 'goals feed'} this one, so its orbit counts how many
@@ -168,8 +179,9 @@
 						step="any"
 						bind:value={target}
 						required
+						{...describedBy(errors?.target, 'target')}
 					/>
-					{#if errors?.target}<p class="error">{errors.target}</p>{/if}
+					<FieldError id="target" message={errors?.target} />
 				</div>
 			</div>
 
@@ -191,7 +203,12 @@
 
 		<div class="field">
 			<label for="parentId">Feeds <span class="muted">(optional)</span></label>
-			<select id="parentId" name="parentId" bind:value={parentId}>
+			<select
+				id="parentId"
+				name="parentId"
+				bind:value={parentId}
+				{...describedBy(errors?.parentId, 'parentId')}
+			>
 				<option value="">Nothing — this goal stands alone</option>
 				{#each parents as candidate (candidate.id)}
 					<option value={candidate.id}>
@@ -199,7 +216,7 @@
 					</option>
 				{/each}
 			</select>
-			{#if errors?.parentId}<p class="error">{errors.parentId}</p>{/if}
+			<FieldError id="parentId" message={errors?.parentId} />
 			<p class="muted note">
 				{#if parents.length === 0}
 					Nothing to feed yet. A goal can only feed one on a longer cadence — a weekly Planet into a

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import FieldError from '$components/FieldError.svelte';
 	import { PREFERENCE_KEYS, specFor } from '$domain/preferences';
+	import { describedBy } from '$domain/validation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageProps } from './$types';
 
@@ -59,18 +61,19 @@
 				defaultValue={data.profile.displayName}
 				maxlength="64"
 				required
+				{...describedBy(form?.errors?.displayName, 'displayName')}
 			/>
-			{#if form?.errors?.displayName}<p class="error">{form.errors.displayName}</p>{/if}
+			<FieldError id="displayName" message={form?.errors?.displayName} />
 		</div>
 
 		<div class="field">
 			<label for="timeZone">Time zone</label>
-			<select id="timeZone" name="timeZone">
+			<select id="timeZone" name="timeZone" {...describedBy(form?.errors?.timeZone, 'timeZone')}>
 				{#each zones as zone (zone)}
 					<option value={zone} selected={zone === data.profile.timeZone}>{zone}</option>
 				{/each}
 			</select>
-			{#if form?.errors?.timeZone}<p class="error">{form.errors.timeZone}</p>{/if}
+			<FieldError id="timeZone" message={form?.errors?.timeZone} />
 		</div>
 
 		<div class="field">

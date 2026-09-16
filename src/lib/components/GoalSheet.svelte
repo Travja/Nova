@@ -8,6 +8,7 @@
 	import { formatAmount } from '$domain/progress';
 	import { metricFor } from '$domain/nesting';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
+	import { describedBy, errorId } from '$domain/validation';
 	import { logOrQueue, type QueuedState } from '$lib/offline/enhance';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -109,6 +110,7 @@
 					inputmode="decimal"
 					bind:value={amount}
 					required
+					{...describedBy(error, `sheet-amount-${goal.id}`)}
 				/>
 			</div>
 
@@ -126,7 +128,9 @@
 			<button class="button" type="submit" disabled={pending}>Log it</button>
 		</form>
 
-		<p class="error" role="alert">{error}</p>
+		<!-- `role="alert"` rather than `<FieldError>`: the sheet never navigates
+		     and the input keeps focus, so nothing else would announce this. -->
+		<p id={errorId(`sheet-amount-${goal.id}`)} class="error" role="alert">{error}</p>
 		{#if queued}
 			<p class="queued" role="status">
 				{#if queued === 'stored'}
