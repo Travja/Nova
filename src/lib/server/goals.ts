@@ -7,6 +7,7 @@ import {
 	type ChildInput,
 	type ParentProblem
 } from '$domain/nesting';
+import { periodsSinceLaunch } from '$domain/stats';
 import type { Goal, ProgressEntry } from '$domain/types';
 import type { GoalInput } from '$domain/validation';
 import { db } from '$lib/server/db';
@@ -148,7 +149,8 @@ function snapshotFromForest(
 	goal: Goal,
 	forest: Forest,
 	user: SessionUser,
-	now: Date
+	now: Date,
+	historyLength?: number
 ): GoalSnapshot {
 	return snapshotWithChildren(
 		goal,
@@ -157,6 +159,7 @@ function snapshotFromForest(
 		{
 			...periodOptions(user),
 			now,
+			historyLength,
 			dormantWindows: forest.dormantByGoal.get(goal.id) ?? []
 		}
 	);
@@ -206,6 +209,65 @@ export async function listArchivedSnapshots(user: SessionUser): Promise<GoalSnap
 		.filter((goal) => goal.archivedAt !== null)
 		.sort((a, b) => (b.archivedAt?.getTime() ?? 0) - (a.archivedAt?.getTime() ?? 0))
 		.map((goal) => snapshotFromForest(goal, forest, user, goal.archivedAt ?? new Date()));
+}
+
+/**
+ * Bounds how far back a statistic ever looks, whatever a goal's actual age.
+ *
+ * `listGoalSnapshots()` already notes the shape of this trade-off: fine for
+ * years of daily history, wrong once someone has decades of it. 3660 covers
+ * ten years of the shortest cadence there is, which is generous for a stats
+ * page nobody is paying for beyond that.
+ */
+const MAX_STATS_HISTORY = 3660;
+
+/** What `/stats` needs: active goals' full-lifetime orbits, and active leaf goals' raw entries. */
+export interface StatsInputs {
+	/** Every active goal, leaf or derived, with orbit history back to launch. */
+	snapshots: GoalSnapshot[];
+	/**
+	 * Active goals with no children — the only ones with entries of their own.
+	 * Momentum and the logging rhythm need a continuous, timestamped stream,
+	 * which a derived goal does not carry: its number only moves when a child
+	 * orbit closes, not while its own period runs.
+	 */
+	leaves: { goal: Goal; entries: ProgressEntry[]; dormantWindows: DormantWindow[] }[];
+}
+
+/**
+ * Everything `/stats` computes from, loaded once.
+ *
+ * Best streak and completion rate want a goal's whole lifetime of orbits, not
+ * the 12-orbit window every other screen defaults to, so each goal's history
+ * is sized to its own age via `periodsSinceLaunch()` rather than a fixed
+ * count that would either cut a long-lived goal short or build months of
+ * empty orbits for a goal launched last week.
+ *
+ * Archived goals are left out entirely, matching `listGoalSnapshots()`: the
+ * numbers here are about what is still in orbit, not a record of everything
+ * that ever flew.
+ */
+export async function loadStatsInputs(user: SessionUser, now = new Date()): Promise<StatsInputs> {
+	const forest = await loadForest(user.id);
+	const active = forest.goals.filter((goal) => goal.archivedAt === null);
+
+	const snapshots = active.map((goal) => {
+		const historyLength = Math.min(
+			MAX_STATS_HISTORY,
+			periodsSinceLaunch(goal.createdAt, now, cadenceOf(goal.tier), periodOptions(user))
+		);
+		return snapshotFromForest(goal, forest, user, now, historyLength);
+	});
+
+	const leaves = active
+		.filter((goal) => childrenOf(goal.id, forest.goals).length === 0)
+		.map((goal) => ({
+			goal,
+			entries: forest.entriesByGoal.get(goal.id) ?? [],
+			dormantWindows: forest.dormantByGoal.get(goal.id) ?? []
+		}));
+
+	return { snapshots, leaves };
 }
 
 export async function getGoal(userId: string, goalId: string): Promise<Goal | null> {
