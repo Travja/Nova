@@ -200,6 +200,31 @@ export function safeNextPath(value: string | null | undefined, fallback = '/'): 
 /** Field name to message, with `form` reserved for errors that belong to the whole form. */
 export type FormErrors = Record<string, string>;
 
+/** The id an error paragraph gets, so a control's `aria-describedby` can point at it. */
+export function errorId(id: string): string {
+	return `${id}-error`;
+}
+
+/**
+ * `aria-invalid` and `aria-describedby` for a control, from the message that
+ * renders beside it — `undefined` on both when the field is clean, so it
+ * carries no attribute at all rather than an explicit "false".
+ *
+ * `id` is the control's own id rather than the schema field name, since a
+ * page can repeat a field name across several rows with unique ids — editing
+ * an entry reuses `amount` for every row. Pair this with `<FieldError>`,
+ * which renders the paragraph at that same id.
+ */
+export function describedBy(
+	message: string | null | undefined,
+	id: string
+): { 'aria-invalid': 'true' | undefined; 'aria-describedby': string | undefined } {
+	return {
+		'aria-invalid': message ? 'true' : undefined,
+		'aria-describedby': message ? errorId(id) : undefined
+	};
+}
+
 /** A form-level message in the same shape as field errors, so payloads union cleanly. */
 export function formError(message: string): FormErrors {
 	return { form: message };

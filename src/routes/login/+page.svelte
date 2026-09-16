@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
+	import FieldError from '$components/FieldError.svelte';
+	import { describedBy } from '$domain/validation';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -32,8 +34,9 @@
 				autocomplete="email"
 				required
 				defaultValue={form?.email ?? ''}
+				{...describedBy(form?.errors?.email, 'email')}
 			/>
-			{#if form?.errors?.email}<p class="error">{form.errors.email}</p>{/if}
+			<FieldError id="email" message={form?.errors?.email} />
 		</div>
 
 		<div class="field">
@@ -44,8 +47,9 @@
 				type="password"
 				autocomplete="current-password"
 				required
+				{...describedBy(form?.errors?.password, 'password')}
 			/>
-			{#if form?.errors?.password}<p class="error">{form.errors.password}</p>{/if}
+			<FieldError id="password" message={form?.errors?.password} />
 		</div>
 
 		<button class="button" type="submit">Sign in</button>

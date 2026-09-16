@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import FieldError from '$components/FieldError.svelte';
+	import { describedBy } from '$domain/validation';
 	import { focusTarget } from '$lib/focus';
 	import { tick } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -104,8 +106,9 @@
 				type="password"
 				autocomplete="current-password"
 				required
+				{...describedBy(form?.errors?.currentPassword, 'currentPassword')}
 			/>
-			{#if form?.errors?.currentPassword}<p class="error">{form.errors.currentPassword}</p>{/if}
+			<FieldError id="currentPassword" message={form?.errors?.currentPassword} />
 		</div>
 
 		<div class="field">
@@ -117,8 +120,9 @@
 				autocomplete="new-password"
 				minlength="8"
 				required
+				{...describedBy(form?.errors?.newPassword, 'newPassword')}
 			/>
-			{#if form?.errors?.newPassword}<p class="error">{form.errors.newPassword}</p>{/if}
+			<FieldError id="newPassword" message={form?.errors?.newPassword} />
 		</div>
 
 		<div class="field">
@@ -130,8 +134,9 @@
 				autocomplete="new-password"
 				minlength="8"
 				required
+				{...describedBy(form?.errors?.confirmPassword, 'confirmPassword')}
 			/>
-			{#if form?.errors?.confirmPassword}<p class="error">{form.errors.confirmPassword}</p>{/if}
+			<FieldError id="confirmPassword" message={form?.errors?.confirmPassword} />
 		</div>
 
 		<button class="button" type="submit">Change password</button>

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
+	import FieldError from '$components/FieldError.svelte';
+	import { describedBy } from '$domain/validation';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -34,8 +36,15 @@
 
 			<div class="field">
 				<label for="email">Email</label>
-				<input id="email" name="email" type="email" autocomplete="email" required />
-				{#if form?.errors?.email}<p class="error">{form.errors.email}</p>{/if}
+				<input
+					id="email"
+					name="email"
+					type="email"
+					autocomplete="email"
+					required
+					{...describedBy(form?.errors?.email, 'email')}
+				/>
+				<FieldError id="email" message={form?.errors?.email} />
 			</div>
 
 			<button class="button" type="submit">Send the link</button>
