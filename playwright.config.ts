@@ -57,7 +57,23 @@ export default defineConfig({
 				// Mail goes to files the tests read, never to a server, and ORIGIN is
 				// what the reset links are built from.
 				MAIL_OUTBOX_DIR: './data/e2e-outbox',
-				ORIGIN: 'http://localhost:4173'
+				ORIGIN: 'http://localhost:4173',
+				/*
+				 * Placeholder VAPID configuration, so the reminders screen is the one
+				 * a configured instance shows rather than the "not set up here"
+				 * notice.
+				 *
+				 * Deliberately not a real key pair, and not a generated one either.
+				 * `readPushConfig()` only checks the shape — base64url, 87 and 43
+				 * characters — and nothing in this suite ever sends: a headless
+				 * browser has no push service to subscribe against, so no
+				 * subscription is ever stored and no push is ever signed. A private
+				 * key in a repository is a thing secret scanners are right to object
+				 * to, even a throwaway one.
+				 */
+				VAPID_PUBLIC_KEY: `B${'e'.repeat(86)}`,
+				VAPID_PRIVATE_KEY: 'e'.repeat(43),
+				VAPID_SUBJECT: 'mailto:e2e@example.com'
 			},
 			stdout: 'pipe'
 		},

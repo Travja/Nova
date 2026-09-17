@@ -4,7 +4,8 @@ import { periodFor } from './period';
 import { buildOrbit, focusForToday, type GoalSnapshot } from './progress';
 import type { Goal } from './types';
 
-const now = new Date('2026-09-12T18:00:00Z');
+/** Evening, so a satellite is inside the last quarter of its day. */
+const now = new Date('2026-09-12T19:00:00Z');
 const options = { timeZone: 'UTC' };
 
 function goal(overrides: Partial<Goal> = {}): Goal {
@@ -65,8 +66,8 @@ describe('mascotFor', () => {
 	});
 
 	it('goes alert, pointing at the orbit that needs attention', () => {
-		// A satellite is always within a day of closing; at 80% there is little
-		// left to do and every reason to say so.
+		// The satellite's day is nearly over; at 80% there is little left to do
+		// and every reason to say so.
 		const state = mascotFor(focusForToday([snapshot(8), yearly(70)], now));
 		expect(state.mood).toBe('alert');
 		expect(state.subject?.goal.id).toBe('goal-1');

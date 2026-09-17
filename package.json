@@ -36,6 +36,7 @@
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@types/better-sqlite3": "^9.6.0",
 		"@types/nodemailer": "^8.0.1",
+		"@types/web-push": "^3.6.4",
 		"@vite-pwa/sveltekit": "^1.1.0",
 		"@vitest/coverage-v8": "^5.0.0",
 		"drizzle-kit": "^0.31.10",
@@ -58,6 +59,7 @@
 		"better-sqlite3": "^13.0.3",
 		"drizzle-orm": "^0.45.2",
 		"nodemailer": "^10.0.9",
+		"web-push": "^3.6.7",
 		"zod": "^4.6.2"
 	},
 	"description": "Track your goals as orbits — a space-themed, installable goal tracker."

@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { hydrated } from './helpers';
+import { EVENING, hydrated, pinClock } from './helpers';
 
 /**
  * The primary action, where a thumb can reach it.
@@ -72,6 +72,9 @@ test('a phone gets one thumb-reachable tap to a new goal, and the header gives i
 
 test('the floating button never sits on the last row of a list', async ({ page }) => {
 	await page.setViewportSize(PHONE);
+	// A full at-risk list is the layout this is about, and that is an evening:
+	// the goals below are only drawn as cards while they are running out of time.
+	await pinClock(page, EVENING);
 	await register(page);
 	// Enough cards that Today scrolls and has a genuine last row.
 	for (const title of ['Read pages', 'Push-ups', 'Stretching', 'Water the plants']) {

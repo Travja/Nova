@@ -7,8 +7,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) redirect(303, `/login?next=${encodeURIComponent(url.pathname)}`);
 
 	// The same instant snapshots the orbits and ranks them, so a goal cannot be
-	// measured against one clock and sorted against another.
-	const now = new Date();
+	// measured against one clock and sorted against another. It comes from the
+	// request rather than from `new Date()` so a test can pin the hour — which
+	// this view's meaning depends on, now that a satellite is only running out
+	// of time in the last quarter of its day. See `$lib/server/clock`.
+	const now = locals.now;
 	return {
 		snapshots: await listGoalSnapshots(locals.user, now),
 		now

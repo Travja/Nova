@@ -58,7 +58,7 @@ The reason to open the app rather than a spreadsheet.
 
 ## M3 — Insight
 
-_1 of 4 done._
+_2 of 5 done._
 
 Turning a log into something you learn from.
 
@@ -68,17 +68,17 @@ Turning a log into something you learn from.
 | [#16](https://github.com/Travja/Nova/issues/16) ✓ | [Stats](issues/16-stats.md)                                 | Cheap to derive from buckets already built              |
 | [#17](https://github.com/Travja/Nova/issues/17)   | [Export, import, delete](issues/17-export-import-delete.md) | It is your record; it should be portable                |
 | [#18](https://github.com/Travja/Nova/issues/18)   | [Orbit notes](issues/18-orbit-notes.md)                     | The reflection is about the period, not the entry       |
-| [#48](https://github.com/Travja/Nova/issues/48)   | [Closing window](issues/48-closing-window.md)               | "Running out of time" is on all day, so it says nothing |
+| [#48](https://github.com/Travja/Nova/issues/48) ✓ | [Closing window](issues/48-closing-window.md)               | "Running out of time" is on all day, so it says nothing |
 
 ## M4 — Reach and operations
 
-_4 of 7 done._
+_5 of 7 done._
 
 Making it dependable, and making it speak up.
 
 | #                                                 | Issue                                                 | Why it matters                                    |
 | ------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------- |
-| [#19](https://github.com/Travja/Nova/issues/19)   | [Push reminders](issues/19-push-reminders.md)         | An app that never speaks up is easy to forget     |
+| [#19](https://github.com/Travja/Nova/issues/19) ✓ | [Push reminders](issues/19-push-reminders.md)         | An app that never speaks up is easy to forget     |
 | [#20](https://github.com/Travja/Nova/issues/20) ✓ | [PWA polish](issues/20-install-and-shortcuts.md)      | Shortcuts, share target, iOS install guidance     |
 | [#21](https://github.com/Travja/Nova/issues/21)   | [Orbit rollups](issues/21-orbit-rollups.md)           | Dashboard cost scales with lifetime entries today |
 | [#22](https://github.com/Travja/Nova/issues/22) ✓ | [Logging and errors](issues/22-logging-and-errors.md) | Debugging a self-hosted instance is guesswork     |

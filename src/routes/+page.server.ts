@@ -13,7 +13,7 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) return { snapshots: null, reordering: false };
 	return {
-		snapshots: await listGoalSnapshots(locals.user),
+		snapshots: await listGoalSnapshots(locals.user, locals.now),
 		/** Reorder mode lives in the URL, so it survives a submit without JavaScript. */
 		reordering: url.searchParams.get('reorder') === '1'
 	};

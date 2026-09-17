@@ -109,6 +109,11 @@
 	</form>
 
 	<p class="muted">
+		Want Nova to speak up before a period closes?
+		<a href={resolve('/settings/reminders')}>Reminders</a>.
+	</p>
+
+	<p class="muted">
 		Looking for your password or the devices you are signed in on?
 		<a href={resolve('/settings/security')}>Security settings</a>.
 	</p>

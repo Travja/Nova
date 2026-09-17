@@ -11,6 +11,16 @@ export default defineConfig({
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
 				/*
+				 * Reminders (#19), added to the generated worker rather than replacing
+				 * it. `generateSW` already carries the precache, the Background Sync
+				 * queue the offline log flushes through, and the `SKIP_WAITING`
+				 * listener `UpdatePrompt.svelte` posts to; a custom worker would mean
+				 * reimplementing all three, and the update prompt would fail silently
+				 * if it were forgotten. One `importScripts` at the top of the worker
+				 * keeps every one of them untouched.
+				 */
+				importScripts: ['/push-sw.js'],
+				/*
 				 * No navigation fallback, and not by omission.
 				 *
 				 * `@vite-pwa/sveltekit` defaults this to the app's base path, which

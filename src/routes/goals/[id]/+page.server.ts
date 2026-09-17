@@ -43,10 +43,10 @@ async function orbitReport(user: SessionUser, goal: Goal, occurredAt: Date, now:
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	if (!locals.user) redirect(303, `/login?next=${encodeURIComponent(url.pathname)}`);
 
-	const detail = await getGoalDetail(locals.user, params.id);
+	const now = locals.now;
+	const detail = await getGoalDetail(locals.user, params.id, now);
 	if (!detail) error(404, 'That goal is not in orbit.');
 
-	const now = new Date();
 	const bounds = occurredAtBounds(detail.snapshot.goal, periodOptions(locals.user), now);
 
 	return {

@@ -110,6 +110,10 @@ Two environment variables matter in production:
   as cross-site.
 - `DATABASE_URL` — defaults to `file:/data/nova.db` inside the container.
 
+Two more turn optional things on, and both are off until you set them:
+`SMTP_HOST` for password reset mail, and `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`
+for reminder notifications.
+
 Put it behind a TLS-terminating reverse proxy: installing a PWA and storing a
 session cookie both require HTTPS on anything other than `localhost`.
 
@@ -173,6 +177,8 @@ src/lib/components/bodies/ The bodies each tier can be drawn as, one file per ti
 src/routes/                Pages and form actions
 e2e/                       Playwright journeys
 src/lib/offline/           The sync queue behind logging without a network
+src/lib/server/push/       Reminder subscriptions, VAPID config and the sweep
+static/push-sw.js          The service worker's push and notification handlers
 scripts/                   Migration runner and the PWA icon generator
 ```
 

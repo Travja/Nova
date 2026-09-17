@@ -1,6 +1,8 @@
-import { building } from '$app/environment';
+import { building, dev } from '$app/environment';
 import { SESSION_COOKIE, validateSession, clearSessionCookie } from '$lib/server/auth/session';
+import { CLOCK_COOKIE, clockOverride } from '$lib/server/clock';
 import { startBackupSchedule } from '$lib/server/backup';
+import { startReminderSchedule } from '$lib/server/push';
 import { handleServerError } from '$lib/server/errors';
 import { logger, newTraceId, serializeError } from '$lib/server/log';
 import { DEFAULT_PREFERENCES, preferenceAttributeString } from '$domain/preferences';
@@ -10,6 +12,10 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 // Snapshots run in-process so a stock `docker compose up` is backed up without
 // anyone wiring up cron. Off while developing; see `readBackupConfig()`.
 if (!building) startBackupSchedule();
+
+// The reminder sweep runs in-process for the same reason. Off entirely unless
+// VAPID keys are configured — see `$lib/server/push`.
+if (!building) startReminderSchedule();
 
 /** The container healthcheck polls this every 30s; it does not belong in the request stream. */
 const HEALTH_PATH = '/health';
@@ -70,6 +76,24 @@ const withSession: Handle = async ({ event, resolve }) => {
 };
 
 /**
+ * The instant this request is answered against.
+ *
+ * One clock per request, so a goal cannot be measured against one and ranked
+ * against another, and — in development only — a clock a test can pin. `dev` is
+ * a literal `false` in a production build, so the override below is removed
+ * from the bundle rather than merely skipped: nothing a request carries can
+ * move a deployed instance's clock. See `$lib/server/clock`.
+ */
+const withClock: Handle = async ({ event, resolve }) => {
+	const now = new Date();
+	event.locals.now = dev
+		? (clockOverride(event.cookies.get(CLOCK_COOKIE), event.locals.user?.timeZone ?? 'UTC', now) ??
+			now)
+		: now;
+	return resolve(event);
+};
+
+/**
  * Stamp the account's preferences onto `<html>`, where CSS can select on them.
  *
  * `app.html` is a static file and Svelte cannot reach outside the body, so this
@@ -86,7 +110,7 @@ const withPreferences: Handle = async ({ event, resolve }) => {
 	});
 };
 
-export const handle: Handle = sequence(withRequestLogging, withSession, withPreferences);
+export const handle: Handle = sequence(withRequestLogging, withSession, withClock, withPreferences);
 
 /**
  * Every unexpected error gets an id. The detail — including the stack — goes to

@@ -1,9 +1,16 @@
 import { expect, type Page, test } from '@playwright/test';
-import { hydrated } from './helpers';
+import { EVENING, hydrated, pinClock } from './helpers';
 
 /**
  * The focused view: what is at risk before its period closes, logged without
  * leaving the screen, with the closed ones folded away rather than dropped.
+ *
+ * Every test that asserts on what is at risk pins the clock first. A satellite
+ * is only running out of time in the last quarter of its day (#48), so at 09:00
+ * these pages say something entirely different and correctly so — the hour is
+ * part of what is being tested, not a detail to be at the mercy of. `21:00` is
+ * an evening in the test user's own zone, whatever zone the machine running
+ * this is in.
  */
 
 async function register(page: Page, name: string) {
@@ -44,6 +51,7 @@ function riskRow(page: Page, title: string) {
 test('the today view ranks what is at risk, logs inline and folds the closed away', async ({
 	page
 }) => {
+	await pinClock(page, EVENING);
 	await register(page, 'Nadia Okonkwo');
 	await launchGoal(page, 'Read pages', 'Satellite', '5');
 	await launchGoal(page, 'Push-ups', 'Satellite', '5');
@@ -85,13 +93,18 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 });
 
 test('a goal with a whole year to run waits in the steady fold', async ({ page }) => {
+	// An evening in March: the day is nearly over, and the year is not. A date
+	// rather than an hour, because "nowhere near its deadline" is the whole
+	// premise and the last fortnight of December would not be — and this year's
+	// March, so the goals launched below still belong to the year on screen.
+	await pinClock(page, `${new Date().getFullYear()}-03-01T21:00`);
 	await register(page, 'Bo Lindqvist');
 	await launchGoal(page, 'Daily stretch', 'Satellite', '5');
 	await launchGoal(page, 'Finish the novel', 'Universe', '12');
 
 	await page.goto('/today');
 
-	// A yearly orbit is only ever within a day of closing on 31 December, so
+	// A yearly orbit is only running out of time in its last fortnight, so
 	// nothing is owed on it today — but it is still reachable from here.
 	await expect(riskRows(page)).toHaveCount(1);
 	await expect(riskRows(page).first()).toContainText('Daily stretch');
@@ -103,18 +116,20 @@ test('a goal with a whole year to run waits in the steady fold', async ({ page }
 });
 
 test('the pilot reacts to the week, and can be sent away and asked back', async ({ page }) => {
+	await pinClock(page, EVENING);
 	await register(page, 'Rae Whitlock');
 	await launchGoal(page, 'Read pages', 'Satellite', '10');
 
 	await page.goto('/today');
 	await hydrated(page);
 
-	// Nothing logged with the day closing: out of time and well short of target.
+	// Nothing logged with the evening's day closing: out of time and well short
+	// of target.
 	const mascot = page.locator('.mascot');
 	await expect(mascot).toHaveAttribute('data-mood', 'adrift');
 	await expect(mascot).toContainText('Read pages');
 
-	// Half of it in, with the same day left: worth a nudge rather than a drift.
+	// Half of it in, with the same evening left: worth a nudge rather than a drift.
 	await page.getByRole('button', { name: '+5 pages' }).first().click();
 	await expect(mascot).toHaveAttribute('data-mood', 'alert');
 
