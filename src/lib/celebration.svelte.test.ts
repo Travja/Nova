@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SWEEP_MS, celebrationShape } from '$domain/celebration';
 import type { GoalSnapshot } from '$domain/progress';
-import { celebrationFor, noteOrbits } from './celebration.svelte';
+import { celebrationFor, heldGoal, justClosed, noteOrbits } from './celebration.svelte';
 
 /**
  * The store keeps one entry per goal for the life of the tab, so every test
@@ -98,5 +98,66 @@ describe('a closing waits for the body to get there', () => {
 
 		vi.advanceTimersByTime(SWEEP_MS * 2);
 		expect(celebrationFor(id)).toBeNull();
+	});
+});
+
+describe('holding a goal through its own celebration (#51)', () => {
+	it('is held from the render that closes it through the end of the burst', () => {
+		const id = newGoal();
+		noteOrbits([look(id, false)]);
+
+		// The render `noteOrbits` has not seen yet: `justClosed` catches it a
+		// beat before `heldGoal` would, which is exactly the render a page's own
+		// partition runs on first. `heldGoal` is one shared value rather than one
+		// per goal, so this only checks it has not already picked up this id —
+		// an earlier test's own closing may still be winding down its tail.
+		expect(justClosed(look(id, true))).toBe(true);
+		expect(heldGoal()).not.toBe(id);
+
+		noteOrbits([look(id, true)]);
+		expect(justClosed(look(id, true))).toBe(false);
+		expect(heldGoal()).toBe(id);
+
+		// Held through the wait...
+		vi.advanceTimersByTime(SWEEP_MS - 1);
+		expect(heldGoal()).toBe(id);
+
+		// ...and through the burst itself.
+		vi.advanceTimersByTime(1);
+		expect(celebrationFor(id)).not.toBeNull();
+		expect(heldGoal()).toBe(id);
+
+		vi.advanceTimersByTime(celebrationShape('satellite').ms + 120 - 1);
+		expect(heldGoal()).toBe(id);
+
+		vi.advanceTimersByTime(1);
+		expect(celebrationFor(id)).toBeNull();
+		expect(heldGoal()).toBeNull();
+	});
+
+	it('never holds a goal that was already closed when this browser first looked', () => {
+		const id = newGoal();
+		expect(justClosed(look(id, true))).toBe(false);
+
+		noteOrbits([look(id, true)]);
+		expect(heldGoal()).not.toBe(id);
+	});
+
+	it('moves the hold to a second closing that lands before the first burst', () => {
+		const first = newGoal();
+		const second = newGoal();
+		noteOrbits([look(first, false), look(second, false)]);
+
+		noteOrbits([look(first, true), look(second, false)]);
+		expect(heldGoal()).toBe(first);
+
+		// The second closes before the first has even raised its burst — the
+		// first is no longer worth holding for a celebration it will not get.
+		noteOrbits([look(first, true), look(second, true)]);
+		expect(heldGoal()).toBe(second);
+
+		vi.advanceTimersByTime(SWEEP_MS);
+		expect(celebrationFor(second)).not.toBeNull();
+		expect(heldGoal()).toBe(second);
 	});
 });
