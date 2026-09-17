@@ -4,6 +4,7 @@
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
 	import GoalRow from '$components/GoalRow.svelte';
+	import GoalRowSheet from '$components/GoalRowSheet.svelte';
 	import GoalOrderList from '$components/GoalOrderList.svelte';
 	import Rocket from '$components/Rocket.svelte';
 	import { noteOrbits } from '$lib/celebration.svelte';
@@ -29,6 +30,12 @@
 	);
 	/** See the note in `/today`: compact is a different shape, not a token. */
 	const compact = $derived(data.user?.preferences.density === 'compact');
+
+	/** See the note in `/today`: one sheet outside the grid, opened by goal id. */
+	let openGoalId = $state<string | null>(null);
+	const openSnapshot = $derived(
+		snapshots.find((snapshot) => snapshot.goal.id === openGoalId) ?? null
+	);
 
 	/** Tiers in orbital order, keeping only the ones that have goals. */
 	const sections = $derived(
@@ -189,7 +196,7 @@
 					<div class="grid" class:grid--rows={compact}>
 						{#each section.goals as snapshot (snapshot.goal.id)}
 							{#if compact}
-								<GoalRow {snapshot} />
+								<GoalRow {snapshot} onopen={(goalId) => (openGoalId = goalId)} />
 							{:else}
 								<GoalCard {snapshot} />
 							{/if}
@@ -205,6 +212,8 @@
 			<a href={resolve('/goals/archived')}>Archived goals</a> keep their history without asking for an
 			orbit.
 		</p>
+
+		<GoalRowSheet snapshot={openSnapshot} onclose={() => (openGoalId = null)} />
 	</section>
 {/if}
 
