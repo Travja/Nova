@@ -64,20 +64,211 @@ Not a new nav item. The header already carries four links, and giving the belt
 its own destination is exactly what would turn it into a second product living
 inside the first.
 
-## Open questions — write a proposal on this issue before coding
+## Decisions
 
-1. **What offers the capture?** Re-adding a similar title, clearing the same
-   asteroid text more than once, a manual "this keeps coming back" action, or
-   some count-based heuristic? The heuristic decides whether this feels clever or
-   presumptuous, and getting it wrong is worse than making it manual.
-2. **Does drift decay from creation or from last touch?** Editing a note should
-   probably not reset the clock; genuinely reconsidering it probably should.
-3. **Does the belt have any order beyond drift?** Oldest drifting outward makes
-   position and age the same fact, which is the trick the orbit dial already
-   uses — progress and position saying the same thing twice.
-4. **Does a released asteroid stay visible anywhere?** Archived goals keep their
-   history; released asteroids arguably should not, or the backlog comes back by
-   another name.
+These were open questions; this section settles them so the build session does
+not re-decide them.
+
+### 1. What offers the capture
+
+**The clear action, on the third time the same title clears — never the add
+action, and never a background scan of open asteroids.**
+
+Every asteroid also carries a manual "this keeps coming back" action, available
+from the moment it exists, so a person who already knows a one-off is really a
+habit is never stuck waiting on a count. The count-based offer is the fallback
+for the case that action exists to cover _before_ someone thinks to reach for
+it.
+
+Rejected alternatives, and why:
+
+- **Offer on re-adding a similar title.** Adding is the wrong moment — it
+  interrupts a two-tap capture with a decision before the thing is even back on
+  the belt, and it requires fuzzy title matching to catch "clean the garage"
+  vs. "clean garage", which is exactly the kind of cleverness that reads as
+  presumptuous when it's wrong.
+- **A background heuristic that surfaces the offer unprompted on the Today
+  view.** The belt is already the "spare ten minutes" band; a proactive banner
+  competing for attention there works against the "quieter than closing an
+  orbit" rule the spec sets for asteroids generally.
+- **Count without a floor (offer on the 2nd clear).** Two is a coincidence as
+  often as it's a pattern — "renew car registration" clears twice a year for
+  years and is never going to be a Planet. Three clears is a much stronger
+  signal of a repeating cadence rather than a repeating category of task, and
+  waiting for it costs nothing since the manual action is always there for
+  someone who's already sure.
+
+Mechanics: matching is on normalized title (trimmed, case-folded — no fuzzy
+matching), and only **cleared** asteroids count toward the streak. A released
+asteroid was explicitly let go, which is a vote against recurrence, not for it,
+so it resets that title's count to zero rather than adding to it. The offer
+fires inline in the response to the clearing action itself (the moment someone
+is already looking at "clean the garage — done"), not as a separate
+notification, and it is dismissible for that title without asking again until
+the count restarts.
+
+### 2. Drift: from creation, or from last touch
+
+**From last touch, where "touch" means the title changes — not the note, and
+not merely being viewed.**
+
+The title is what makes an asteroid _this_ asteroid; editing it is reconsidering
+what the rock is, which is exactly the moment its drift should reset. The note
+is detail attached to that identity, so amending it leaves the clock alone —
+otherwise jotting one more sentence on a stale asteroid would quietly hide how
+stale it is. Viewing it doesn't touch it either, for the same reason opening a
+goal doesn't reset a streak: looking is not doing.
+
+This needs one column, not two: `driftAnchorAt`, initialized to `createdAt` and
+reassigned whenever the title is edited. Everything downstream reads drift as
+`now - driftAnchorAt`.
+
+### 3. Order beyond drift
+
+**No.** Oldest `driftAnchorAt` first, full stop — no manual drag-to-reorder, no
+secondary sort. This is the same move the orbit dial already makes: position
+and age are the same fact, so a second ordering axis would just be a second way
+to say the same thing and a chance for the two to disagree. Goals get
+`sortOrder` because a person's sense of what matters isn't chronological;
+asteroids don't need that field because the belt is deliberately not a
+prioritized list — it's what's left when nothing else is due.
+
+### 4. Does a released asteroid stay visible
+
+**No — not in any list.** The whole point of drift-and-release is that the
+belt stops being a ledger of things not done; a "released" filter would just
+be the backlog under a gentler name, which is the exact failure mode the spec
+calls out. The row is not deleted (see the export/import note below — this is
+still the account's data), but no view queries for `resolution = 'released'`.
+Contrast with archived goals, which stay visible on purpose because an archived
+goal is paused work someone may resume and its history still counts toward
+streak maths; a released asteroid was never going to have history, and nothing
+downstream needs to find it again.
+
+## Sketch: schema and the domain/service split
+
+Not a spec to implement verbatim — concrete enough that the build session isn't
+re-deriving the shape from scratch.
+
+### Table
+
+```ts
+export const asteroids = sqliteTable(
+	'asteroids',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		title: text('title').notNull(),
+		note: text('note'),
+		createdAt: timestamp('created_at').notNull(),
+		/** The drift clock. Starts at createdAt; reassigned when the title changes. */
+		driftAnchorAt: timestamp('drift_anchor_at').notNull(),
+		/** Null while active. One of 'cleared' | 'captured' | 'released' once resolved. */
+		resolution: text('resolution'),
+		resolvedAt: timestamp('resolved_at'),
+		/** Set only when resolution is 'captured' — the goal this asteroid became. */
+		capturedGoalId: text('captured_goal_id').references(() => goals.id, {
+			onDelete: 'set null'
+		})
+	},
+	(table) => [
+		index('asteroids_user_id_idx').on(table.userId),
+		// Backs the recurrence count in `clearAsteroid()` — same normalized title,
+		// same user, resolution = 'cleared'.
+		index('asteroids_user_title_idx').on(table.userId, table.title)
+	]
+);
+```
+
+One `resolution` column with three string values rather than three nullable
+timestamp columns, for the same reason `metricKind` is a text column read
+through an app-side union: the three terminal states are mutually exclusive,
+and a single discriminator makes that a fact the type checker can see instead
+of an invariant three columns have to maintain by convention. `capturedGoalId`
+uses `set null` for the same reason `parentId` does on `goals` — deleting the
+goal an asteroid became must not take the historical fact of the capture with
+it.
+
+### Domain: `$domain/asteroids.ts`
+
+Pure functions over plain data, no database, same rule as everything else
+under `$domain`:
+
+- `normalizeTitle(title)` — trim and case-fold, the one normalization step
+  behind both the capture count and the (intentionally absent) fuzzy matching.
+- `recurrenceCount(title, resolvedAsteroids)` — count of `cleared` minus reset
+  on `released`, over a caller-supplied list, per decision #1.
+- `shouldOfferCapture(count)` — the `count >= 3` threshold as a named function
+  rather than a bare literal at the call site, the way `CLOSING_FRACTION` and
+  `ADRIFT_SHORTFALL` are named elsewhere.
+- `driftBand(asteroid, now)` — buckets `now - driftAnchorAt` into whatever the
+  belt's visual stages turn out to be (fresh / drifting / faint), and a
+  `DRIFT_RELEASE_OFFER_MS` constant (propose 21 days — three weeks, long enough
+  that a slow week doesn't trigger it, short enough that the belt doesn't
+  silently become the backlog decision #4 is trying to avoid) past which the
+  release offer becomes available.
+- `sortBelt(asteroids, now)` — oldest `driftAnchorAt` first, per decision #3.
+
+None of this touches `focusForToday()` or `FocusRow` — asteroids are not
+goals and don't produce `GoalSnapshot`s, so the Today view sketch below reads
+the belt as a second, separate list rendered under the existing bands rather
+than a new case inside `TodayFocus`.
+
+### Service: `src/lib/server/asteroids.ts`
+
+Same ownership pattern as `goals.ts` — every function re-reads the row under
+the caller's `userId` rather than trusting an id alone:
+
+- `listAsteroids(userId)` — active asteroids, sorted with `sortBelt()`.
+- `createAsteroid(userId, { title, note })`.
+- `clearAsteroid(userId, id)` — sets `resolution: 'cleared'`, `resolvedAt`;
+  loads this user's asteroids sharing the normalized title and returns whether
+  to show the capture offer via `shouldOfferCapture(recurrenceCount(...))`.
+- `releaseAsteroid(userId, id)`.
+- `captureAsteroid(userId, id, input: GoalInput)` — re-reads the asteroid under
+  `userId`, delegates to the existing `createGoal(userId, input)` so the
+  resulting goal goes through the same nesting and validation checks as one
+  created directly (the "indistinguishable" requirement in Done when), then on
+  success stamps `resolution: 'captured'`, `resolvedAt`, `capturedGoalId`.
+- `updateAsteroidTitle(userId, id, title)` — the one place `driftAnchorAt` gets
+  reassigned, per decision #2. A separate function from a general "edit" so
+  editing the note doesn't have to remember not to touch the clock.
+
+### Today view
+
+`+page.server.ts` loads `listAsteroids(locals.user.id)` alongside
+`listGoalSnapshots()` and hands both to the template; `+page.svelte` renders
+the belt as its own band below `focus.steady`, gated the same way the other
+bands already are (nothing rendered when the list is empty). Clearing posts to
+a new form action the same shape as `today`'s existing `log` action; a
+successful clear response carries the capture-offer flag so the template can
+show the "make this a Planet?" prompt inline without a page reload.
+
+## What this adds to #17 (export, import, delete)
+
+Written now so #17 can be scoped against a known shape instead of waiting on
+this issue to land and then re-opening the schema question.
+
+**Export** includes every asteroid the account owns, in every state — active,
+cleared, captured and released — because export is about data ownership, not
+about what the UI currently chooses to display; decision #4 hides released
+asteroids from the app, not from the account's own copy of its data. Each
+row exports `title`, `note`, `createdAt`, `driftAnchorAt`, `resolution`,
+`resolvedAt`, and, for a captured asteroid, the id of the goal it became.
+
+**Import** creates asteroid rows in whatever state the export recorded,
+including resolved ones — a cleared or released asteroid re-imports as
+cleared or released, not as a fresh active one, the same way an archived goal
+re-imports archived rather than restored. `capturedGoalId` re-links only when
+the goal it names is also present in the same import bundle (the same rule a
+re-imported `parentId` needs); when it isn't, the import drops the reference
+but keeps `resolution: 'captured'` and `resolvedAt` — the fact that it became
+a goal survives even when that goal isn't part of this import.
+
+**Delete** (of the account) removes asteroids the same way it removes goals:
+`onDelete: 'cascade'` from `users`, no special casing.
 
 ## Deliberately out of scope for a first pass
 
