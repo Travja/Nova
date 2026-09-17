@@ -77,6 +77,9 @@ Routes parse forms and render; they do not build queries.
   that loads a page. One clock per request, and a `dev`-only cookie can pin it so
   a test can say which hour it is testing — see `src/lib/server/clock.ts`. Writes
   keep the ordinary clock on purpose.
+- **A notification never carries the user's own words.** Reminder payloads count
+  orbits and name cadences; goal titles stay behind the session. `$domain/reminders`
+  decides what is sent, `$lib/server/push` sends it.
 - **A log that can be retried carries a `clientId`.** `entries.client_id` is
   unique per goal and `logEntry()` conflicts on it, which is what stops the
   offline queue, the `online` listener and the service worker's replay from

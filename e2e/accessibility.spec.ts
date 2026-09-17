@@ -115,7 +115,8 @@ function signedInRoutes(goalHref: string): string[] {
 		'/goals/archived',
 		'/share',
 		'/settings',
-		'/settings/security'
+		'/settings/security',
+		'/settings/reminders'
 	];
 }
 

@@ -345,6 +345,58 @@ written by whoever sent the request and a reset link built from it would point
 wherever they liked. If `ORIGIN` is unset in production the send is refused and
 logged.
 
+## 9. Reminders, if you want Nova to speak up
+
+Nova can send a push notification when an orbit is genuinely running out of
+time. Like mail, it is off until you configure it: with no VAPID keys there is
+no schedule, no outbound connection, and the reminders screen says so instead of
+offering a switch that does nothing.
+
+Generate a key pair once:
+
+```bash
+docker compose exec nova npx web-push generate-vapid-keys
+```
+
+Then set all three:
+
+```yaml
+VAPID_PUBLIC_KEY: <the public key it printed>
+VAPID_PRIVATE_KEY: <the private key it printed>
+VAPID_SUBJECT: mailto:you@example.com # defaults to ORIGIN
+```
+
+The public key is handed to browsers and is not a secret. **The private key
+is** — it is the only thing that lets anyone push to the devices subscribed
+against its pair. Rotating it invalidates every subscription, which is exactly
+what you want if it leaks; everyone re-subscribes from the reminders screen.
+
+What then happens:
+
+- Each account opts in at **Settings → Reminders**, and each device it is used
+  on opts in separately — a push subscription belongs to a browser, not to a
+  login. Opting out is one tap and undoes both halves.
+- The server sweeps every 15 minutes and sends **at most one reminder per
+  account per day**, never during that account's quiet hours, and never about an
+  orbit that has already closed or one whose goal is archived.
+- Quiet hours and "late in the day" are read on **each account's own time
+  zone**, the one in its profile — not the server's.
+- Notifications deliberately carry no goal titles. A lock screen is read by
+  whoever is holding the phone, so a reminder counts orbits and names cadences
+  ("2 orbits are short of target with today nearly over"); the app shows which
+  goal after the tap, behind the session.
+- A subscription the push service reports as gone (404 or 410) is deleted rather
+  than retried.
+
+**iOS delivers push only to an installed PWA.** On an iPhone or iPad, Nova has
+to be added to the home screen and opened from there before Safari will offer
+notifications at all — the reminders screen says so rather than failing quietly.
+HTTPS is required for any of this, which the TLS step above already covers.
+
+Nothing is sent to a third party beyond the browser's own push service (Apple's,
+Google's, Mozilla's — whichever the device uses), and what reaches it is
+encrypted to that device's keys.
+
 ## Troubleshooting
 
 | Symptom                                                                                               | Cause                                                             | Fix                                                                                        |
@@ -358,3 +410,6 @@ logged.
 | Uploads or long forms rejected with 413                                                               | `BODY_SIZE_LIMIT` or the proxy's body limit                       | Raise both; they have to agree                                                             |
 | Reset mail never arrives                                                                              | No `SMTP_HOST`, or the relay rejected it                          | `docker compose logs nova \| grep 'mail send failed'`; or use `scripts/reset-password.mjs` |
 | Reset links point at `localhost`                                                                      | `ORIGIN` unset or wrong                                           | Set `ORIGIN` to the browsed origin, as in step 4                                           |
+| Reminders screen says "not set up on this server"                                                     | `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` unset or malformed         | Generate a pair as in step 9; `docker compose logs nova \| grep 'VAPID'`                   |
+| Reminders on, but nothing arrives                                                                     | No device subscribed, quiet hours, or the day's one is spent      | `docker compose logs nova \| grep 'reminder'`; check Settings → Reminders on that device   |
+| No notification option on an iPhone                                                                   | Nova is open in a tab rather than installed                       | Share → Add to Home Screen, open Nova from there                                           |

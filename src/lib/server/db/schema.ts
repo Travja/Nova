@@ -179,9 +179,84 @@ export const entries = sqliteTable(
 	]
 );
 
+/**
+ * One row per device that has agreed to be reminded.
+ *
+ * Per device rather than per account, because that is what a push subscription
+ * is: the browser mints one against its own push service and the same person
+ * signing in on a phone and a laptop has two. The endpoint is the address the
+ * push service routes on, and the two keys are what the payload is encrypted
+ * to — see `$lib/server/push`.
+ *
+ * The endpoint is unique across the table, not per user. A push service hands
+ * the same endpoint back to whoever is using that browser profile, so a shared
+ * device that signs in as somebody else must move the row rather than end up
+ * with two accounts pushing to one address.
+ *
+ * Nothing here is a secret Nova chose: the keys belong to the browser, and a
+ * subscription that stops working is deleted rather than retried, because a
+ * 404 or a 410 from the push service means the device is gone for good.
+ */
+export const pushSubscriptions = sqliteTable(
+	'push_subscriptions',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		/** Where the push service takes delivery, and the identity of the device. */
+		endpoint: text('endpoint').notNull(),
+		/** The device's public key, base64url, exactly as the browser gave it. */
+		p256dh: text('p256dh').notNull(),
+		/** The device's auth secret, base64url. */
+		auth: text('auth').notNull(),
+		/** What the browser called itself, so the settings list can name the device. */
+		userAgent: text('user_agent'),
+		createdAt: timestamp('created_at').notNull(),
+		/** Null until this device has been sent something. */
+		lastSentAt: timestamp('last_sent_at')
+	},
+	(table) => [
+		uniqueIndex('push_subscriptions_endpoint_unique').on(table.endpoint),
+		index('push_subscriptions_user_idx').on(table.userId)
+	]
+);
+
+/**
+ * When an account is willing to be interrupted, one row per user.
+ *
+ * A row exists only once somebody has opened the reminders screen; its absence
+ * reads as the defaults, which are off. Quiet hours are stored as minutes past
+ * local midnight rather than as instants because that is what they mean — ten
+ * at night where the person is, whatever the server's zone. `$domain/reminders`
+ * resolves them against the account's own zone.
+ *
+ * `lastSentAt` is the whole of the frequency cap: one reminder per user per
+ * local day, counted from here.
+ */
+export const reminderSettings = sqliteTable('reminder_settings', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+	/** Inclusive start of the quiet window, minutes past local midnight. */
+	quietFrom: integer('quiet_from')
+		.notNull()
+		.default(22 * 60),
+	/** Exclusive end. Smaller than `quiet_from` when the window crosses midnight. */
+	quietUntil: integer('quiet_until')
+		.notNull()
+		.default(7 * 60),
+	/** When this account was last reminded, in any device. Null until the first. */
+	lastSentAt: timestamp('last_sent_at'),
+	updatedAt: timestamp('updated_at').notNull()
+});
+
 export type UserRow = typeof users.$inferSelect;
 export type GoalRow = typeof goals.$inferSelect;
 export type EntryRow = typeof entries.$inferSelect;
 export type GoalArchiveWindowRow = typeof goalArchiveWindows.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type ReminderSettingsRow = typeof reminderSettings.$inferSelect;

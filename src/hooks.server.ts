@@ -2,6 +2,7 @@ import { building, dev } from '$app/environment';
 import { SESSION_COOKIE, validateSession, clearSessionCookie } from '$lib/server/auth/session';
 import { CLOCK_COOKIE, clockOverride } from '$lib/server/clock';
 import { startBackupSchedule } from '$lib/server/backup';
+import { startReminderSchedule } from '$lib/server/push';
 import { handleServerError } from '$lib/server/errors';
 import { logger, newTraceId, serializeError } from '$lib/server/log';
 import { DEFAULT_PREFERENCES, preferenceAttributeString } from '$domain/preferences';
@@ -11,6 +12,10 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 // Snapshots run in-process so a stock `docker compose up` is backed up without
 // anyone wiring up cron. Off while developing; see `readBackupConfig()`.
 if (!building) startBackupSchedule();
+
+// The reminder sweep runs in-process for the same reason. Off entirely unless
+// VAPID keys are configured — see `$lib/server/push`.
+if (!building) startReminderSchedule();
 
 /** The container healthcheck polls this every 30s; it does not belong in the request stream. */
 const HEALTH_PATH = '/health';

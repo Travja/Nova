@@ -215,6 +215,40 @@ refused, because the goals are not the signed-in user's. They are reported in
 the queue bar with the reason rather than written to the wrong account, and
 rather than disappearing quietly.
 
+### Reminders
+
+Push is the second thing the service worker does, and it was added by
+`importScripts`ing `static/push-sw.js` from the generated worker rather than by
+switching to `injectManifest`. A custom worker would mean owning the precache,
+the Background Sync queue above and the `SKIP_WAITING` listener `UpdatePrompt`
+posts to — and that last one fails silently when it is forgotten.
+
+The split is the same as everywhere else:
+
+- **`domain/reminders.ts`** decides. Which orbit is worth interrupting someone
+  for, whether the hour is inside their quiet window, whether today's one
+  reminder is already spent, and the exact words. It is pure, so every rule is
+  a unit test rather than a notification somebody has to wait for.
+- **`lib/server/push/`** has the database and the network: the subscriptions,
+  the VAPID configuration, the 15-minute sweep, and one call into `web-push`.
+
+Three decisions worth keeping:
+
+- **Nothing private goes in a payload.** A notification is read by whoever is
+  holding the phone, so a reminder carries counts and cadences, never a goal's
+  title, and never an id. The tap opens `/today`, which is behind the session.
+- **Quiet hours and "late in the day" are local.** Both are wall-clock ideas,
+  so they are stored as minutes past midnight and resolved against the
+  account's own zone — the same rule the period maths follows.
+- **A device that is gone is deleted, not retried.** A 404 or a 410 from a push
+  service is final, and retrying it forever is how a sender gets rate-limited
+  for delivering to nobody.
+
+`web-push` is the one dependency this brought in. The alternative was
+implementing RFC 8291 — ECDH over P-256, HKDF, AES-128-GCM, and a VAPID JWT —
+which Node has every primitive for, but whose failure mode is silence on
+somebody's phone rather than a test going red.
+
 ## The server's clock
 
 Every request answers against one instant, `locals.now`, set in

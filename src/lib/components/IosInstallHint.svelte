@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import { focusMain, holdsFocus } from '$lib/focus';
+	import { isIosSafari, isStandalone } from '$lib/platform';
 
 	/**
 	 * iOS fires no `beforeinstallprompt`, so the only way anyone finds "Add to
@@ -36,19 +37,10 @@
 	}
 
 	onMount(() => {
-		const ua = navigator.userAgent;
-		const isIos = /iphone|ipad|ipod/i.test(ua) && !('MSStream' in window);
-		// Other iOS browsers embed Safari's engine and still say "Safari" in
-		// their UA string, so the browsers that add their own name have to be
-		// ruled out explicitly rather than matched in.
-		const isOtherIosBrowser = /crios|fxios|edgios|opios|duckduckgo/i.test(ua);
-		const isMobileSafari = isIos && /safari/i.test(ua) && !isOtherIosBrowser;
-
-		const standalone =
-			window.matchMedia?.('(display-mode: standalone)').matches ||
-			(navigator as Navigator & { standalone?: boolean }).standalone === true;
-
-		show = isMobileSafari && !standalone;
+		// The same two questions the reminder opt-in asks, from the same place:
+		// iOS delivers push only to an installed PWA, so "can this install" and
+		// "can this be reminded" have to agree about what installed looks like.
+		show = isIosSafari() && !isStandalone();
 	});
 </script>
 
