@@ -474,14 +474,15 @@ describe('focusForToday', () => {
 		);
 		const focus = focusForToday([satellite], morning);
 
-		expect(focus.atRisk).toEqual([]);
 		expect(focus.steady).toEqual([]);
-		expect(ids(focus.today)).toEqual(['stretch']);
+		expect(ids(focus.atRisk)).toEqual(['stretch']);
+		expect(focus.atRisk[0].owedToday).toBe(true);
 	});
 
 	it('does not call a satellite behind pace for having a day still to run', () => {
-		// The same morning, nothing logged at all. The hours gone are not the
-		// measure; the deadline is, and it is hours away yet.
+		// The same morning, nothing logged at all. It is pending, which is not the
+		// same as being in trouble: the hours gone are not the measure, the
+		// deadline is, and it is hours away yet.
 		const morning = new Date('2026-12-31T10:00:00Z');
 		const satellite = snapshotFor(
 			{ id: 'stretch', tier: 'satellite', target: 10 },
@@ -491,30 +492,34 @@ describe('focusForToday', () => {
 		);
 		const focus = focusForToday([satellite], morning);
 
-		expect(focus.atRisk).toEqual([]);
-		expect(ids(focus.today)).toEqual(['stretch']);
-		expect(focus.today[0].behindPace).toBe(false);
+		expect(ids(focus.atRisk)).toEqual(['stretch']);
+		expect(focus.atRisk[0].behindPace).toBe(false);
+		expect(focus.atRisk[0].closing).toBe(false);
 	});
 
-	it('hands a satellite over to the at-risk list once its day is closing', () => {
-		// Seven in the evening, the last quarter of the day: now it is the deadline
-		// talking, and the deadline is the signal a day actually has.
+	it('marks the same satellite closing once its day is nearly done', () => {
+		// Seven in the evening, the last quarter of the day. It was pending all
+		// along; now the deadline is the reason, which is the signal a day has.
 		const satellite = snapshotFor({ id: 'stretch', tier: 'satellite', target: 10 }, 9);
 		const focus = focusForToday([satellite], now);
 
 		expect(ids(focus.atRisk)).toEqual(['stretch']);
-		expect(focus.today).toEqual([]);
 		expect(focus.atRisk[0].closing).toBe(true);
 	});
 
-	it('leaves the longer cadences to the steady fold', () => {
-		const morning = new Date('2026-11-01T10:00:00Z');
-		const quarter = snapshotFor({ id: 'galaxy', tier: 'galaxy', target: 30 }, 8, false, morning);
-		const satellite = snapshotFor({ id: 'sat', tier: 'satellite', target: 10 }, 0, false, morning);
-		const focus = focusForToday([quarter, satellite], morning);
+	it('ranks a satellite among the other tiers rather than beside them', () => {
+		// Mid-December, ten in the morning. The quarter at 20% with a fortnight
+		// and a bit to run outranks a satellite with the whole day ahead of it,
+		// and the satellite outranks a quarter that is nearly done. One list,
+		// ordered by pressure — the tier decides nothing.
+		const midDecember = new Date('2026-12-15T10:00:00Z');
+		const late = snapshotFor({ id: 'late', tier: 'galaxy', target: 30 }, 6, false, midDecember);
+		const sat = snapshotFor({ id: 'sat', tier: 'satellite', target: 10 }, 0, false, midDecember);
+		const easy = snapshotFor({ id: 'easy', tier: 'galaxy', target: 30 }, 28, false, midDecember);
+		const focus = focusForToday([sat, late, easy], midDecember);
 
-		expect(ids(focus.steady)).toEqual(['galaxy']);
-		expect(ids(focus.today)).toEqual(['sat']);
+		expect(ids(focus.atRisk)).toEqual(['late', 'sat']);
+		expect(ids(focus.steady)).toEqual(['easy']);
 	});
 
 	it('keeps a dormant orbit out of the at-risk list', () => {

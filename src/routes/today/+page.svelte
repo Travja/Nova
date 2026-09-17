@@ -78,16 +78,15 @@
 			<p class="muted">
 				{#if snapshots.length === 0}
 					Nothing in orbit yet.
-				{:else if focus.atRisk.length === 0 && focus.today.length > 0}
-					Nothing at risk. {focus.today.length}
-					{focus.today.length === 1 ? 'satellite is' : 'satellites are'} still in flight today.
+				{:else if focus.atRisk.length === 0 && focus.closed.length > 0}
+					Nothing owed. {focus.closed.length}
+					{focus.closed.length === 1 ? 'orbit is' : 'orbits are'} closed.
 				{:else if focus.atRisk.length === 0}
-					Nothing at risk. {focus.closed.length}
-					{focus.closed.length === 1 ? 'orbit' : 'orbits'} closed.
+					Nothing owed today.
 				{:else}
 					{focus.atRisk.length}
-					{focus.atRisk.length === 1 ? 'orbit needs' : 'orbits need'} attention — running out of time
-					or behind pace.
+					{focus.atRisk.length === 1 ? 'orbit is' : 'orbits are'} pending — owed today, running out of
+					time, or behind pace.
 				{/if}
 			</p>
 		</div>
@@ -120,8 +119,8 @@
 		</div>
 	{:else if focus.atRisk.length === 0}
 		<p class="muted clear">
-			Nothing is short of target with its period closing, and nothing is behind the pace its period
-			asks for. Whatever is still in flight has room left.
+			Everything that closes today has closed, nothing is running out of time, and nothing is behind
+			the pace its period asks for. Whatever is still in flight has room left.
 		</p>
 	{:else}
 		<ul class="risk">
@@ -151,32 +150,6 @@
 				</li>
 			{/each}
 		</ul>
-	{/if}
-
-	<!--
-		Not a fold. A satellite's deadline is tonight, so hiding it behind a
-		collapsed summary on the one screen that is about today would be hiding
-		the work. It is a plain section that says what it is and lists the goals
-		the same way the at-risk list does, so logging is one tap from here too.
-	-->
-	{#if focus.today.length > 0}
-		<section class="daily" aria-labelledby="in-flight-today">
-			<h2 id="in-flight-today">In flight today ({focus.today.length})</h2>
-			<p class="muted fold__note">
-				Owed before the night is out, the one with furthest to go first. Nothing here is late.
-			</p>
-			<ul class="flight">
-				{#each focus.today as row (row.snapshot.goal.id)}
-					<li>
-						{#if compact}
-							<GoalRow snapshot={row.snapshot} {logAction} />
-						{:else}
-							<GoalCard snapshot={row.snapshot} {logAction} />
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		</section>
 	{/if}
 
 	<!--
@@ -329,23 +302,6 @@
 		font-weight: 600;
 		min-height: var(--tap-min);
 		padding: 0.68rem 0;
-	}
-
-	/*
-	 * Reads as the fold headings do, so the page has one voice for "here is a
-	 * group of goals" whether or not the group happens to open and shut. The
-	 * `summary` rule cannot simply be shared: it also carries the tap floor a
-	 * control needs, and a heading is not one.
-	 */
-	.daily h2 {
-		color: var(--text-bright);
-		font-size: inherit;
-		font-weight: 600;
-		margin: 0;
-	}
-
-	.daily .flight {
-		margin-top: 0.6rem;
 	}
 
 	.fold__note {

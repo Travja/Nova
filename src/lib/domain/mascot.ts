@@ -25,11 +25,7 @@ export interface MascotState {
 	subject: GoalSnapshot | null;
 	atRisk: number;
 	closed: number;
-	/**
-	 * Still in flight and not behind — the satellites owed before tonight along
-	 * with the longer cadences that can wait. `focus.steady` alone would leave
-	 * the pilot claiming nothing was owed on a morning full of satellites.
-	 */
+	/** Still in flight with nothing wrong with it, owed today or not. */
 	flying: number;
 }
 
@@ -42,20 +38,27 @@ export const ADRIFT_SHORTFALL = 0.5;
 
 /** The mood the whole picture adds up to. */
 export function mascotFor(focus: TodayFocus): MascotState {
+	/*
+	 * Being owed today is not the same as being in trouble, and the mood has to
+	 * tell them apart even though the pending list deliberately does not. A
+	 * satellite with nothing logged is pending from midnight — if that alone
+	 * made the pilot alert, the mascot would spend the whole day alarmed about a
+	 * day that has barely started.
+	 */
+	const wrong = focus.atRisk.filter((row) => row.closing || row.behindPace);
 	const counts = {
 		atRisk: focus.atRisk.length,
 		closed: focus.closed.length,
-		flying: focus.today.length + focus.steady.length
+		flying: focus.atRisk.length - wrong.length + focus.steady.length
 	};
 
-	const [urgent] = focus.atRisk;
+	const [urgent] = wrong;
 	if (urgent)
 		return { mood: isAdrift(urgent) ? 'adrift' : 'alert', subject: urgent.snapshot, ...counts };
 
-	// Nothing needs attention. Still flying is work; everything closed is rest.
-	// Today's own orbits speak first: a satellite is owed before the night is
-	// out, which a quarter with two months left in it is not.
-	const [next] = focus.today.length > 0 ? focus.today : focus.steady;
+	// Nothing is wrong. Still flying is work; everything closed is rest. What is
+	// owed today speaks before a quarter with two months left in it.
+	const [next] = focus.atRisk.length > 0 ? focus.atRisk : focus.steady;
 	if (next) return { mood: 'working', subject: next.snapshot, ...counts };
 	return { mood: 'resting', subject: focus.closed[0] ?? null, ...counts };
 }

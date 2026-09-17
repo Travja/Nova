@@ -323,18 +323,22 @@ export interface FocusRow {
 	closing: boolean;
 	/** Behind the pace the period calls for, deadline or no deadline. */
 	behindPace: boolean;
+	/**
+	 * Its period ends tonight, so it is owed today whether or not anything is
+	 * wrong with it. Nothing is wrong with a satellite at ten in the morning —
+	 * it is simply work that today is going to ask for.
+	 */
+	owedToday: boolean;
 }
 
 export interface TodayFocus {
-	/** Needs attention now — running out of time, behind pace, or both. */
-	atRisk: FocusRow[];
 	/**
-	 * Open and owed before the night is out: a daily orbit that is not at risk
-	 * yet. Its own group because a satellite's deadline is tonight, so it is
-	 * never the "out of sight" that makes a goal steady, however far ahead of
-	 * its own pace it happens to be.
+	 * What today asks for: owed before tonight, running out of time, behind
+	 * pace, or some combination. One list rather than a group per reason, ranked
+	 * by pressure, because a satellite still to fly and a quarter running out of
+	 * time are the same kind of thing to the pilot — work that is pending.
 	 */
-	today: FocusRow[];
+	atRisk: FocusRow[];
 	/** Closed in their current period — kept for the reward, not for the work. */
 	closed: GoalSnapshot[];
 	/** In flight, on pace, with the deadline still out of sight. */
@@ -345,7 +349,7 @@ export interface TodayFocus {
  * Split goals into what today asks for, what it has already given, and what can
  * wait. Pass the same `now` the snapshots were computed with.
  *
- * Every open group is ranked by urgency, so the goal closest to becoming work
+ * Both open groups are ranked by urgency, so the goal closest to becoming work
  * sits at the top of the ones that can wait.
  */
 export function focusForToday(
@@ -353,7 +357,6 @@ export function focusForToday(
 	now: Date = new Date()
 ): TodayFocus {
 	const atRisk: FocusRow[] = [];
-	const today: FocusRow[] = [];
 	const closed: GoalSnapshot[] = [];
 	const steady: FocusRow[] = [];
 
@@ -366,25 +369,16 @@ export function focusForToday(
 			snapshot,
 			urgency: urgency(snapshot.current, now),
 			closing: isClosing(snapshot.current, now),
-			behindPace: isBehindPace(snapshot.current, snapshot.goal.createdAt, now)
+			behindPace: isBehindPace(snapshot.current, snapshot.goal.createdAt, now),
+			// A satellite closes tonight, so it is owed today however well it is
+			// going — and can never be steady, whose whole promise is that nothing
+			// in it is owed. A dormant one was not expected to fly at all.
+			owedToday: snapshot.current.period.cadence === 'day' && !snapshot.current.dormant
 		};
-		if (row.closing || row.behindPace) {
-			atRisk.push(row);
-			continue;
-		}
-		// A satellite closes tonight. Whatever it has logged, it is still owed
-		// today, so it can never join the group whose whole promise is that
-		// nothing in it is. A dormant one was not expected to fly at all.
-		const daily = snapshot.current.period.cadence === 'day' && !snapshot.current.dormant;
-		(daily ? today : steady).push(row);
+		(row.closing || row.behindPace || row.owedToday ? atRisk : steady).push(row);
 	}
 
-	return {
-		atRisk: byUrgency(atRisk),
-		today: byUrgency(today),
-		closed,
-		steady: byUrgency(steady)
-	};
+	return { atRisk: byUrgency(atRisk), closed, steady: byUrgency(steady) };
 }
 
 /** Most urgent first, ties going to the nearer deadline and then the pilot's own order. */

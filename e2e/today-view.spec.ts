@@ -48,11 +48,6 @@ function riskRows(page: Page) {
 	return page.locator('ul.risk').getByRole('article');
 }
 
-/** The goals owed before tonight that are not in trouble yet. */
-function flightRows(page: Page) {
-	return page.locator('ul.flight').getByRole('article');
-}
-
 function riskRow(page: Page, title: string) {
 	return riskRows(page).filter({ hasText: title });
 }
@@ -70,7 +65,7 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 	// The quick-log forms below post for real until `use:enhance` is attached,
 	// which navigates away from the view this test is about.
 	await hydrated(page);
-	await expect(page.getByText('2 orbits need attention')).toBeVisible();
+	await expect(page.getByText('2 orbits are pending')).toBeVisible();
 
 	// Both satellites close today and neither has moved, so the tie falls to the
 	// order they were launched in.
@@ -93,7 +88,7 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 
 	// Closing an orbit moves it out of the list without hiding it.
 	await riskRow(page, 'Read pages').getByRole('button', { name: '+1 page', exact: true }).click();
-	await expect(page.getByText('1 orbit needs attention')).toBeVisible();
+	await expect(page.getByText('1 orbit is pending')).toBeVisible();
 	await expect(riskRows(page)).toHaveCount(1);
 
 	// Folded away, and still drawn as a row with its dial: the filled ring is the
@@ -104,11 +99,13 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 	await expect(closed.locator('.dial')).toBeVisible();
 });
 
-test('a satellite mid-morning is owed today, not behind pace and not steady', async ({ page }) => {
+test('a satellite mid-morning is pending work, not behind pace and not steady', async ({
+	page
+}) => {
 	// Two halves of one mistake. A third of the day has gone by eight in the
 	// morning, which was enough to call every satellite behind pace all day; and
-	// a satellite that was doing fine fell into the fold whose whole promise is
-	// that nothing in it is owed today.
+	// a satellite that was doing fine fell into the steady fold, whose whole
+	// promise is that nothing in it is owed today.
 	await pinClock(page, '10:00');
 	await register(page, 'Ines Varga');
 	await launchGoal(page, 'Read pages', 'Satellite', '10');
@@ -117,14 +114,12 @@ test('a satellite mid-morning is owed today, not behind pace and not steady', as
 	await page.goto('/today');
 	await hydrated(page);
 
-	// Ten in the morning is not running out of time and not behind anything.
-	await expect(riskRows(page)).toHaveCount(0);
-	await expect(page.getByText('Behind pace')).toHaveCount(0);
-
-	// The satellite is owed all the same, in a group of its own, out in the open.
-	await expect(page.getByRole('heading', { name: 'In flight today (1)' })).toBeVisible();
-	await expect(flightRows(page)).toHaveCount(1);
-	await expect(flightRows(page).first()).toContainText('Read pages');
+	// Pending, in the one list, alongside whatever else today asks for — and
+	// without being called behind for having a day still to run.
+	await expect(riskRows(page)).toHaveCount(1);
+	await expect(riskRows(page).first()).toContainText('Read pages');
+	await expect(page.getByText('Behind pace', { exact: true })).toHaveCount(0);
+	await expect(page.getByText('1 orbit is pending')).toBeVisible();
 
 	// The yearly goal is the only thing here that can genuinely wait.
 	const steady = page.locator('details').filter({ hasText: 'Flying steady (1)' });
@@ -133,9 +128,9 @@ test('a satellite mid-morning is owed today, not behind pace and not steady', as
 	await expect(steady.locator('.dial')).toBeVisible();
 	await expect(steady).not.toContainText('Read pages');
 
-	// And it can be logged from where it stands, which closes it out of the group.
-	await flightRows(page).first().getByRole('button', { name: '+10 pages', exact: true }).click();
-	await expect(page.getByRole('heading', { name: /In flight today/ })).toHaveCount(0);
+	// Logging it closed takes it off the list and into the fold, ring and all.
+	await riskRows(page).first().getByRole('button', { name: '+10 pages', exact: true }).click();
+	await expect(page.getByText('Nothing owed')).toBeVisible();
 	await expect(page.locator('details').filter({ hasText: 'Closed (1)' })).toBeVisible();
 });
 
