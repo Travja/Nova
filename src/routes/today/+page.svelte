@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
+	import AsteroidBelt from '$components/AsteroidBelt.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
 	import GoalRow from '$components/GoalRow.svelte';
 	import Mascot from '$components/Mascot.svelte';
@@ -28,6 +29,19 @@
 	/** Ranked on the same clock the orbits were measured against. */
 	const focus = $derived(focusForToday(snapshots, data.now));
 	const logAction = $derived(`${resolve('/today')}?/log`);
+	/**
+	 * The belt's four endings and its add, as actions on this page. It is a band
+	 * below the orbits rather than a destination of its own: the header already
+	 * carries four links, and giving the belt a fifth is exactly what would turn
+	 * it into a second product living inside the first.
+	 */
+	const belt = $derived({
+		add: `${resolve('/today')}?/addAsteroid`,
+		clear: `${resolve('/today')}?/clearAsteroid`,
+		release: `${resolve('/today')}?/releaseAsteroid`,
+		edit: `${resolve('/today')}?/editAsteroid`,
+		dismiss: `${resolve('/today')}?/dismissCapture`
+	});
 	/**
 	 * Density is CSS everywhere else, but compact is a different shape here, not
 	 * the same one with less padding round it — so this one has to be a branch
@@ -195,6 +209,24 @@
 			</ul>
 		</details>
 	{/if}
+
+	<!--
+		Below the bands, and last: asteroids are what you reach for when nothing
+		is due. The same clock the orbits were measured against decides how far
+		each rock has drifted, so the page tells one time throughout.
+	-->
+	<AsteroidBelt
+		asteroids={data.asteroids}
+		now={data.now}
+		errors={form?.errors ?? null}
+		message={form?.belt ?? null}
+		offer={form?.offer ?? null}
+		addAction={belt.add}
+		clearAction={belt.clear}
+		releaseAction={belt.release}
+		editAction={belt.edit}
+		dismissAction={belt.dismiss}
+	/>
 </section>
 
 <style>

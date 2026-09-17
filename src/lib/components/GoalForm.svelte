@@ -23,6 +23,18 @@
 		goals?: readonly ParentCandidate[];
 		/** Goals already feeding this one, which is what makes it derived. */
 		children?: readonly ParentCandidate[];
+		/**
+		 * Values to start a *new* goal from — what an asteroid being captured
+		 * already knows about itself. Ignored when `goal` is set, which is an
+		 * edit and has real values of its own.
+		 */
+		seed?: { title?: string; description?: string | null } | null;
+		/**
+		 * Where Cancel goes back to, when it is not the goal or the dashboard.
+		 * A route rather than a href so it is resolved here, in one place, like
+		 * every other link in the app.
+		 */
+		cancelTo?: '/today' | null;
 	}
 
 	let {
@@ -30,13 +42,15 @@
 		errors = null,
 		submitLabel = 'Launch goal',
 		goals = [],
-		children = []
+		children = [],
+		seed = null,
+		cancelTo = null
 	}: Props = $props();
 
 	// Form fields seed from the goal once; the props never change under this
 	// component because each page renders a fresh instance.
 	/* svelte-ignore state_referenced_locally */
-	let title = $state(goal?.title ?? '');
+	let title = $state(goal?.title ?? seed?.title ?? '');
 	/* svelte-ignore state_referenced_locally */
 	let tier = $state(goal?.tier ?? 'planet');
 	/* svelte-ignore state_referenced_locally */
@@ -86,7 +100,9 @@
 		)
 	);
 	const unitPlaceholder = $derived(metricKind === 'count' ? 'pages, workouts, chapters…' : '');
-	const cancelHref = $derived(goal ? resolve('/goals/[id]', { id: goal.id }) : resolve('/'));
+	const backHref = $derived(
+		cancelTo ? resolve(cancelTo) : goal ? resolve('/goals/[id]', { id: goal.id }) : resolve('/')
+	);
 </script>
 
 <div class="layout">
@@ -107,7 +123,7 @@
 		<div class="field">
 			<label for="description">Notes <span class="muted">(optional)</span></label>
 			<textarea id="description" name="description" maxlength="500"
-				>{goal?.description ?? ''}</textarea
+				>{goal?.description ?? seed?.description ?? ''}</textarea
 			>
 		</div>
 
@@ -245,7 +261,7 @@
 
 		<div class="actions">
 			<button class="button" type="submit">{submitLabel}</button>
-			<a class="button button--ghost" href={cancelHref}>Cancel</a>
+			<a class="button button--ghost" href={backHref}>Cancel</a>
 		</div>
 	</form>
 
