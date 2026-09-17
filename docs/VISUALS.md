@@ -174,8 +174,33 @@ that ratio wins over a pair of offsets.
 
 The belt never raises its voice. Both endings are outline pills rather than
 `.button`s, the three-clear capture offer is a bordered note with no gradient
-and no burst, and clearing one says "Done." in a muted line. Closing an orbit is
-the biggest moment in the app and nothing on this band may compete with it.
+and no burst, and finishing one says "Done." in a muted line. Closing an orbit
+is the biggest moment in the app and nothing on this band may compete with it.
+
+### The row, and why it has no breakpoint
+
+Both endings have to stay one tap from the Today view, so both stay on the row —
+and a control carries the touch floor, which means any line they are on is 44px
+tall whatever else is on it. A line holding nothing but two buttons is the most
+expensive line a row can have, so the drift shares it: the title takes a line of
+its own, the drift and the two endings take the next, and the height pays for
+two things instead of one.
+
+![The belt on a phone, compact](screenshots/30-asteroids/belt-on-a-phone-compact.png)
+
+Nothing in that is a media query. The drift sits in a wrapping flex line and
+moves under the endings by itself when the words no longer fit beside them —
+which is a question about this title at this density in this window, and not one
+a breakpoint can answer. Compact then does what compact does everywhere else:
+it changes the shape rather than the padding. The mark comes down to 52px, the
+drift drops to its number (`driftLabel(…, 'short')` — "6 weeks", not "Drifting 6
+weeks"), and the "at the edge" tag goes, because the band above the list already
+counts how many are out there and the rocks themselves say which. That is the
+difference between a row of three stacked bands and a row of two lines.
+
+The explanation above the list is only drawn while the belt is empty. Four rocks
+say what a belt is better than three lines of prose above them, and on a phone
+those three lines cost more than the rock they describe.
 
 ## The rules
 

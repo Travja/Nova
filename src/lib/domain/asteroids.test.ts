@@ -237,6 +237,15 @@ describe('drift', () => {
 		expect(at(9)).toBe('Drifting 9 days');
 		expect(at(21)).toBe('Drifting 3 weeks');
 	});
+
+	it('has a short form for a row that has to share its line', () => {
+		const at = (days: number) =>
+			driftLabel(asteroid({ driftAnchorAt: daysAgo(days) }), now, 'short');
+		expect(at(0)).toBe('Today');
+		expect(at(1)).toBe('1 day');
+		expect(at(9)).toBe('9 days');
+		expect(at(21)).toBe('3 weeks');
+	});
 });
 
 describe('doneLabel', () => {

@@ -29,6 +29,8 @@
 
 	interface Props {
 		asteroids: readonly AsteroidData[];
+		/** Compact rows say less, so the drift fits beside the two endings. */
+		compact?: boolean;
 		/** Recently finished, newest first — bounded by the service. */
 		done?: readonly AsteroidData[];
 		now: Date;
@@ -45,6 +47,7 @@
 
 	let {
 		asteroids,
+		compact = false,
 		done = [],
 		now,
 		errors = null,
@@ -66,18 +69,26 @@
 	<h2 id="belt-heading">
 		The belt{#if asteroids.length > 0}&nbsp;({asteroids.length}){/if}
 	</h2>
-	<p class="muted lede">
-		One-offs that never became a cycle — no tier, no target, no streak. Tick one off when nothing is
-		due, or let it go.
-	</p>
+	<!--
+		The explanation, only while there is nothing to explain it against. Four
+		rocks on the belt say what a belt is better than three lines of prose
+		above them do, and on a phone those three lines cost more than the rock
+		they describe.
+	-->
+	{#if asteroids.length === 0}
+		<p class="muted lede">
+			One-offs that never became a cycle — no tier, no target, no streak. Tick one off when nothing
+			is due, or let it go.
+		</p>
+	{/if}
 
 	{#if atEdge > 0}
 		<!-- Said once, by the band, rather than once per rock. What it is saying
 		     is that letting go is an ending, not a verdict — and a sentence
 		     repeated down a list stops reading that way by the third time. -->
 		<p class="muted lede">
-			{atEdge === 1 ? 'One of these has' : `${atEdge} of these have`} drifted as far as the belt goes.
-			Letting one go is as good an ending as finishing it.
+			{atEdge === 1 ? 'One is' : `${atEdge} are`} out at the edge. Letting one go is as good an ending
+			as finishing it.
 		</p>
 	{/if}
 
@@ -126,7 +137,14 @@
 	{#if asteroids.length > 0}
 		<ul class="rocks">
 			{#each asteroids as asteroid (asteroid.id)}
-				<AsteroidRow {asteroid} {now} {clearAction} {releaseAction} {editAction} />
+				<AsteroidRow
+					{asteroid}
+					{now}
+					labels={compact ? 'short' : 'long'}
+					{clearAction}
+					{releaseAction}
+					{editAction}
+				/>
 			{/each}
 		</ul>
 	{:else}
@@ -264,8 +282,16 @@
 	}
 
 	.rocks--done {
+		/* The fold's marks are smaller than a row's: a finished one-off is a
+		   line, not a card. */
+		--mark-width: 56px;
+
 		gap: 0.15rem;
 		margin: 0 0 0.5rem;
+	}
+
+	:global(html[data-density='compact']) .rocks--done {
+		--mark-width: 44px;
 	}
 
 	/*

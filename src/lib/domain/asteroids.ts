@@ -160,6 +160,9 @@ export const DRIFT_DRIFTING_MS = 7 * DAY_MS;
  */
 export type DriftBand = 'fresh' | 'drifting' | 'faint';
 
+/** How much room the label has: a sentence, or the number on its own. */
+export type LabelStyle = 'long' | 'short';
+
 /** The little of an asteroid that drift depends on. */
 export interface DriftInput {
 	driftAnchorAt: Date;
@@ -234,12 +237,23 @@ export function sortBelt<T extends DriftInput>(asteroids: readonly T[]): T[] {
 	return [...asteroids].sort((a, b) => a.driftAnchorAt.getTime() - b.driftAnchorAt.getTime());
 }
 
-/** How the belt says how long something has been out there. */
-export function driftLabel(asteroid: DriftInput, now: Date): string {
+/**
+ * How the belt says how long something has been out there.
+ *
+ * Two lengths, because compact is a different shape and not the same one with
+ * less padding round it: at that density the row puts this on the same line as
+ * the two endings, and a sentence does not fit beside two buttons on a phone.
+ * The long form is the sentence; the short form is the number, which is all the
+ * words were ever carrying — the rock's own distance from the belt says the
+ * rest.
+ */
+export function driftLabel(asteroid: DriftInput, now: Date, style: LabelStyle = 'long'): string {
 	const days = Math.floor(driftAge(asteroid, now) / DAY_MS);
-	if (days < 1) return 'Added today';
-	if (days === 1) return 'Drifting a day';
-	if (days < 14) return `Drifting ${days} days`;
+	const short = style === 'short';
+
+	if (days < 1) return short ? 'Today' : 'Added today';
+	if (days === 1) return short ? '1 day' : 'Drifting a day';
+	if (days < 14) return short ? `${days} days` : `Drifting ${days} days`;
 	const weeks = Math.round(days / 7);
-	return `Drifting ${weeks} weeks`;
+	return short ? `${weeks} weeks` : `Drifting ${weeks} weeks`;
 }

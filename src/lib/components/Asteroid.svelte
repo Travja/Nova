@@ -25,9 +25,15 @@
 	 * moment in the app; this is a stone turning over in the dark.
 	 *
 	 * The box is wider than it is tall because the drift is horizontal, and the
-	 * height is computed from the width at the viewBox's own ratio rather than
-	 * set independently — an SVG whose two scales disagree draws every circle
-	 * in it as an ellipse, so the units below can stay units.
+	 * height follows from the width at the viewBox's own ratio rather than being
+	 * set independently — an SVG whose two scales disagree draws every circle in
+	 * it as an ellipse, so the units below can stay units.
+	 *
+	 * How wide is `--mark-width`, set by whoever is drawing the row rather than
+	 * passed in as a number. Compact is a different shape and not the same one
+	 * scaled down, so the density that decides a row's shape is the thing that
+	 * should decide its mark — and that decision lives in CSS, where the rest of
+	 * density already lives.
 	 */
 
 	interface Props {
@@ -38,11 +44,9 @@
 		band: DriftBand;
 		/** Finished: drawn back in the swarm rather than out beyond it. */
 		settled?: boolean;
-		/** Width in pixels; the height follows from the viewBox. */
-		size?: number;
 	}
 
-	let { seed, drift, band, settled = false, size = 76 }: Props = $props();
+	let { seed, drift, band, settled = false }: Props = $props();
 
 	/**
 	 * Two boxes, not one.
@@ -192,8 +196,7 @@
 	class="asteroid"
 	class:asteroid--settled={settled}
 	data-band={band}
-	style="--mark-width: {size}px; --strip-width: {(size * STRIP.width) /
-		BOX.width}px; --spin: {rock.spin}s; --turn: {rock.clockwise ? '360deg' : '-360deg'}"
+	style="--spin: {rock.spin}s; --turn: {rock.clockwise ? '360deg' : '-360deg'}"
 >
 	<!-- The belt itself: the same swarm in every row, at the same weight
 	     whatever this rock is doing. It is the thing being drifted away from,
@@ -211,13 +214,7 @@
 		{/each}
 	</svg>
 
-	<svg
-		class="mark"
-		viewBox="0 0 {BOX.width} {BOX.height}"
-		width={size}
-		height={(size * BOX.height) / BOX.width}
-		role="presentation"
-	>
+	<svg class="mark" viewBox="0 0 {BOX.width} {BOX.height}" role="presentation">
 		{#if !settled}
 			<!-- How far it has come. The dots run from the swarm's edge and stop
 			     where the rock is, so length and position are the same fact rather
@@ -245,7 +242,7 @@
 		display: flex;
 		flex: none;
 		position: relative;
-		width: var(--mark-width);
+		width: var(--mark-width, 72px);
 	}
 
 	/*
@@ -262,15 +259,20 @@
 		overflow: hidden;
 		position: absolute;
 		top: 0;
-		width: var(--strip-width);
+		/* The strip's share of the mark, kept in the same proportion the two
+		   viewBoxes are written in, so one number sets both. */
+		width: calc(var(--mark-width, 72px) * 34 / 96);
 	}
 
 	/* Over the strip, so a settled rock sits among the rubble rather than
 	   behind it. */
 	.mark {
 		display: block;
+		/* The rock reaches a little past its box at full drift; the row has a
+		   gap there for it. */
 		overflow: visible;
 		position: relative;
+		width: 100%;
 	}
 
 	/*

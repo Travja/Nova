@@ -101,9 +101,10 @@ test('an asteroid captured into a goal is a goal like any other', async ({ page 
 	await addAsteroid(page, 'Clean the garage');
 
 	// The manual offer, available from the moment the rock exists rather than
-	// only after Nova has counted to three.
+	// only after Nova has counted to three — and worded as an offer, because on
+	// the first one "this keeps coming back" is simply not true yet.
 	await belt(page).locator('details > summary').first().click();
-	await page.getByRole('link', { name: 'This keeps coming back — make it a goal' }).click();
+	await page.getByRole('link', { name: 'Make this a goal instead' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Capture into orbit' })).toBeVisible();
 	await hydrated(page);
