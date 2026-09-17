@@ -41,7 +41,7 @@ The gaps that stand between "it works" and "I use it every day".
 
 ## M2 — The fun part
 
-_5 of 9 done._
+_7 of 9 done._
 
 The reason to open the app rather than a spreadsheet.
 
@@ -54,18 +54,18 @@ The reason to open the app rather than a spreadsheet.
 | [#13](https://github.com/Travja/Nova/issues/13) ✓ | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app                       |
 | [#14](https://github.com/Travja/Nova/issues/14) ✓ | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield                       |
 | [#30](https://github.com/Travja/Nova/issues/30)   | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app          |
-| [#41](https://github.com/Travja/Nova/issues/41)   | [Starfield viewport units](issues/41-starfield-viewport-units.md)     | `vmin` rebases when a mobile address bar hides              |
-| [#51](https://github.com/Travja/Nova/issues/51)   | [Closing takes the sheet](issues/51-closing-takes-the-sheet.md)       | The celebration is lost exactly where it is easiest to earn |
+| [#41](https://github.com/Travja/Nova/issues/41) ✓ | [Starfield viewport units](issues/41-starfield-viewport-units.md)     | `vmin` rebases when a mobile address bar hides              |
+| [#51](https://github.com/Travja/Nova/issues/51) ✓ | [Closing takes the sheet](issues/51-closing-takes-the-sheet.md)       | The celebration is lost exactly where it is easiest to earn |
 
 ## M3 — Insight
 
-_2 of 5 done._
+_3 of 5 done._
 
 Turning a log into something you learn from.
 
 | #                                                 | Issue                                                       | Why it matters                                          |
 | ------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| [#15](https://github.com/Travja/Nova/issues/15)   | [History and heatmap](issues/15-history-heatmap.md)         | Twelve rings shows a streak, not a pattern              |
+| [#15](https://github.com/Travja/Nova/issues/15) ✓ | [History and heatmap](issues/15-history-heatmap.md)         | Twelve rings shows a streak, not a pattern              |
 | [#16](https://github.com/Travja/Nova/issues/16) ✓ | [Stats](issues/16-stats.md)                                 | Cheap to derive from buckets already built              |
 | [#17](https://github.com/Travja/Nova/issues/17)   | [Export, import, delete](issues/17-export-import-delete.md) | It is your record; it should be portable                |
 | [#18](https://github.com/Travja/Nova/issues/18)   | [Orbit notes](issues/18-orbit-notes.md)                     | The reflection is about the period, not the entry       |
