@@ -2,21 +2,27 @@
 	import type { DriftBand } from '$domain/asteroids';
 
 	/**
-	 * One rock, drawn where its drift has taken it.
+	 * One rock, drawn against the belt it belongs to.
 	 *
 	 * The belt is matter that never coalesced into an orbiting body, which is
 	 * exactly what a one-off is next to a goal — so this is deliberately not a
 	 * dial. There is no arc to fill and no body travelling round to meet it,
 	 * because there is no period and nothing to complete. What there is instead
-	 * is a distance: the faint track on the left is the orbit this rock never
-	 * joined, and the further right it sits the longer nobody has touched it.
+	 * is a *distance*, and a distance needs two things to be a distance: the
+	 * swarm on the left is the belt proper, and the rock is however far out of
+	 * it nobody has touched this one.
+	 *
+	 * The swarm is seeded from a constant rather than from the asteroid, so
+	 * every row draws the same belt — it is the same belt. Only the rock is the
+	 * row's own, seeded from its id so the server and the browser carve the same
+	 * stone; `Math.random()` here would be a hydration mismatch per vertex.
+	 *
+	 * A rock that is `settled` is drawn back among the swarm instead of out
+	 * beyond it, which is the whole of what the Done fold means: finished, and
+	 * no longer drifting away from anything.
 	 *
 	 * Quieter than a closing orbit, always. A revolution closing is the biggest
 	 * moment in the app; this is a stone turning over in the dark.
-	 *
-	 * The shape is seeded from the asteroid's id, so every rock is its own rock
-	 * and the server and the browser draw the same one — `Math.random()` here
-	 * would be a hydration mismatch per vertex.
 	 *
 	 * The box is wider than it is tall because the drift is horizontal, and the
 	 * height is computed from the width at the viewBox's own ratio rather than
@@ -30,14 +36,27 @@
 		/** How far out it has drifted, 0 at the inner edge and 1 at the outer. */
 		drift: number;
 		band: DriftBand;
+		/** Finished: drawn back in the swarm rather than out beyond it. */
+		settled?: boolean;
 		/** Width in pixels; the height follows from the viewBox. */
 		size?: number;
 	}
 
-	let { seed, drift, band, size = 76 }: Props = $props();
+	let { seed, drift, band, settled = false, size = 76 }: Props = $props();
 
-	/** The box the geometry below is written in. */
-	const BOX = { width: 120, height: 64 };
+	/**
+	 * Two boxes, not one.
+	 *
+	 * The belt has to run the whole height of whatever row it is in, and the
+	 * rock has to keep its horizontal position exactly — one element cannot do
+	 * both, because stretching a viewBox to fill a variable height either
+	 * squashes every circle in it or crops the side the rock drifts towards. So
+	 * the strip is its own element, scaled uniformly to cover the row and
+	 * cropped top and bottom (which is what a belt does anyway — it carries on
+	 * past the card), and the rock sits in a fixed box laid over it.
+	 */
+	const STRIP = { width: 34, height: 170 };
+	const BOX = { width: 96, height: 48 };
 
 	/** FNV-1a, so two ids that differ by a character do not draw the same rock. */
 	function hash(value: string): number {
@@ -57,6 +76,55 @@
 			return state / 2_147_483_648;
 		};
 	}
+
+	/*
+	 * The swarm: a long, gently bowed band of rubble down the left of the strip.
+	 *
+	 * Bowed rather than straight because a belt is an orbit that never gathered
+	 * itself up, and the curve is the only thing left on screen still saying so.
+	 * The bow is written as a sagitta rather than as a circle's centre and
+	 * radius: over a band this tall the radius that gives a subtle curve is in
+	 * the thousands, and a number nobody can picture is a number nobody can
+	 * tune.
+	 */
+	const SWARM = {
+		seed: 20_260_930,
+		count: 130,
+		/** The band's near edge at its widest point, and how far across it runs. */
+		x: 10,
+		width: 22,
+		/** How far the band leans back towards the card's edge at top and bottom. */
+		bow: 9
+	};
+
+	interface Speck {
+		x: number;
+		y: number;
+		r: number;
+		o: number;
+	}
+
+	function swarm(): Speck[] {
+		const random = seeded(SWARM.seed);
+
+		return Array.from({ length: SWARM.count }, () => {
+			// -1 at the top of the strip, 1 at the bottom.
+			const along = random() * 2 - 1;
+			// Two draws averaged rather than one, so the band is thick through the
+			// middle and thins at its edges. A flat scatter reads as noise; this
+			// reads as a belt seen edge-on.
+			const across = (random() + random()) / 2;
+			return {
+				x: Number((SWARM.x + across * SWARM.width - SWARM.bow * along * along).toFixed(2)),
+				y: Number(((along + 1) * 0.5 * STRIP.height).toFixed(2)),
+				r: Number((0.9 + random() * 2).toFixed(2)),
+				o: Number((0.45 + random() * 0.5).toFixed(2))
+			};
+		});
+	}
+
+	/** Every row's belt is the same belt, so it is carved once for the module. */
+	const specks = swarm();
 
 	const VERTICES = 9;
 	const RADIUS = 18;
@@ -100,48 +168,118 @@
 	const rock = $derived(carve(seed));
 	/** Clamped here too: a stray fraction must not put a rock outside its box. */
 	const travelled = $derived(Math.min(1, Math.max(0, drift)));
-	/** Inner edge of the belt to its outer reach, in the box's own units. */
-	const cx = $derived(34 + travelled * 64);
+	/**
+	 * Where the rock sits. Settled puts it in the swarm; otherwise it starts
+	 * clear of the swarm's outer edge and runs to the far side of the box, so
+	 * "out of the belt" is true of the drawing before it is true of the words.
+	 */
+	/*
+	 * The far end stops short of the box's edge by the rock's own reach, so the
+	 * most drifted rock is still a whole rock rather than one clipped by the
+	 * title beside it.
+	 */
+	const cx = $derived(settled ? 20 : 46 + travelled * 30);
+	const cy = $derived(BOX.height / 2);
+	/**
+	 * A settled rock is drawn smaller. It is back among the rubble and no longer
+	 * the thing being measured — the row it belongs to is a line in a fold, not
+	 * a card — so it takes the room a line can spare.
+	 */
+	const scale = $derived(settled ? 0.6 : 1);
 </script>
 
-<svg
+<span
 	class="asteroid"
+	class:asteroid--settled={settled}
 	data-band={band}
-	viewBox="0 0 {BOX.width} {BOX.height}"
-	width={size}
-	height={(size * BOX.height) / BOX.width}
-	role="presentation"
-	style="--spin: {rock.spin}s; --turn: {rock.clockwise ? '360deg' : '-360deg'}"
+	style="--mark-width: {size}px; --strip-width: {(size * STRIP.width) /
+		BOX.width}px; --spin: {rock.spin}s; --turn: {rock.clockwise ? '360deg' : '-360deg'}"
 >
-	<!-- The orbit it never joined. Always the same weight, whatever the drift:
-	     it is the thing being drifted away from, so it cannot fade too. -->
-	<path class="track" d="M 10 5 A 42 42 0 0 1 10 59" />
-
-	<!-- How far it has come. The dots stop where the rock is, so length and
-	     position are the same fact rather than two that can disagree. -->
-	<path class="wake" d="M 22 32 L {cx.toFixed(2)} 32" />
-
-	<g class="rock" transform="translate({cx.toFixed(2)} 32)">
-		<polygon class="rock__body" points={rock.points} />
-		{#each rock.craters as crater, index (index)}
-			<circle class="rock__crater" cx={crater.x} cy={crater.y} r={crater.r} />
+	<!-- The belt itself: the same swarm in every row, at the same weight
+	     whatever this rock is doing. It is the thing being drifted away from,
+	     so it cannot fade along with the rock that left it. `slice` scales it
+	     to cover the row and crops the overflow, which is how it runs the whole
+	     height of a card of any size without a single circle going oval. -->
+	<svg
+		class="strip"
+		viewBox="0 0 {STRIP.width} {STRIP.height}"
+		preserveAspectRatio="xMidYMid slice"
+		role="presentation"
+	>
+		{#each specks as speck, index (index)}
+			<circle cx={speck.x} cy={speck.y} r={speck.r} opacity={speck.o} />
 		{/each}
-	</g>
-</svg>
+	</svg>
+
+	<svg
+		class="mark"
+		viewBox="0 0 {BOX.width} {BOX.height}"
+		width={size}
+		height={(size * BOX.height) / BOX.width}
+		role="presentation"
+	>
+		{#if !settled}
+			<!-- How far it has come. The dots run from the swarm's edge and stop
+			     where the rock is, so length and position are the same fact rather
+			     than two that can disagree. -->
+			<path class="wake" d="M 36 {cy} L {cx.toFixed(2)} {cy}" />
+		{/if}
+
+		<g class="rock" transform="translate({cx.toFixed(2)} {cy}) scale({scale})">
+			<polygon class="rock__body" points={rock.points} />
+			{#each rock.craters as crater, index (index)}
+				<circle class="rock__crater" cx={crater.x} cy={crater.y} r={crater.r} />
+			{/each}
+		</g>
+	</svg>
+</span>
 
 <style>
+	/*
+	 * The mark is a fixed width and whatever height the row turns out to be —
+	 * `align-self: stretch` on the row's side — so the belt runs the full card
+	 * rather than sitting in a band across the top of it.
+	 */
 	.asteroid {
-		display: block;
+		align-items: center;
+		display: flex;
 		flex: none;
-		overflow: visible;
+		position: relative;
+		width: var(--mark-width);
 	}
 
-	.track {
-		fill: none;
-		stroke: var(--space-border);
-		stroke-dasharray: 3 6;
-		stroke-linecap: round;
-		stroke-width: 2;
+	/*
+	 * `height: 100%` rather than `top: 0; bottom: 0`. An SVG carrying a viewBox
+	 * is a replaced element with an intrinsic aspect ratio, and that ratio wins
+	 * over a pair of offsets — which sized the strip from its own proportions
+	 * and spilled it out of the bottom of every card. `slice` then scales it
+	 * uniformly to cover the row and crops the rest, which is what a belt does
+	 * anyway: it carries on past the card.
+	 */
+	.strip {
+		height: 100%;
+		left: 0;
+		overflow: hidden;
+		position: absolute;
+		top: 0;
+		width: var(--strip-width);
+	}
+
+	/* Over the strip, so a settled rock sits among the rubble rather than
+	   behind it. */
+	.mark {
+		display: block;
+		overflow: visible;
+		position: relative;
+	}
+
+	/*
+	 * Stone, like the rock, rather than an accent: the belt is the context a
+	 * row is read against and must not compete with anything on the page above
+	 * it. Bright enough to be a band, dim enough to stay background.
+	 */
+	.strip {
+		fill: rgba(198, 207, 238, 0.55);
 	}
 
 	.wake {
@@ -162,6 +300,11 @@
 		animation: tumble var(--spin) linear infinite;
 		transform-box: fill-box;
 		transform-origin: center;
+	}
+
+	/* Back in the swarm and not going anywhere: nothing left to be adrift. */
+	.asteroid--settled .rock {
+		animation: none;
 	}
 
 	.rock__body {
@@ -203,6 +346,21 @@
 		--rock-edge: rgba(196, 205, 236, 0.38);
 		--rock-pit: rgba(46, 54, 90, 0.32);
 		--rock-wake: rgba(148, 163, 214, 0.18);
+	}
+
+	/*
+	 * Settled last, so it wins over the band blocks above at equal specificity.
+	 *
+	 * Opaque, where a drifting rock is not: at 90% the rubble behind shows
+	 * straight through the stone, and a rock you can see the belt through reads
+	 * as part of the belt rather than as something sitting in front of it. The
+	 * edge is brighter for the same reason — it is the line that says which of
+	 * the two you are looking at.
+	 */
+	.asteroid--settled {
+		--rock-face: rgb(172, 184, 222);
+		--rock-edge: rgba(242, 246, 255, 0.92);
+		--rock-pit: rgba(52, 60, 98, 0.6);
 	}
 
 	@keyframes tumble {

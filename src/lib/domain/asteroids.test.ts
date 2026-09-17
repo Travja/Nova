@@ -5,6 +5,8 @@ import {
 	driftAge,
 	driftBand,
 	driftFraction,
+	doneLabel,
+	DONE_VISIBLE,
 	driftLabel,
 	DRIFT_DRIFTING_MS,
 	DRIFT_RELEASE_OFFER_MS,
@@ -234,6 +236,24 @@ describe('drift', () => {
 		expect(at(1)).toBe('Drifting a day');
 		expect(at(9)).toBe('Drifting 9 days');
 		expect(at(21)).toBe('Drifting 3 weeks');
+	});
+});
+
+describe('doneLabel', () => {
+	it('counts back from when it was finished, not from when it drifted', () => {
+		const at = (days: number) => doneLabel({ resolvedAt: daysAgo(days) }, now);
+		expect(at(0)).toBe('Done today');
+		expect(at(1)).toBe('Done yesterday');
+		expect(at(5)).toBe('Done 5 days ago');
+		expect(at(21)).toBe('Done 3 weeks ago');
+	});
+
+	it('says only that it is done when nothing recorded when', () => {
+		expect(doneLabel({ resolvedAt: null }, now)).toBe('Done');
+	});
+
+	it('keeps the fold bounded, so it cannot become a flattering ledger', () => {
+		expect(DONE_VISIBLE).toBe(12);
 	});
 });
 

@@ -1,5 +1,6 @@
 import {
 	captureOffer,
+	DONE_VISIBLE,
 	sortBelt,
 	type Asteroid,
 	type AsteroidResolution,
@@ -10,7 +11,7 @@ import { db } from '$lib/server/db';
 import { asteroids, type AsteroidRow } from '$lib/server/db/schema';
 import { newId } from '$lib/server/auth/session';
 import { createGoal, type GoalWriteResult } from '$lib/server/goals';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 
 /**
  * The belt, server side.
@@ -48,6 +49,26 @@ export async function listAsteroids(userId: string): Promise<Asteroid[]> {
 		.where(and(eq(asteroids.userId, userId), isNull(asteroids.resolution)));
 
 	return sortBelt(rows.map(toAsteroid));
+}
+
+/**
+ * What this user has finished lately, newest first.
+ *
+ * Cleared only, and bounded in the query rather than after it: this runs on
+ * every Today load, and the whole reason the fold is capped is that a list of
+ * everything ever finished is the same endless ledger the belt is built to
+ * avoid. Released rows are not here by decision #4, and captured ones are
+ * already on the page as the goals they became.
+ */
+export async function listDoneAsteroids(userId: string, limit = DONE_VISIBLE): Promise<Asteroid[]> {
+	const rows = await db
+		.select()
+		.from(asteroids)
+		.where(and(eq(asteroids.userId, userId), eq(asteroids.resolution, 'cleared')))
+		.orderBy(desc(asteroids.resolvedAt))
+		.limit(limit);
+
+	return rows.map(toAsteroid);
 }
 
 /**

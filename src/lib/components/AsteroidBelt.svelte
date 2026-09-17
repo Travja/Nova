@@ -1,7 +1,8 @@
 <script lang="ts">
 	import AsteroidRow from '$components/AsteroidRow.svelte';
 	import FieldError from '$components/FieldError.svelte';
-	import { offersRelease, type Asteroid } from '$domain/asteroids';
+	import Asteroid from '$components/Asteroid.svelte';
+	import { doneLabel, offersRelease, type Asteroid as AsteroidData } from '$domain/asteroids';
 	import { describedBy, type FormErrors } from '$domain/validation';
 	import { resolve } from '$app/paths';
 
@@ -27,7 +28,9 @@
 	}
 
 	interface Props {
-		asteroids: readonly Asteroid[];
+		asteroids: readonly AsteroidData[];
+		/** Recently finished, newest first — bounded by the service. */
+		done?: readonly AsteroidData[];
 		now: Date;
 		errors?: FormErrors | null;
 		/** What just happened, for the belt's own live region. */
@@ -42,6 +45,7 @@
 
 	let {
 		asteroids,
+		done = [],
 		now,
 		errors = null,
 		message = null,
@@ -63,7 +67,7 @@
 		The belt{#if asteroids.length > 0}&nbsp;({asteroids.length}){/if}
 	</h2>
 	<p class="muted lede">
-		One-offs that never became a cycle — no tier, no target, no streak. Clear one when nothing is
+		One-offs that never became a cycle — no tier, no target, no streak. Tick one off when nothing is
 		due, or let it go.
 	</p>
 
@@ -73,7 +77,7 @@
 		     repeated down a list stops reading that way by the third time. -->
 		<p class="muted lede">
 			{atEdge === 1 ? 'One of these has' : `${atEdge} of these have`} drifted as far as the belt goes.
-			Letting one go is as good an ending as clearing it.
+			Letting one go is as good an ending as finishing it.
 		</p>
 	{/if}
 
@@ -127,6 +131,34 @@
 		</ul>
 	{:else}
 		<p class="muted empty">Nothing adrift.</p>
+	{/if}
+
+	{#if done.length > 0}
+		<!--
+			What settled back into the belt. The same `<details>` the folds above
+			this band use, for the same reason: it is worth keeping and not worth
+			the room, and the element already maps to a disclosure that announces
+			its own state.
+
+			Bounded, and deliberately so — an endless list of finished one-offs is
+			the same infinite ledger drift exists to prevent, only flattering
+			instead of reproachful. Released asteroids are in no list at all.
+		-->
+		<details class="fold">
+			<summary>Done ({done.length})</summary>
+			<ul class="rocks rocks--done">
+				{#each done as asteroid (asteroid.id)}
+					<li class="settled">
+						<Asteroid seed={asteroid.id} drift={0} band="fresh" settled />
+						<span class="settled__title">{asteroid.title}</span>
+						<span class="settled__when muted">{doneLabel(asteroid, now)}</span>
+					</li>
+				{/each}
+			</ul>
+			<p class="muted fold__note">
+				Back in the belt, and drifting from nothing. The most recent stay here.
+			</p>
+		</details>
 	{/if}
 </section>
 
@@ -213,5 +245,61 @@
 	.empty {
 		font-size: var(--text-secondary);
 		margin: 0.2rem 0 0;
+	}
+
+	/* The same fold the bands above this one use. */
+	.fold {
+		border: 1px solid var(--space-border);
+		border-radius: var(--radius);
+		margin-top: 0.35rem;
+		padding: 0.1rem 0.9rem;
+	}
+
+	summary {
+		color: var(--text-dim);
+		cursor: pointer;
+		font-weight: 600;
+		min-height: var(--tap-min);
+		padding: 0.68rem 0;
+	}
+
+	.rocks--done {
+		gap: 0.15rem;
+		margin: 0 0 0.5rem;
+	}
+
+	/*
+	 * Mark, title, then when — the when beside the title rather than flung out
+	 * to the right margin, where a short title and its date stop looking like
+	 * one line.
+	 */
+	.settled {
+		align-items: center;
+		display: grid;
+		gap: 0 0.55rem;
+		grid-template-columns: auto auto minmax(0, 1fr);
+	}
+
+	/*
+	 * Not struck through. A finished one-off is not a crossed-out line in a
+	 * list, it is a rock that made it back — and the drawing beside it already
+	 * says which of the two this is.
+	 */
+	.settled__title {
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.settled__when {
+		font-size: var(--text-secondary);
+		white-space: nowrap;
+	}
+
+	.fold__note {
+		font-size: var(--text-secondary);
+		margin: 0 0 0.7rem;
+		max-width: 60ch;
 	}
 </style>

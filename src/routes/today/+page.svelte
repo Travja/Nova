@@ -288,6 +288,7 @@
 	-->
 	<AsteroidBelt
 		asteroids={data.asteroids}
+		done={data.doneAsteroids}
 		now={data.now}
 		errors={form?.errors ?? null}
 		message={form?.belt ?? null}

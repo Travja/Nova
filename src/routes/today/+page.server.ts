@@ -4,6 +4,7 @@ import {
 	createAsteroid,
 	dismissCaptureOffer,
 	listAsteroids,
+	listDoneAsteroids,
 	releaseAsteroid,
 	updateAsteroidNote,
 	updateAsteroidTitle
@@ -27,6 +28,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		// snapshot of its own: an asteroid has no period to close, so there is
 		// nothing here for the orbit maths to compute.
 		asteroids: await listAsteroids(locals.user.id),
+		// What has settled back into the belt, so the band says what was got
+		// through and not only what is still out there.
+		doneAsteroids: await listDoneAsteroids(locals.user.id),
 		now
 	};
 };
@@ -82,10 +86,14 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Done. The answer carries the capture offer for the title just cleared, so
+	 * Done. The answer carries the capture offer for the title just finished, so
 	 * the belt can ask whether it should be a goal in the same breath as saying
 	 * it is done — inline, where somebody is already looking, rather than as a
 	 * banner that turns up later uninvited.
+	 *
+	 * `cleared` stays the stored name of the state: the three terminal states
+	 * are settled vocabulary that #17's export is scoped against. "Done" is
+	 * what a person reads, which is a different question.
 	 */
 	clearAsteroid: async ({ request, locals }) => {
 		if (!locals.user) redirect(303, '/login');
@@ -95,7 +103,7 @@ export const actions: Actions = {
 		if (!cleared.ok) return fail(404, { errors: formError(GONE) });
 
 		return {
-			belt: 'Cleared.',
+			belt: 'Done.',
 			offer: cleared.offer.offer
 				? {
 						asteroidId: cleared.asteroid.id,

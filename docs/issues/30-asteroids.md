@@ -145,6 +145,24 @@ goal is paused work someone may resume and its history still counts toward
 streak maths; a released asteroid was never going to have history, and nothing
 downstream needs to find it again.
 
+### What a finished one-off is called, and where it goes
+
+The action reads **Done**, not "Clear": the belt needed a word that says the
+one-off is finished rather than that the list is tidier. The stored state is
+still `cleared` — the three terminal states are the vocabulary decisions #1 and
+#4 are written in and #17's export is scoped against, and what a person reads is
+a different question from what the column holds.
+
+Finished asteroids stay visible, in a bounded fold under the belt, drawn back
+inside the swarm rather than out beyond it. This does not reopen decision #4,
+which is about **released** ones: a release is an explicit letting-go and a list
+of those is the backlog of guilt under a gentler name, while seeing what you got
+through is most of the reason to tick anything off. The fold is capped at
+`DONE_VISIBLE` (a dozen) for the same reason drift exists at all — an endless
+list of finished one-offs is the same infinite ledger, only flattering instead
+of reproachful. A captured asteroid is not in it either: it is already on the
+page above, as the goal it became.
+
 ## Sketch: schema and the domain/service split
 
 Not a spec to implement verbatim — concrete enough that the build session isn't
@@ -237,6 +255,9 @@ Same ownership pattern as `goals.ts` — every function re-reads the row under
 the caller's `userId` rather than trusting an id alone:
 
 - `listAsteroids(userId)` — active asteroids, sorted with `sortBelt()`.
+- `listDoneAsteroids(userId, limit)` — the most recently cleared, newest first,
+  bounded in the query rather than after it, since this runs on every Today
+  load.
 - `createAsteroid(userId, { title, note })`.
 - `clearAsteroid(userId, id)` — sets `resolution: 'cleared'`, `resolvedAt`;
   loads this user's asteroids sharing the normalized title and returns whether

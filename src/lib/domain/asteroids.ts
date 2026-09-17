@@ -193,6 +193,32 @@ export function offersRelease(asteroid: DriftInput, now: Date): boolean {
 }
 
 /**
+ * How many finished one-offs the belt keeps in view.
+ *
+ * Bounded on purpose. Seeing what you got through is the point of showing them
+ * at all, and an unbounded list of them is the same infinite ledger drift
+ * exists to prevent — just a flattering one instead of a reproachful one. A
+ * dozen is about a good fortnight of spare ten minutes.
+ *
+ * Only *cleared* asteroids are ever in it. A released one is gone from every
+ * list by decision #4, and a captured one is already on the page above as the
+ * goal it became, so listing it here would be saying the same thing twice.
+ */
+export const DONE_VISIBLE = 12;
+
+/** How a finished one-off says when it was finished. */
+export function doneLabel(asteroid: { resolvedAt: Date | null }, now: Date): string {
+	if (!asteroid.resolvedAt) return 'Done';
+
+	const days = Math.floor(Math.max(0, now.getTime() - asteroid.resolvedAt.getTime()) / DAY_MS);
+	if (days < 1) return 'Done today';
+	if (days === 1) return 'Done yesterday';
+	if (days < 14) return `Done ${days} days ago`;
+	const weeks = Math.round(days / 7);
+	return `Done ${weeks} weeks ago`;
+}
+
+/**
  * The belt, oldest drift anchor first.
  *
  * One axis and no second one: no manual order, no secondary sort. Goals get

@@ -8,10 +8,14 @@
 	 * One rock on the belt: what it is, how long it has been out there, and the
 	 * three ways it can leave.
 	 *
-	 * Clearing and releasing sit side by side and are drawn at the same weight
+	 * Finishing and releasing sit side by side and are drawn at the same weight
 	 * on purpose. Releasing is a legitimate ending, not a failure — the whole
 	 * point of drift is that the belt never becomes a ledger of things not done
 	 * — so nothing here dresses one of them up as the right answer.
+	 *
+	 * The button says Done and the state it writes is still called `cleared`:
+	 * the three terminal states are settled vocabulary the export in #17 is
+	 * scoped against, and what a person reads is a different question.
 	 */
 
 	interface Props {
@@ -52,10 +56,8 @@
 	<div class="actions">
 		<form method="POST" action={clearAction}>
 			<input type="hidden" name="id" value={asteroid.id} />
-			<button class="tap act act--clear" type="submit">
-				<span aria-hidden="true">✓</span> Clear<span class="visually-hidden">
-					{asteroid.title}</span
-				>
+			<button class="tap act act--done" type="submit">
+				<span aria-hidden="true">✓</span> Done<span class="visually-hidden"> {asteroid.title}</span>
 			</button>
 		</form>
 		<form method="POST" action={releaseAction}>
@@ -113,12 +115,12 @@
 	}
 
 	/*
-	 * The mark sits at the top of its column rather than centred, so a row that
-	 * grows — an open edit panel, a release offer — does not send the rock
-	 * sliding down the middle of it.
+	 * The mark takes the row's whole height rather than a fixed slice of the
+	 * top of it, which is what lets the belt run the length of the card. The
+	 * rock inside it stays vertically centred whatever the row grows to.
 	 */
 	.rock > :global(.asteroid) {
-		align-self: start;
+		align-self: stretch;
 		grid-area: mark;
 	}
 
@@ -183,12 +185,12 @@
 		color: var(--text-bright);
 	}
 
-	/* Clearing is the likelier of the two, so it is the one that is lit. */
-	.act--clear {
+	/* Finishing is the likelier of the two, so it is the one that is lit. */
+	.act--done {
 		color: var(--text-bright);
 	}
 
-	.act--clear:hover {
+	.act--done:hover {
 		border-color: var(--success);
 		color: var(--success);
 	}

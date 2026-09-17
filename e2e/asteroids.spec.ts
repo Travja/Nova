@@ -39,7 +39,9 @@ function rock(page: Page, title: string) {
 	return belt(page).getByRole('listitem').filter({ hasText: title });
 }
 
-test('a one-off is added, cleared and let go, without ever becoming an orbit', async ({ page }) => {
+test('a one-off is added, ticked off and let go, without ever becoming an orbit', async ({
+	page
+}) => {
 	await pinClock(page, EVENING);
 	await register(page, 'Wren Achebe');
 
@@ -54,24 +56,35 @@ test('a one-off is added, cleared and let go, without ever becoming an orbit', a
 	await addAsteroid(page, 'Cancel the gym trial');
 	await expect(belt(page).getByRole('heading', { name: 'The belt (2)' })).toBeVisible();
 
-	// Each rock is drawn, and drawn as a rock: no dial, no arc, nothing that
-	// suggests there is a revolution here to complete.
-	await expect(belt(page).locator('svg.asteroid')).toHaveCount(2);
+	// Each rock is drawn, against the belt it drifted out of — and drawn as a
+	// rock: no dial, no arc, nothing suggesting a revolution to complete.
+	await expect(belt(page).locator('.asteroid')).toHaveCount(2);
+	await expect(belt(page).locator('.asteroid .strip')).toHaveCount(2);
 	await expect(belt(page).locator('.dial')).toHaveCount(0);
 
 	// One tap to clear. Quieter than a closing orbit: a line, not a burst.
-	await page.getByRole('button', { name: 'Clear Return the library books' }).click();
-	await expect(belt(page).getByText('Cleared.')).toBeVisible();
+	await page.getByRole('button', { name: 'Done Return the library books' }).click();
+	await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
 	await expect(rock(page, 'Return the library books')).toHaveCount(0);
 
-	// One tap to let go, on equal footing with clearing.
+	// Finished is not gone: it settles back into the belt, in a fold of its own,
+	// where a released one is in no list at all.
+	const settled = belt(page).locator('details').filter({ hasText: 'Done (1)' });
+	await settled.locator('summary').click();
+	await expect(settled.getByText('Return the library books')).toBeVisible();
+	await expect(settled.getByText('Done today')).toBeVisible();
+
+	// One tap to let go, on equal footing with finishing.
 	await page.getByRole('button', { name: 'Release Cancel the gym trial' }).click();
 	await expect(belt(page).getByText('Released.')).toBeVisible();
 
-	// And released means gone from every list, not filed under a gentler name.
+	// And released means gone from every list, not filed under a gentler name —
+	// including the Done fold, which the one that was finished is still in.
 	await expect(belt(page).getByText('Nothing adrift.')).toBeVisible();
 	await page.reload();
 	await expect(rock(page, 'Cancel the gym trial')).toHaveCount(0);
+	await expect(belt(page).locator('details').filter({ hasText: 'Done (1)' })).toBeVisible();
+	await expect(belt(page)).not.toContainText('Cancel the gym trial');
 
 	// Nothing an asteroid did reached the orbit machinery: three of them came
 	// and went and this account has still never had a goal.
@@ -128,7 +141,9 @@ test('an asteroid captured into a goal is a goal like any other', async ({ page 
 	await expect(belt(page).getByText('Nothing adrift.')).toBeVisible();
 });
 
-test('the third clear of the same one-off offers to make it a habit, once', async ({ page }) => {
+test('the third time the same one-off is done, Nova offers to make it a habit', async ({
+	page
+}) => {
 	await pinClock(page, EVENING);
 	await register(page, 'Sasha Delacroix');
 
@@ -139,21 +154,21 @@ test('the third clear of the same one-off offers to make it a habit, once', asyn
 	// for years and is never going to be a Planet.
 	for (const pass of [1, 2]) {
 		await addAsteroid(page, 'Water the plants');
-		await page.getByRole('button', { name: 'Clear Water the plants' }).click();
-		await expect(belt(page).getByText('Cleared.')).toBeVisible();
+		await page.getByRole('button', { name: 'Done Water the plants' }).click();
+		await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
 		expect(await belt(page).getByText('has cleared').count(), `pass ${pass}`).toBe(0);
 	}
 
 	// Three is a cadence, and the offer arrives inline on the clear itself —
 	// where somebody is already looking at "done".
 	await addAsteroid(page, 'Water the plants');
-	await page.getByRole('button', { name: 'Clear Water the plants' }).click();
+	await page.getByRole('button', { name: 'Done Water the plants' }).click();
 	await expect(belt(page).getByText('Water the plants has cleared 3 times')).toBeVisible();
 
 	// Turned down, and not asked again on the next clear of the same title.
 	await page.getByRole('button', { name: 'No, it is a one-off' }).click();
 	await addAsteroid(page, 'Water the plants');
-	await page.getByRole('button', { name: 'Clear Water the plants' }).click();
-	await expect(belt(page).getByText('Cleared.')).toBeVisible();
+	await page.getByRole('button', { name: 'Done Water the plants' }).click();
+	await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
 	await expect(belt(page).getByText('has cleared')).toHaveCount(0);
 });

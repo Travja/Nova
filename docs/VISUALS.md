@@ -112,6 +112,71 @@ the pilot can be sent away with the ✕ if you find it distracting.
 
 ![The pilot in place](screenshots/mascot-today.png)
 
+## The belt
+
+An asteroid is the one thing in Nova with no period to complete, so it is the
+one thing that is deliberately **not** a dial. There is no arc to fill and no
+body travelling round to meet it. What there is instead is a distance — and a
+distance needs two things to be a distance.
+
+![The belt: rocks drifting, and finished ones settled back in](screenshots/30-asteroids/drift-and-done.png)
+
+The swarm on the left is the belt itself, drawn as a slice of a very large ring
+whose centre is far off the left of the box: a belt is an orbit that never
+gathered itself up, and the curve is the only thing on screen still saying so.
+Its specks are seeded from a **constant** rather than from the asteroid, so
+every row draws the same belt — it _is_ the same belt. Two random draws are
+averaged for each speck's distance across the band, which thickens it through
+the middle and thins it at the edges; a flat scatter reads as noise rather than
+as rubble.
+
+The rock is the row's own, seeded from the asteroid's id the same way
+`bodyVariant()` pins a goal's body — the shape, the craters, the direction it
+tumbles and how long a turn takes all come out of that one hash, so no rock
+tumbles in lockstep with its neighbour and the server and the browser carve the
+same stone.
+
+Where it sits is the whole message:
+
+| Band         | Since the title was last written | Drawn                                 |
+| ------------ | -------------------------------- | ------------------------------------- |
+| **fresh**    | under a week                     | just clear of the swarm, full weight  |
+| **drifting** | one to three weeks               | further out, dimmer                   |
+| **faint**    | three weeks and beyond           | at the far edge, faintest             |
+| **settled**  | finished                         | back inside the swarm, smaller, still |
+
+`faint` and the release offer share their boundary on purpose: a rock reaching
+the outer edge and Nova offering to let it go are the same fact, and giving them
+a threshold each is two readings that can disagree. Drift is also **clamped** —
+a rock nobody has touched for a year sits exactly where one of three weeks does,
+because drift is a distance and not a debt that keeps growing.
+
+A finished one-off is drawn back among the swarm rather than struck through.
+Nothing here is a crossed-out line in a list; it is a rock that made it back,
+and the drawing says which of the two a row is before the words do. It is drawn
+smaller, because it is a line in a fold rather than a card, and **opaque** where
+a drifting rock is not — at 90% the rubble shows straight through the stone, and
+a rock you can see the belt through reads as part of the belt instead of as
+something sitting in front of it.
+
+The strip is its own element rather than part of the rock's box. The belt has to
+run the whole height of whatever row it is in and the rock has to hold its
+horizontal position exactly, and one element cannot do both: stretching a viewBox
+to fill a variable height either squashes every circle in it or crops the side
+the rock drifts towards. So the strip covers the row with
+`preserveAspectRatio="xMidYMid slice"` — scaled uniformly, cropped top and
+bottom, which is what a belt does anyway — and the rock sits in a fixed box laid
+over it. Give that strip `height: 100%` and not `top: 0; bottom: 0`: an SVG
+carrying a viewBox is a replaced element with an intrinsic aspect ratio, and
+that ratio wins over a pair of offsets.
+
+![A row opened, with the belt running its full height](screenshots/30-asteroids/row-opened.png)
+
+The belt never raises its voice. Both endings are outline pills rather than
+`.button`s, the three-clear capture offer is a bordered note with no gradient
+and no burst, and clearing one says "Done." in a muted line. Closing an orbit is
+the biggest moment in the app and nothing on this band may compete with it.
+
 ## The rules
 
 Four of these are load-bearing, and breaking any of them shows up immediately:
@@ -144,9 +209,13 @@ src/lib/components/OrbitHistory.svelte  The strip of recent orbits
 src/lib/components/Mascot.svelte        The pilot, and the copy beside it
 src/lib/components/Astronaut.svelte     The sprite itself, one pose per mood
 src/lib/components/Starfield.svelte     The backdrop, three parallax layers
+src/lib/components/Asteroid.svelte      One rock, and the belt it drifted out of
+src/lib/components/AsteroidRow.svelte   A one-off and its two endings
+src/lib/components/AsteroidBelt.svelte  The band, the capture offer, the Done fold
 src/lib/domain/bodies.ts                Which body a goal flies
 src/lib/domain/celebration.ts           Whether a closing just happened
 src/lib/domain/mascot.ts                What the week adds up to
+src/lib/domain/asteroids.ts             Drift, its bands, and the capture offer
 ```
 
 The three domain modules are pure functions over plain data, tested like the
