@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { hydrated } from './helpers';
+import { EVENING, hydrated, pinClock } from './helpers';
 
 /**
  * Closing an orbit is the one moment the app is built around, so it has to fire
@@ -73,5 +73,78 @@ test.describe('with reduced motion', () => {
 		await expect(page.getByText('Orbit closed today')).toBeVisible();
 		await expect(page.locator('.burst')).toBeAttached();
 		await expect(page.locator('.burst')).toBeHidden();
+	});
+});
+
+/**
+ * #51: closing an orbit from `/today` used to throw the whole moment away.
+ * Compact draws the closing goal's sheet as a modal `<dialog>` inside a
+ * `GoalRow`, and the row used to be destroyed the instant the goal moved from
+ * the pending list to the Closed fold — taking the open dialog with it before
+ * `noteOrbits`'s `SWEEP_MS` wait ever raised anything to see.
+ */
+test.describe('closing from the sheet on /today', () => {
+	async function chooseCompact(page: Page) {
+		await page.goto('/settings');
+		await hydrated(page);
+		await page.getByLabel('Density').selectOption('compact');
+		await page.getByRole('button', { name: 'Save' }).click();
+		await expect(page.getByText('Saved.')).toBeVisible();
+	}
+
+	test('the dialog survives the goal moving to Closed, and the dial bursts inside it', async ({
+		page
+	}) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await pinClock(page, EVENING);
+		await launchDailyGoal(page, 'Evening stretch');
+		await chooseCompact(page);
+
+		await page.goto('/today');
+		await hydrated(page);
+
+		const row = page.locator('.row').filter({ hasText: 'Evening stretch' });
+		await row.click();
+		const sheet = page.getByRole('dialog');
+		await expect(sheet).toBeVisible();
+
+		await sheet.getByRole('button', { name: '+1 check-in' }).click();
+
+		// The burst that matters is the dial's own, on the card inside the sheet —
+		// the astronaut at the top of the page is behind the modal's backdrop and
+		// nobody sees it. The dialog has to still be here to show it at all: a
+		// rebuilt or reopened one would have already lost the dial's sweep.
+		const burst = sheet.locator('.burst');
+		await expect(burst).toBeAttached();
+		await expect(sheet).toBeVisible();
+		await expect(sheet.getByText('Orbit closed today')).toBeVisible();
+		await expect(burst).toHaveCount(0, { timeout: 5_000 });
+
+		// Only once the celebration is over does the goal make the move a plain
+		// partition would have made instantly — into the Closed fold, ring and
+		// all. That move is still a goal crossing from one `{#each}` to another,
+		// which Svelte always treats as a destroy and a create (see #51's own
+		// spec), so the row it lands in in Closed is a fresh one; what the hold
+		// promised was only that this never happens before the celebration ends.
+		await expect(page.getByText('Closed (1)')).toBeVisible();
+		await expect(page.locator('.row').filter({ hasText: 'Evening stretch' })).toContainText(
+			'Orbit closed today'
+		);
+	});
+
+	test('non-compact keeps the same GoalCard through the sweep', async ({ page }) => {
+		await pinClock(page, EVENING);
+		await launchDailyGoal(page, 'Evening pages');
+		await page.goto('/today');
+		await hydrated(page);
+
+		await page.getByRole('button', { name: '+1 check-in' }).click();
+
+		const burst = page.getByRole('article').locator('.burst');
+		await expect(burst).toBeAttached();
+		await expect(page.getByRole('article')).toContainText('Orbit closed today');
+		await expect(burst).toHaveCount(0, { timeout: 5_000 });
+
+		await expect(page.getByText('Closed (1)')).toBeVisible();
 	});
 });

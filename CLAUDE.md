@@ -128,8 +128,9 @@ position and fill say the same thing twice.
   because it carries the test block.
 - `better-sqlite3` compiles a native addon and is listed in
   `pnpm-workspace.yaml` under `onlyBuiltDependencies`.
-- Playwright can reuse a preinstalled browser via
-  `PLAYWRIGHT_CHROMIUM_EXECUTABLE`; CI installs its own.
+- Playwright finds a preinstalled Chromium by itself when its own build is
+  missing and the CDN is blocked, which is the usual sandbox. Nothing to set:
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE` still overrides, and CI installs its own.
 
 ## Session start
 

@@ -1,4 +1,6 @@
-import { defineConfig, devices } from '@playwright/test';
+import { chromium, defineConfig, devices } from '@playwright/test';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * End-to-end coverage runs against the dev server with its own throwaway
@@ -11,10 +13,43 @@ import { defineConfig, devices } from '@playwright/test';
  * flush. Testing it against dev would be testing something else.
  */
 /**
- * Escape hatch for sandboxes and images that already ship a Chromium build,
- * so `playwright install` is not required there. CI installs browsers normally.
+ * A Chromium already on this machine, for images that ship one that is not the
+ * build this Playwright asks for.
+ *
+ * Sandboxes commonly preinstall browsers into `PLAYWRIGHT_BROWSERS_PATH` and
+ * then block the CDN, so `playwright install` cannot fetch the missing build
+ * and the whole suite fails to launch over a revision number. Running against
+ * a near-miss build is not a combination Playwright supports, but it is the
+ * difference between running the tests and not running them at all, so it is
+ * the fallback rather than the default: when Playwright's own copy is present
+ * this returns nothing and normal resolution applies, which is what happens on
+ * a development machine and in CI.
  */
-const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+function installedChromium(): string | undefined {
+	try {
+		// Playwright's own copy, when it is there, is always the right one.
+		if (existsSync(chromium.executablePath())) return undefined;
+	} catch {
+		// It throws when the browser was never installed, which is the case this
+		// function exists for.
+	}
+
+	const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
+	if (!root || !existsSync(root)) return undefined;
+
+	// The image's own symlink first: whoever built it chose that one on purpose.
+	const candidates = [join(root, 'chromium')];
+	// Then whatever builds are on disk, newest revision first.
+	for (const name of readdirSync(root)
+		.filter((name) => /^chromium-\d+$/.test(name))
+		.sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))) {
+		candidates.push(join(root, name, 'chrome-linux', 'chrome'));
+	}
+
+	return candidates.find((candidate) => existsSync(candidate));
+}
+
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? installedChromium();
 
 const OFFLINE_SPEC = '**/offline-logging.spec.ts';
 

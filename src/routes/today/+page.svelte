@@ -4,11 +4,12 @@
 	import AsteroidBelt from '$components/AsteroidBelt.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
 	import GoalRow from '$components/GoalRow.svelte';
+	import GoalRowSheet from '$components/GoalRowSheet.svelte';
 	import Mascot from '$components/Mascot.svelte';
-	import { celebration, noteOrbits } from '$lib/celebration.svelte';
+	import { celebration, heldGoal, justClosed, noteOrbits } from '$lib/celebration.svelte';
 	import { overlayAll } from '$domain/queue';
 	import { queuedEntries } from '$lib/offline/queue.svelte';
-	import type { FocusRow, GoalSnapshot } from '$domain/progress';
+	import type { FocusRow, GoalSnapshot, TodayFocus } from '$domain/progress';
 	import { focusForToday, formatTimeLeft, periodElapsed } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
@@ -27,7 +28,66 @@
 		})
 	);
 	/** Ranked on the same clock the orbits were measured against. */
-	const focus = $derived(focusForToday(snapshots, data.now));
+	const rawFocus = $derived(focusForToday(snapshots, data.now));
+
+	/**
+	 * Where each goal sat the last time it was not being celebrated. Plain,
+	 * like `seen` in the celebration store, and written from inside the same
+	 * derivation that reads it: `$state` here would retrigger the derivation
+	 * it feeds, and this only ever needs the value `focus` already settled on
+	 * a moment ago.
+	 */
+	const lastBucket: Record<string, 'atRisk' | 'steady'> = {};
+
+	/**
+	 * `focusForToday` moves a goal to Closed the instant its orbit does, which
+	 * would tear the non-compact `GoalCard` mid-sweep out of the list it was
+	 * animating in (#51) — the dial's arc and travelling body are a CSS
+	 * transition running on that specific element, and a fresh one built in the
+	 * Closed fold starts cold. So a goal mid-celebration is held in the section
+	 * it already occupied until the celebration — the `SWEEP_MS` wait and the
+	 * burst both — has finished.
+	 *
+	 * Compact's sheet no longer needs this: `GoalRowSheet` lives outside every
+	 * `{#each}` a row is drawn in, so it stays put regardless of which section
+	 * the row itself is in. Holding the row here anyway is harmless — compact
+	 * just gets the same brief pause non-compact needs for its dial.
+	 *
+	 * `justClosed` catches the render `noteOrbits` would otherwise catch a beat
+	 * late: that effect runs one render after the data it reacts to, and by
+	 * then the row this is protecting would already have moved. `heldGoal`
+	 * picks up from there and carries the hold through the wait and the burst.
+	 */
+	const focus = $derived.by((): TodayFocus => {
+		for (const row of rawFocus.atRisk) lastBucket[row.snapshot.goal.id] = 'atRisk';
+		for (const row of rawFocus.steady) lastBucket[row.snapshot.goal.id] = 'steady';
+
+		let holdId: string | null = null;
+		for (const snapshot of snapshots) {
+			if (justClosed(snapshot)) holdId = snapshot.goal.id;
+		}
+		// Read unconditionally, `??=` would skip the call once the loop above has
+		// already found one — and an unread `heldGoal()` is untracked, so this
+		// derivation would never rerun once the celebration it is waiting on ends.
+		const stillHeld = heldGoal();
+		holdId ??= stillHeld;
+		if (!holdId) return rawFocus;
+
+		const index = rawFocus.closed.findIndex((snapshot) => snapshot.goal.id === holdId);
+		if (index === -1) return rawFocus;
+
+		const stillClosed = [...rawFocus.closed.slice(0, index), ...rawFocus.closed.slice(index + 1)];
+		const row: FocusRow = {
+			snapshot: rawFocus.closed[index],
+			urgency: 0,
+			closing: false,
+			behindPace: false,
+			owedToday: false
+		};
+		return lastBucket[holdId] === 'steady'
+			? { ...rawFocus, closed: stillClosed, steady: [row, ...rawFocus.steady] }
+			: { ...rawFocus, closed: stillClosed, atRisk: [row, ...rawFocus.atRisk] };
+	});
 	const logAction = $derived(`${resolve('/today')}?/log`);
 	/**
 	 * The belt's four endings and its add, as actions on this page. It is a band
@@ -49,6 +109,17 @@
 	 * for hydration to disagree about.
 	 */
 	const compact = $derived(data.user?.preferences.density === 'compact');
+
+	/**
+	 * Which goal's sheet a compact row asked to open, if any. One id rather than
+	 * a snapshot, so the sheet below always reads the goal's current state —
+	 * closing, then closed — straight out of `snapshots` rather than a copy
+	 * frozen at the moment the row was tapped.
+	 */
+	let openGoalId = $state<string | null>(null);
+	const openSnapshot = $derived(
+		snapshots.find((snapshot) => snapshot.goal.id === openGoalId) ?? null
+	);
 
 	/**
 	 * A goal that closes leaves the at-risk list, taking its dial with it, so the
@@ -146,8 +217,8 @@
 						     list is the urgency the reason was spelling out. -->
 						<GoalRow
 							snapshot={row.snapshot}
-							{logAction}
 							flag={row.behindPace && !row.closing ? 'Behind pace' : undefined}
+							onopen={(goalId) => (openGoalId = goalId)}
 						/>
 					{:else}
 						<p class="deadline">
@@ -187,7 +258,7 @@
 			</summary>
 			<ul class="flight">
 				{#each focus.closed as snapshot (snapshot.goal.id)}
-					<li><GoalRow {snapshot} {logAction} /></li>
+					<li><GoalRow {snapshot} onopen={(goalId) => (openGoalId = goalId)} /></li>
 				{/each}
 			</ul>
 		</details>
@@ -204,7 +275,7 @@
 			</p>
 			<ul class="flight">
 				{#each focus.steady as row (row.snapshot.goal.id)}
-					<li><GoalRow snapshot={row.snapshot} {logAction} /></li>
+					<li><GoalRow snapshot={row.snapshot} onopen={(goalId) => (openGoalId = goalId)} /></li>
 				{/each}
 			</ul>
 		</details>
@@ -227,6 +298,8 @@
 		editAction={belt.edit}
 		dismissAction={belt.dismiss}
 	/>
+
+	<GoalRowSheet snapshot={openSnapshot} {logAction} onclose={() => (openGoalId = null)} />
 </section>
 
 <style>
