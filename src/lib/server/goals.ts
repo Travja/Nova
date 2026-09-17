@@ -1,6 +1,8 @@
 import { buildOrbit, type DormantWindow, type GoalSnapshot, type Orbit } from '$domain/progress';
 import {
 	childrenOf,
+	closedPeriods,
+	ORBIT_METRIC,
 	parentProblem,
 	snapshotWithChildren,
 	tierProblem,
@@ -8,7 +10,14 @@ import {
 	type ParentProblem
 } from '$domain/nesting';
 import { periodsSinceLaunch } from '$domain/stats';
-import type { Goal, ProgressEntry } from '$domain/types';
+import {
+	detailsFromClosures,
+	detailsFromEntries,
+	historyCells,
+	HISTORY_PAGE_LENGTH,
+	type HistoryCell
+} from '$domain/history';
+import type { Goal, MetricDefinition, ProgressEntry } from '$domain/types';
 import type { GoalInput } from '$domain/validation';
 import { db } from '$lib/server/db';
 import {
@@ -296,6 +305,84 @@ export async function getGoalDetail(
 		// An archived goal is frozen at the moment it was archived.
 		snapshot: snapshotFromForest(goal, forest, user, goal.archivedAt ?? now),
 		recentEntries
+	};
+}
+
+export interface GoalHistoryPage {
+	goal: Goal;
+	/** Whether this goal has children — see `metricFor`, which is what `metric` already reads through. */
+	derived: boolean;
+	metric: MetricDefinition;
+	/** This page's cells, oldest first — a calendar reads left to right, forward in time. */
+	cells: HistoryCell[];
+	/** Clamped to what the goal's age actually has. */
+	page: number;
+	hasOlder: boolean;
+	hasNewer: boolean;
+}
+
+/**
+ * One page of a goal's whole history — issue #15's heatmap and orbit list,
+ * paged back through its whole life rather than the twelve-orbit window
+ * `getGoalDetail()` shows.
+ *
+ * `snapshotFromForest()` already builds an arbitrary-length orbit list from
+ * the same loaded forest `loadStatsInputs()` reads, so a page is a slice of
+ * a long enough one rather than a second pass over the entries with its own
+ * dormancy rules to keep in sync. Page 0 is the most recent
+ * `HISTORY_PAGE_LENGTH` periods (including the one in flight), page 1 the
+ * `HISTORY_PAGE_LENGTH` before that, and so on back to the goal's launch.
+ */
+export async function getGoalHistoryPage(
+	user: SessionUser,
+	goalId: string,
+	now: Date,
+	page = 0
+): Promise<GoalHistoryPage | null> {
+	const goal = await getGoal(user.id, goalId);
+	if (!goal) return null;
+
+	const forest = await loadForest(user.id);
+	const options = periodOptions(user);
+	const cadence = cadenceOf(goal.tier);
+	// An archived goal is frozen at the moment it was archived, same as the detail page.
+	const anchor = goal.archivedAt ?? now;
+	const pageLength = HISTORY_PAGE_LENGTH[cadence];
+
+	const lifetimePeriods = Math.min(
+		MAX_STATS_HISTORY,
+		periodsSinceLaunch(goal.createdAt, anchor, cadence, options)
+	);
+	const maxPage = Math.max(0, Math.ceil(lifetimePeriods / pageLength) - 1);
+	const safePage = Math.min(Math.max(0, page), maxPage);
+	const offset = safePage * pageLength;
+	const windowLength = Math.min(pageLength, lifetimePeriods - offset);
+
+	const snapshot = snapshotFromForest(goal, forest, user, anchor, offset + windowLength);
+	// Newest first out of the snapshot; oldest first for a calendar to draw left to right.
+	const window = [...snapshot.history.slice(offset, offset + windowLength)].reverse();
+
+	const children = childInputs(goal.id, forest);
+	const detailsByPeriod =
+		children.length > 0
+			? detailsFromClosures(
+					children.map((child) => ({
+						title: child.goal.title,
+						periods: closedPeriods(child, options)
+					})),
+					cadence,
+					options
+				)
+			: detailsFromEntries(forest.entriesByGoal.get(goal.id) ?? [], cadence, options);
+
+	return {
+		goal,
+		derived: children.length > 0,
+		metric: children.length > 0 ? ORBIT_METRIC : goal.metric,
+		cells: historyCells(window, detailsByPeriod),
+		page: safePage,
+		hasOlder: offset + windowLength < lifetimePeriods,
+		hasNewer: safePage > 0
 	};
 }
 
