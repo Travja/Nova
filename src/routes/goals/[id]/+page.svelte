@@ -330,7 +330,12 @@
 	{/if}
 
 	<section class="panel block">
-		<h2>Recent orbits</h2>
+		<div class="section-head">
+			<h2>Recent orbits</h2>
+			<a class="link-button tap" href={resolve('/goals/[id]/history', { id: goal.id })}
+				>Full history</a
+			>
+		</div>
 		<OrbitHistory history={snapshot.history} tier={goal.tier} goalId={goal.id} color={goal.color} />
 	</section>
 
@@ -545,6 +550,16 @@
 		display: grid;
 		gap: var(--gap-block);
 		padding: var(--pad-panel);
+	}
+
+	.section-head {
+		align-items: center;
+		display: flex;
+		justify-content: space-between;
+	}
+
+	.section-head h2 {
+		margin: 0;
 	}
 
 	.quick {
