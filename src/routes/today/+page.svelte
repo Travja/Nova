@@ -3,6 +3,7 @@
 	import Astronaut from '$components/Astronaut.svelte';
 	import GoalCard from '$components/GoalCard.svelte';
 	import GoalRow from '$components/GoalRow.svelte';
+	import GoalRowSheet from '$components/GoalRowSheet.svelte';
 	import Mascot from '$components/Mascot.svelte';
 	import { celebration, heldGoal, justClosed, noteOrbits } from '$lib/celebration.svelte';
 	import { overlayAll } from '$domain/queue';
@@ -39,16 +40,22 @@
 
 	/**
 	 * `focusForToday` moves a goal to Closed the instant its orbit does, which
-	 * would take the sheet on top of it along for the ride (#51) — the row it
-	 * was drawn in is destroyed, and a `<dialog>` whose element is gone cannot
-	 * be closed, only lost. So a goal mid-celebration is held in the section
+	 * would tear the non-compact `GoalCard` mid-sweep out of the list it was
+	 * animating in (#51) — the dial's arc and travelling body are a CSS
+	 * transition running on that specific element, and a fresh one built in the
+	 * Closed fold starts cold. So a goal mid-celebration is held in the section
 	 * it already occupied until the celebration — the `SWEEP_MS` wait and the
 	 * burst both — has finished.
 	 *
+	 * Compact's sheet no longer needs this: `GoalRowSheet` lives outside every
+	 * `{#each}` a row is drawn in, so it stays put regardless of which section
+	 * the row itself is in. Holding the row here anyway is harmless — compact
+	 * just gets the same brief pause non-compact needs for its dial.
+	 *
 	 * `justClosed` catches the render `noteOrbits` would otherwise catch a beat
 	 * late: that effect runs one render after the data it reacts to, and by
-	 * then the row this is protecting would already be gone. `heldGoal` picks
-	 * up from there and carries the hold through the wait and the burst.
+	 * then the row this is protecting would already have moved. `heldGoal`
+	 * picks up from there and carries the hold through the wait and the burst.
 	 */
 	const focus = $derived.by((): TodayFocus => {
 		for (const row of rawFocus.atRisk) lastBucket[row.snapshot.goal.id] = 'atRisk';
@@ -88,6 +95,17 @@
 	 * for hydration to disagree about.
 	 */
 	const compact = $derived(data.user?.preferences.density === 'compact');
+
+	/**
+	 * Which goal's sheet a compact row asked to open, if any. One id rather than
+	 * a snapshot, so the sheet below always reads the goal's current state —
+	 * closing, then closed — straight out of `snapshots` rather than a copy
+	 * frozen at the moment the row was tapped.
+	 */
+	let openGoalId = $state<string | null>(null);
+	const openSnapshot = $derived(
+		snapshots.find((snapshot) => snapshot.goal.id === openGoalId) ?? null
+	);
 
 	/**
 	 * A goal that closes leaves the at-risk list, taking its dial with it, so the
@@ -185,8 +203,8 @@
 						     list is the urgency the reason was spelling out. -->
 						<GoalRow
 							snapshot={row.snapshot}
-							{logAction}
 							flag={row.behindPace && !row.closing ? 'Behind pace' : undefined}
+							onopen={(goalId) => (openGoalId = goalId)}
 						/>
 					{:else}
 						<p class="deadline">
@@ -226,7 +244,7 @@
 			</summary>
 			<ul class="flight">
 				{#each focus.closed as snapshot (snapshot.goal.id)}
-					<li><GoalRow {snapshot} {logAction} /></li>
+					<li><GoalRow {snapshot} onopen={(goalId) => (openGoalId = goalId)} /></li>
 				{/each}
 			</ul>
 		</details>
@@ -243,11 +261,13 @@
 			</p>
 			<ul class="flight">
 				{#each focus.steady as row (row.snapshot.goal.id)}
-					<li><GoalRow snapshot={row.snapshot} {logAction} /></li>
+					<li><GoalRow snapshot={row.snapshot} onopen={(goalId) => (openGoalId = goalId)} /></li>
 				{/each}
 			</ul>
 		</details>
 	{/if}
+
+	<GoalRowSheet snapshot={openSnapshot} {logAction} onclose={() => (openGoalId = null)} />
 </section>
 
 <style>
