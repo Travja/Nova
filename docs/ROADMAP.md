@@ -58,7 +58,7 @@ The reason to open the app rather than a spreadsheet.
 
 ## M3 — Insight
 
-_1 of 4 done._
+_2 of 5 done._
 
 Turning a log into something you learn from.
 
@@ -68,7 +68,7 @@ Turning a log into something you learn from.
 | [#16](https://github.com/Travja/Nova/issues/16) ✓ | [Stats](issues/16-stats.md)                                 | Cheap to derive from buckets already built              |
 | [#17](https://github.com/Travja/Nova/issues/17)   | [Export, import, delete](issues/17-export-import-delete.md) | It is your record; it should be portable                |
 | [#18](https://github.com/Travja/Nova/issues/18)   | [Orbit notes](issues/18-orbit-notes.md)                     | The reflection is about the period, not the entry       |
-| [#48](https://github.com/Travja/Nova/issues/48)   | [Closing window](issues/48-closing-window.md)               | "Running out of time" is on all day, so it says nothing |
+| [#48](https://github.com/Travja/Nova/issues/48) ✓ | [Closing window](issues/48-closing-window.md)               | "Running out of time" is on all day, so it says nothing |
 
 ## M4 — Reach and operations
 

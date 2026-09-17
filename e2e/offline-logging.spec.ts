@@ -409,7 +409,18 @@ test('compact density shows the same pending state, and the bar is thumb-sized',
 	await expect(page.getByText('Saved.')).toBeVisible();
 
 	await page.setViewportSize({ width: 390, height: 844 });
-	await page.goto('/');
+	/*
+	 * The dashboard, reached deliberately rather than by landing on it — a phone
+	 * sends a fresh `/` to Today, which draws a compact row only for a goal that
+	 * is running out of time (#48). That is a statement about the hour, and this
+	 * project runs a production build, whose clock nothing can pin. The dashboard
+	 * draws the same row for every goal at every hour, and the row is what is
+	 * under test here.
+	 */
+	await page.goto('/today');
+	await hydrated(page);
+	await page.getByRole('link', { name: 'All tiers' }).click();
+	await expect(page).toHaveURL(/\/$/);
 	await controlled(page);
 
 	// Compact draws rows rather than cards, so the sheet is where a row logs.

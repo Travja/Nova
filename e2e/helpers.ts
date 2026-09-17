@@ -14,6 +14,28 @@ export async function hydrated(page: Page) {
 	await expect(page.locator('html')).toHaveAttribute('data-hydrated', 'true');
 }
 
+/**
+ * Pin the server's clock for everything this browser context loads.
+ *
+ * The app is correctly time-dependent — a satellite is only running out of time
+ * in the last quarter of its day — so a spec that asserts on that has to say
+ * which hour it is testing rather than hoping the machine's clock is kind. The
+ * cookie is read in development only and the code that reads it is not in a
+ * production build; see `$lib/server/clock` for the two shapes it takes and for
+ * why a spec that logs entries pins an hour rather than a date.
+ *
+ * `EVENING` is the hour most specs want: late enough in the user's own day for
+ * a satellite to be running out of time, so the Today view is showing its
+ * at-risk list rather than a fold of goals that can wait.
+ */
+export const EVENING = '21:00';
+
+export async function pinClock(page: Page, when: string) {
+	await page
+		.context()
+		.addCookies([{ name: 'nova_clock', value: when, domain: 'localhost', path: '/' }]);
+}
+
 /** Where `MAIL_OUTBOX_DIR` puts messages during a test run. */
 const OUTBOX = 'data/e2e-outbox';
 

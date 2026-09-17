@@ -228,22 +228,42 @@ export function urgency(orbit: Orbit, now: Date = new Date()): number {
 	return (1 - orbit.fraction) * periodElapsed(orbit.period, now);
 }
 
-/** How close a period has to be to closing for its orbit to be running out of time. */
-export const CLOSING_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** The share of its own period an orbit spends running out of time. */
+export const CLOSING_FRACTION = 0.25;
+
+/**
+ * The longest that share may be.
+ *
+ * A quarter of a year is three months, and a yearly goal is not running out of
+ * time in October. Falling behind over a long horizon is what `isBehindPace`
+ * covers; this is only ever about the deadline being close.
+ */
+export const CLOSING_CAP_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * How close a period has to be to closing for its orbit to be running out of
+ * time — a quarter of the period itself, capped at a fortnight.
+ *
+ * A day gets its last 6 hours, a week its last 42, a 30-day month its last 7½
+ * days, and a quarter and a year the capped fortnight. Deriving it from the
+ * period's own length is also what makes a 23- or 25-hour day across a daylight
+ * saving transition scale with it rather than needing a special case.
+ */
+export function closingWindowFor(period: Period): number {
+	const span = period.end.getTime() - period.start.getTime();
+	return Math.min(span * CLOSING_FRACTION, CLOSING_CAP_MS);
+}
 
 /**
  * Whether an orbit is short of target with its period about to close.
  *
- * A satellite's period is never longer than the window, so every unclosed
- * satellite qualifies; everything larger only surfaces as its deadline nears.
+ * The window is the period's own, so this says the same thing at every cadence:
+ * the deadline is near enough that time itself is the problem. A satellite is
+ * not running out of time at breakfast.
  */
-export function isClosing(
-	orbit: Orbit,
-	now: Date = new Date(),
-	windowMs = CLOSING_WINDOW_MS
-): boolean {
+export function isClosing(orbit: Orbit, now: Date = new Date()): boolean {
 	if (orbit.complete || orbit.dormant) return false;
-	return orbit.period.end.getTime() - now.getTime() <= windowMs;
+	return orbit.period.end.getTime() - now.getTime() <= closingWindowFor(orbit.period);
 }
 
 /**
@@ -311,8 +331,7 @@ export interface TodayFocus {
  */
 export function focusForToday(
 	snapshots: readonly GoalSnapshot[],
-	now: Date = new Date(),
-	windowMs = CLOSING_WINDOW_MS
+	now: Date = new Date()
 ): TodayFocus {
 	const atRisk: FocusRow[] = [];
 	const closed: GoalSnapshot[] = [];
@@ -326,7 +345,7 @@ export function focusForToday(
 		const row: FocusRow = {
 			snapshot,
 			urgency: urgency(snapshot.current, now),
-			closing: isClosing(snapshot.current, now, windowMs),
+			closing: isClosing(snapshot.current, now),
 			behindPace: isBehindPace(snapshot.current, snapshot.goal.createdAt, now)
 		};
 		(row.closing || row.behindPace ? atRisk : steady).push(row);

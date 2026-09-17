@@ -214,3 +214,24 @@ consequence worth naming: sign out with entries still waiting and the flush is
 refused, because the goals are not the signed-in user's. They are reported in
 the queue bar with the reason rather than written to the wrong account, and
 rather than disappearing quietly.
+
+## The server's clock
+
+Every request answers against one instant, `locals.now`, set in
+`hooks.server.ts`. Two reasons. A goal must not be measured against one clock
+and ranked against another inside the same render. And whether an orbit is
+running out of time depends on the hour — after #48 a satellite is only closing
+in the last quarter of its day — which makes `new Date()` inside a load
+function untestable.
+
+In development only, a `nova_clock` cookie can pin that instant: `21:00` moves
+the hour and keeps the date, and a full `2026-03-01T21:00` moves both. The gate
+is `dev` from `$app/environment`, which Vite replaces with a literal `false` in
+a production build, so the override is not merely skipped in production — it is
+not in the bundle. Nothing reads the environment, so there is no variable that
+turns it back on.
+
+Writes are deliberately not routed through it. Entries and goals are stamped by
+the ordinary clock, which is why the hour-only form of the cookie is the one an
+end-to-end test uses when it logs something: the date is unchanged, so what it
+writes still lands in the period it is looking at.

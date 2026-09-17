@@ -4,6 +4,7 @@ import { cadenceOf } from './tiers';
 import {
 	PACE_TOLERANCE,
 	buildOrbit,
+	closingWindowFor,
 	focusForToday,
 	formatAmount,
 	formatTimeLeft,
@@ -241,22 +242,59 @@ describe('urgency', () => {
 	});
 });
 
+describe('closingWindowFor', () => {
+	const denver = { timeZone: 'America/Denver' };
+	const hours = (period: Parameters<typeof closingWindowFor>[0]) =>
+		closingWindowFor(period) / 3_600_000;
+
+	it('gives a day its last six hours', () => {
+		expect(hours(periodFor(new Date('2026-09-12T06:00:00Z'), 'day', options))).toBe(6);
+	});
+
+	it('gives a week its last 42 hours', () => {
+		expect(hours(periodFor(new Date('2026-09-12T06:00:00Z'), 'week', options))).toBe(42);
+	});
+
+	it('scales with a month rather than assuming one length', () => {
+		// 30 days is 7½; February is shorter, and says so.
+		expect(hours(periodFor(new Date('2026-09-12T06:00:00Z'), 'month', options))).toBe(180);
+		expect(hours(periodFor(new Date('2026-02-12T06:00:00Z'), 'month', options))).toBe(168);
+	});
+
+	it('caps the long cadences at a fortnight', () => {
+		expect(hours(periodFor(new Date('2026-09-12T06:00:00Z'), 'quarter', options))).toBe(14 * 24);
+		expect(hours(periodFor(new Date('2026-09-12T06:00:00Z'), 'year', options))).toBe(14 * 24);
+	});
+
+	it('follows a day across a daylight saving transition, in both directions', () => {
+		// 8 March 2026 is 23 hours long in Denver and 1 November is 25, so the
+		// window is a quarter of each rather than a quarter of a nominal day.
+		const spring = periodFor(new Date('2026-03-08T18:00:00Z'), 'day', denver);
+		const autumn = periodFor(new Date('2026-11-01T18:00:00Z'), 'day', denver);
+		expect(hours(spring)).toBeCloseTo(5.75, 10);
+		expect(hours(autumn)).toBeCloseTo(6.25, 10);
+	});
+});
+
 describe('isClosing', () => {
 	const day = periodFor(new Date('2026-09-12T06:00:00Z'), 'day', options);
 	const year = periodFor(new Date('2026-09-12T06:00:00Z'), 'year', options);
 
-	it('flags an unclosed satellite at any hour, since its period is short', () => {
-		expect(isClosing(buildOrbit(day, 0, 1), new Date('2026-09-12T00:00:00Z'))).toBe(true);
+	it('leaves a satellite alone until the last quarter of its day', () => {
+		expect(isClosing(buildOrbit(day, 0, 1), new Date('2026-09-12T00:01:00Z'))).toBe(false);
+		expect(isClosing(buildOrbit(day, 0, 1), new Date('2026-09-12T17:59:00Z'))).toBe(false);
+		expect(isClosing(buildOrbit(day, 0, 1), new Date('2026-09-12T18:00:00Z'))).toBe(true);
 		expect(isClosing(buildOrbit(day, 0, 1), new Date('2026-09-12T23:00:00Z'))).toBe(true);
 	});
 
-	it('leaves a long period alone until its last day', () => {
-		expect(isClosing(buildOrbit(year, 1, 12), new Date('2026-09-12T06:00:00Z'))).toBe(false);
+	it('leaves a yearly goal alone in October, and flags it in the last fortnight', () => {
+		expect(isClosing(buildOrbit(year, 1, 12), new Date('2026-10-15T06:00:00Z'))).toBe(false);
+		expect(isClosing(buildOrbit(year, 1, 12), new Date('2026-12-10T06:00:00Z'))).toBe(false);
 		expect(isClosing(buildOrbit(year, 1, 12), new Date('2026-12-31T06:00:00Z'))).toBe(true);
 	});
 
 	it('never flags a closed or dormant orbit', () => {
-		const now = new Date('2026-09-12T18:00:00Z');
+		const now = new Date('2026-09-12T23:00:00Z');
 		expect(isClosing(buildOrbit(day, 1, 1), now)).toBe(false);
 		expect(isClosing(buildOrbit(day, 0, 1, true), now)).toBe(false);
 	});
@@ -314,9 +352,10 @@ describe('paceDeficit and isBehindPace', () => {
 });
 
 describe('focusForToday', () => {
-	// New Year's Eve: every cadence closes at the same instant, which is exactly
-	// when the ordering has to say something other than "by tier".
-	const now = new Date('2026-12-31T18:00:00Z');
+	// New Year's Eve, late enough to be inside every cadence's closing window:
+	// every cadence closes at the same instant, which is exactly when the
+	// ordering has to say something other than "by tier".
+	const now = new Date('2026-12-31T19:00:00Z');
 	/** Mid-quarter, so nothing longer than a day is anywhere near its deadline. */
 	const november = new Date('2026-11-01T12:00:00Z');
 	/** Half way through the year: far from every deadline, and past the pace grace. */

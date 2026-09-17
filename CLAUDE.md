@@ -73,6 +73,10 @@ Routes parse forms and render; they do not build queries.
   through `metricFor(snapshot)`, never `goal.metric`. Tree maths lives in
   `$domain/nesting`; the service loads the shape, the domain does the sums.
 - **Timestamps are UTC epoch milliseconds.** Nothing stores a local time.
+- **Server-side "now" comes from `locals.now`**, not `new Date()`, in anything
+  that loads a page. One clock per request, and a `dev`-only cookie can pin it so
+  a test can say which hour it is testing — see `src/lib/server/clock.ts`. Writes
+  keep the ordinary clock on purpose.
 - **A log that can be retried carries a `clientId`.** `entries.client_id` is
   unique per goal and `logEntry()` conflicts on it, which is what stops the
   offline queue, the `online` listener and the service worker's replay from

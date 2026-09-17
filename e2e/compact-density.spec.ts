@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { hydrated } from './helpers';
+import { EVENING, hydrated, pinClock } from './helpers';
 
 /**
  * Compact is a different shape, not the same one with less padding: the lists
@@ -10,6 +10,16 @@ import { hydrated } from './helpers';
  */
 
 const PHONE = { width: 390, height: 844 };
+
+/*
+ * Every test here reads the Today view's at-risk list, which is a statement
+ * about the hour: a satellite is only running out of time in the last quarter
+ * of its day (#48). Pinned so these are about density rather than about when
+ * they happen to be run.
+ */
+test.beforeEach(async ({ page }) => {
+	await pinClock(page, EVENING);
+});
 
 async function register(page: Page) {
 	const email = `pilot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
