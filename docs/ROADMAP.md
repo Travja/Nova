@@ -53,7 +53,7 @@ The reason to open the app rather than a spreadsheet.
 | [#12](https://github.com/Travja/Nova/issues/12) ✓ | [Nested orbits](issues/12-nested-orbits.md)                           | Makes the tier ladder mean something mechanically           |
 | [#13](https://github.com/Travja/Nova/issues/13) ✓ | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app                       |
 | [#14](https://github.com/Travja/Nova/issues/14) ✓ | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield                       |
-| [#30](https://github.com/Travja/Nova/issues/30)   | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app          |
+| [#30](https://github.com/Travja/Nova/issues/30) ✓ | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app          |
 | [#41](https://github.com/Travja/Nova/issues/41) ✓ | [Starfield viewport units](issues/41-starfield-viewport-units.md)     | `vmin` rebases when a mobile address bar hides              |
 | [#51](https://github.com/Travja/Nova/issues/51) ✓ | [Closing takes the sheet](issues/51-closing-takes-the-sheet.md)       | The celebration is lost exactly where it is easiest to earn |
 

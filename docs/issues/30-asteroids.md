@@ -171,16 +171,23 @@ export const asteroids = sqliteTable(
 		/** Set only when resolution is 'captured' — the goal this asteroid became. */
 		capturedGoalId: text('captured_goal_id').references(() => goals.id, {
 			onDelete: 'set null'
-		})
+		}),
+		/** When the capture offer for this title was turned down, on the cleared
+		    row it was made against. This is the whole of "dismissible for that
+		    title without asking again until the count restarts" from decision #1:
+		    the count only resets on a release, so the same walk that counts can
+		    see the dismissal. */
+		captureDismissedAt: timestamp('capture_dismissed_at')
 	},
-	(table) => [
-		index('asteroids_user_id_idx').on(table.userId),
-		// Backs the recurrence count in `clearAsteroid()` — same normalized title,
-		// same user, resolution = 'cleared'.
-		index('asteroids_user_title_idx').on(table.userId, table.title)
-	]
+	(table) => [index('asteroids_user_id_idx').on(table.userId)]
 );
 ```
+
+One index, on the owner, and deliberately none on the title. The recurrence
+count matches on a Unicode case fold and SQLite's `lower()` folds only ASCII,
+so an index on `(user_id, title)` could not answer the question the count is
+asking; the owner's resolved rows are read and folded in `$domain/asteroids`
+instead — the same bargain `loadForest()` strikes to count a user's orbits.
 
 One `resolution` column with three string values rather than three nullable
 timestamp columns, for the same reason `metricKind` is a text column read
@@ -203,13 +210,21 @@ under `$domain`:
 - `shouldOfferCapture(count)` — the `count >= 3` threshold as a named function
   rather than a bare literal at the call site, the way `CLOSING_FRACTION` and
   `ADRIFT_SHORTFALL` are named elsewhere.
-- `driftBand(asteroid, now)` — buckets `now - driftAnchorAt` into whatever the
-  belt's visual stages turn out to be (fresh / drifting / faint), and a
-  `DRIFT_RELEASE_OFFER_MS` constant (propose 21 days — three weeks, long enough
-  that a slow week doesn't trigger it, short enough that the belt doesn't
-  silently become the backlog decision #4 is trying to avoid) past which the
-  release offer becomes available.
-- `sortBelt(asteroids, now)` — oldest `driftAnchorAt` first, per decision #3.
+- `driftBand(asteroid, now)` — buckets `now - driftAnchorAt` into the belt's
+  visual stages (fresh under a week, drifting under three, faint beyond), and a
+  `DRIFT_RELEASE_OFFER_MS` constant of 21 days — three weeks, long enough that
+  a slow week doesn't trigger it, short enough that the belt doesn't silently
+  become the backlog decision #4 is trying to avoid — past which the release
+  offer becomes available. `faint` and the offer share that boundary rather
+  than having one each: the rock reaching the outer edge and Nova offering to
+  let it go are the same fact, and splitting them gives two readings that can
+  disagree.
+- `driftFraction(asteroid, now)` — where the rock sits between the inner edge
+  of the belt and the outer one, clamped at 1. Drift is a distance, not a debt
+  that keeps growing, so a rock untouched for a year sits where one untouched
+  for three weeks does.
+- `sortBelt(asteroids)` — oldest `driftAnchorAt` first, per decision #3. No
+  clock: the order is a fact about the rocks, not about when they are read.
 
 None of this touches `focusForToday()` or `FocusRow` — asteroids are not
 goals and don't produce `GoalSnapshot`s, so the Today view sketch below reads

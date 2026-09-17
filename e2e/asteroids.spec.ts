@@ -107,11 +107,15 @@ test('an asteroid captured into a goal is a goal like any other', async ({ page 
 	// A goal, on its own page, indistinguishable from one launched directly.
 	await expect(page.getByRole('heading', { name: 'Clean the garage' })).toBeVisible();
 	await expect(page.locator('.dial').first()).toBeVisible();
+	// The quick-log is enhanced, so a click landing mid-hydration is prevented
+	// by Svelte without the handler that replaces it being attached yet.
+	await hydrated(page);
 
 	// It logs, it counts, and its orbit closes — all the things an asteroid
-	// deliberately cannot do.
-	await page.getByLabel('Amount').fill('2');
-	await page.getByRole('button', { name: 'Log it' }).click();
+	// deliberately cannot do. The chip rather than the custom form below it:
+	// the form posts the wall-clock time it was rendered with, which is the
+	// machine's rather than the hour this spec pinned, and lands in the future.
+	await page.getByRole('button', { name: '+2 sessions', exact: true }).click();
 	await expect(page.getByText('Logged.')).toBeVisible();
 
 	// Two of two: the orbit closes, and the Today view folds it away with its
