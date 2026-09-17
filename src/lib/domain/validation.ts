@@ -74,6 +74,24 @@ export const goalSchema = z
 		metricUnit: value.metricKind === 'duration' ? 'minutes' : value.metricUnit
 	}));
 
+/**
+ * An asteroid: a title and an optional note, and nothing else.
+ *
+ * No tier, no metric, no target, no cadence — the absence is the feature. A
+ * one-off that starts wanting a target is not a gap in this schema, it is the
+ * signal that it should be captured into a goal, which `goalSchema` above
+ * already describes.
+ */
+export const asteroidSchema = z.object({
+	title: z.string().trim().min(1, 'What is the one-off?').max(80, 'That title is too long.'),
+	note: z
+		.string()
+		.trim()
+		.max(500)
+		.nullish()
+		.transform((value) => (value ? value : null))
+});
+
 /** A phone with a slightly fast clock should still be able to log "now". */
 export const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
@@ -172,6 +190,7 @@ export const entrySchema = entrySchemaFor();
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type GoalInput = z.infer<typeof goalSchema>;
+export type AsteroidInput = z.infer<typeof asteroidSchema>;
 export type EntryInput = z.infer<typeof entrySchema>;
 
 /**

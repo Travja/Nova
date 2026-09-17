@@ -180,6 +180,74 @@ export const entries = sqliteTable(
 );
 
 /**
+ * A one-off that never became a cycle — see `$domain/asteroids`.
+ *
+ * Deliberately not a goal: no tier, no metric, no target, no period, no
+ * entries. Nothing here reaches the streak maths, and nothing in the streak
+ * maths reaches here. A title, an optional note, and how it ended.
+ */
+export const asteroids = sqliteTable(
+	'asteroids',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		title: text('title').notNull(),
+		note: text('note'),
+		createdAt: timestamp('created_at').notNull(),
+		/**
+		 * The drift clock. Starts at `createdAt` and is reassigned when the title
+		 * changes — the title is what makes this rock this rock, so rewriting it
+		 * is reconsidering what it is. Amending the note leaves the clock alone,
+		 * otherwise one more sentence on a stale asteroid would quietly hide how
+		 * stale it is.
+		 */
+		driftAnchorAt: timestamp('drift_anchor_at').notNull(),
+		/**
+		 * Null while the asteroid is on the belt; one of `cleared`, `captured` or
+		 * `released` once it is off it.
+		 *
+		 * One discriminator rather than three nullable timestamps, for the same
+		 * reason `metricKind` is a text column read through an app-side union:
+		 * the three outcomes are mutually exclusive, and a single column makes
+		 * that a fact the type checker can see rather than an invariant three
+		 * columns maintain by convention.
+		 */
+		resolution: text('resolution'),
+		resolvedAt: timestamp('resolved_at'),
+		/**
+		 * The goal this asteroid became, set only when `resolution` is `captured`.
+		 *
+		 * `set null` for the same reason `goals.parentId` uses it: deleting the
+		 * goal must not take the historical fact of the capture with it.
+		 */
+		capturedGoalId: text('captured_goal_id').references(() => goals.id, {
+			onDelete: 'set null'
+		}),
+		/**
+		 * When the pilot said no to the capture offer for this title.
+		 *
+		 * Stamped on the cleared row the offer was made against, which is all the
+		 * state "don't ask again until the count restarts" needs: the count only
+		 * resets on a release, so `captureOffer()` in `$domain/asteroids` walks
+		 * the same list it counts over and stops offering once it passes one of
+		 * these.
+		 */
+		captureDismissedAt: timestamp('capture_dismissed_at')
+	},
+	/*
+	 * One index, on the owner. The capture offer counts by normalized title,
+	 * and normalizing is `trim` plus a Unicode case fold — SQLite's `lower()`
+	 * only folds ASCII, so a title index could not answer the question the
+	 * count actually asks. The rows are read under the owner and folded in
+	 * `$domain/asteroids` instead, which is the same bargain `loadForest()`
+	 * strikes when it loads a user's entries to count their orbits.
+	 */
+	(table) => [index('asteroids_user_id_idx').on(table.userId)]
+);
+
+/**
  * One row per device that has agreed to be reminded.
  *
  * Per device rather than per account, because that is what a push subscription
@@ -255,6 +323,7 @@ export const reminderSettings = sqliteTable('reminder_settings', {
 export type UserRow = typeof users.$inferSelect;
 export type GoalRow = typeof goals.$inferSelect;
 export type EntryRow = typeof entries.$inferSelect;
+export type AsteroidRow = typeof asteroids.$inferSelect;
 export type GoalArchiveWindowRow = typeof goalArchiveWindows.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
