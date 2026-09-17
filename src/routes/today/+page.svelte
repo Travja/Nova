@@ -4,10 +4,10 @@
 	import GoalCard from '$components/GoalCard.svelte';
 	import GoalRow from '$components/GoalRow.svelte';
 	import Mascot from '$components/Mascot.svelte';
-	import { celebration, noteOrbits } from '$lib/celebration.svelte';
+	import { celebration, heldGoal, justClosed, noteOrbits } from '$lib/celebration.svelte';
 	import { overlayAll } from '$domain/queue';
 	import { queuedEntries } from '$lib/offline/queue.svelte';
-	import type { FocusRow, GoalSnapshot } from '$domain/progress';
+	import type { FocusRow, GoalSnapshot, TodayFocus } from '$domain/progress';
 	import { focusForToday, formatTimeLeft, periodElapsed } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
@@ -26,7 +26,60 @@
 		})
 	);
 	/** Ranked on the same clock the orbits were measured against. */
-	const focus = $derived(focusForToday(snapshots, data.now));
+	const rawFocus = $derived(focusForToday(snapshots, data.now));
+
+	/**
+	 * Where each goal sat the last time it was not being celebrated. Plain,
+	 * like `seen` in the celebration store, and written from inside the same
+	 * derivation that reads it: `$state` here would retrigger the derivation
+	 * it feeds, and this only ever needs the value `focus` already settled on
+	 * a moment ago.
+	 */
+	const lastBucket: Record<string, 'atRisk' | 'steady'> = {};
+
+	/**
+	 * `focusForToday` moves a goal to Closed the instant its orbit does, which
+	 * would take the sheet on top of it along for the ride (#51) — the row it
+	 * was drawn in is destroyed, and a `<dialog>` whose element is gone cannot
+	 * be closed, only lost. So a goal mid-celebration is held in the section
+	 * it already occupied until the celebration — the `SWEEP_MS` wait and the
+	 * burst both — has finished.
+	 *
+	 * `justClosed` catches the render `noteOrbits` would otherwise catch a beat
+	 * late: that effect runs one render after the data it reacts to, and by
+	 * then the row this is protecting would already be gone. `heldGoal` picks
+	 * up from there and carries the hold through the wait and the burst.
+	 */
+	const focus = $derived.by((): TodayFocus => {
+		for (const row of rawFocus.atRisk) lastBucket[row.snapshot.goal.id] = 'atRisk';
+		for (const row of rawFocus.steady) lastBucket[row.snapshot.goal.id] = 'steady';
+
+		let holdId: string | null = null;
+		for (const snapshot of snapshots) {
+			if (justClosed(snapshot)) holdId = snapshot.goal.id;
+		}
+		// Read unconditionally, `??=` would skip the call once the loop above has
+		// already found one — and an unread `heldGoal()` is untracked, so this
+		// derivation would never rerun once the celebration it is waiting on ends.
+		const stillHeld = heldGoal();
+		holdId ??= stillHeld;
+		if (!holdId) return rawFocus;
+
+		const index = rawFocus.closed.findIndex((snapshot) => snapshot.goal.id === holdId);
+		if (index === -1) return rawFocus;
+
+		const stillClosed = [...rawFocus.closed.slice(0, index), ...rawFocus.closed.slice(index + 1)];
+		const row: FocusRow = {
+			snapshot: rawFocus.closed[index],
+			urgency: 0,
+			closing: false,
+			behindPace: false,
+			owedToday: false
+		};
+		return lastBucket[holdId] === 'steady'
+			? { ...rawFocus, closed: stillClosed, steady: [row, ...rawFocus.steady] }
+			: { ...rawFocus, closed: stillClosed, atRisk: [row, ...rawFocus.atRisk] };
+	});
 	const logAction = $derived(`${resolve('/today')}?/log`);
 	/**
 	 * Density is CSS everywhere else, but compact is a different shape here, not
