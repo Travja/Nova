@@ -334,6 +334,21 @@ describe('paceDeficit and isBehindPace', () => {
 		);
 	});
 
+	it('never holds a day to a pace, however much of it has gone', () => {
+		// The hours a day has spent are not a measure of whether it is behind: the
+		// work lands in a block at an hour of the pilot's choosing. What the day
+		// has instead is a deadline, which `isClosing` raises in its last quarter.
+		const day = periodFor(new Date('2026-09-12T10:00:00Z'), 'day', options);
+		const nothingLogged = buildOrbit(day, 0, 10);
+		for (const hour of [8, 10, 12, 16, 20, 23]) {
+			const now = new Date(`2026-09-12T${String(hour).padStart(2, '0')}:00:00Z`);
+			expect(isBehindPace(nothingLogged, launched, now)).toBe(false);
+			// The gap is still there to read — it is only the nagging that is withheld.
+			expect(paceDeficit(nothingLogged, launched, now)).toBeGreaterThan(PACE_TOLERANCE);
+		}
+		expect(isClosing(nothingLogged, new Date('2026-09-12T20:00:00Z'))).toBe(true);
+	});
+
 	it('does not hold a goal to the part of the period it missed', () => {
 		// Launched three days ago, on a yearly orbit: at the start of its first
 		// orbit, not half a year into it.
@@ -445,6 +460,61 @@ describe('focusForToday', () => {
 		const focus = focusForToday([ahead, behind], november);
 
 		expect(ids(focus.steady)).toEqual(['behind', 'ahead']);
+	});
+
+	it('never parks a satellite as steady, however well it is going', () => {
+		// Ten in the morning with nine of ten logged: nothing is wrong with it, and
+		// it is still owed before tonight — which is not what steady promises.
+		const morning = new Date('2026-12-31T10:00:00Z');
+		const satellite = snapshotFor(
+			{ id: 'stretch', tier: 'satellite', target: 10 },
+			9,
+			false,
+			morning
+		);
+		const focus = focusForToday([satellite], morning);
+
+		expect(focus.atRisk).toEqual([]);
+		expect(focus.steady).toEqual([]);
+		expect(ids(focus.today)).toEqual(['stretch']);
+	});
+
+	it('does not call a satellite behind pace for having a day still to run', () => {
+		// The same morning, nothing logged at all. The hours gone are not the
+		// measure; the deadline is, and it is hours away yet.
+		const morning = new Date('2026-12-31T10:00:00Z');
+		const satellite = snapshotFor(
+			{ id: 'stretch', tier: 'satellite', target: 10 },
+			0,
+			false,
+			morning
+		);
+		const focus = focusForToday([satellite], morning);
+
+		expect(focus.atRisk).toEqual([]);
+		expect(ids(focus.today)).toEqual(['stretch']);
+		expect(focus.today[0].behindPace).toBe(false);
+	});
+
+	it('hands a satellite over to the at-risk list once its day is closing', () => {
+		// Seven in the evening, the last quarter of the day: now it is the deadline
+		// talking, and the deadline is the signal a day actually has.
+		const satellite = snapshotFor({ id: 'stretch', tier: 'satellite', target: 10 }, 9);
+		const focus = focusForToday([satellite], now);
+
+		expect(ids(focus.atRisk)).toEqual(['stretch']);
+		expect(focus.today).toEqual([]);
+		expect(focus.atRisk[0].closing).toBe(true);
+	});
+
+	it('leaves the longer cadences to the steady fold', () => {
+		const morning = new Date('2026-11-01T10:00:00Z');
+		const quarter = snapshotFor({ id: 'galaxy', tier: 'galaxy', target: 30 }, 8, false, morning);
+		const satellite = snapshotFor({ id: 'sat', tier: 'satellite', target: 10 }, 0, false, morning);
+		const focus = focusForToday([quarter, satellite], morning);
+
+		expect(ids(focus.steady)).toEqual(['galaxy']);
+		expect(ids(focus.today)).toEqual(['sat']);
 	});
 
 	it('keeps a dormant orbit out of the at-risk list', () => {

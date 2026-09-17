@@ -252,7 +252,7 @@ test("the Today folds are real disclosures, with their state in the browser's tr
 	await expect(summary).toBeFocused();
 
 	await page.keyboard.press('Enter');
-	await expect(page.getByRole('link', { name: 'First light' })).toBeHidden();
+	await expect(page.getByRole('link', { name: /First light/ })).toBeHidden();
 	expect(await disclosure(page, context, 'Closed (1)')).toEqual({
 		focusable: true,
 		expanded: false

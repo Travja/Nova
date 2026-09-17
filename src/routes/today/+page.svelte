@@ -8,8 +8,7 @@
 	import { overlayAll } from '$domain/queue';
 	import { queuedEntries } from '$lib/offline/queue.svelte';
 	import type { FocusRow, GoalSnapshot } from '$domain/progress';
-	import { metricFor } from '$domain/nesting';
-	import { focusForToday, formatAmount, formatTimeLeft, periodElapsed } from '$domain/progress';
+	import { focusForToday, formatTimeLeft, periodElapsed } from '$domain/progress';
 	import { CADENCE_LABEL, TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
 
@@ -49,13 +48,6 @@
 		return formatTimeLeft(snapshot.current.period, data.now);
 	}
 
-	function standing(snapshot: GoalSnapshot): string {
-		const { goal, current } = snapshot;
-		// Orbits rather than the goal's own metric once it has children.
-		const metric = metricFor(snapshot);
-		return `${formatAmount(current.logged, metric)} / ${formatAmount(goal.target, metric)}`;
-	}
-
 	function percent(fraction: number): number {
 		return Math.round(fraction * 100);
 	}
@@ -86,6 +78,9 @@
 			<p class="muted">
 				{#if snapshots.length === 0}
 					Nothing in orbit yet.
+				{:else if focus.atRisk.length === 0 && focus.today.length > 0}
+					Nothing at risk. {focus.today.length}
+					{focus.today.length === 1 ? 'satellite is' : 'satellites are'} still in flight today.
 				{:else if focus.atRisk.length === 0}
 					Nothing at risk. {focus.closed.length}
 					{focus.closed.length === 1 ? 'orbit' : 'orbits'} closed.
@@ -159,6 +154,37 @@
 	{/if}
 
 	<!--
+		Not a fold. A satellite's deadline is tonight, so hiding it behind a
+		collapsed summary on the one screen that is about today would be hiding
+		the work. It is a plain section that says what it is and lists the goals
+		the same way the at-risk list does, so logging is one tap from here too.
+	-->
+	{#if focus.today.length > 0}
+		<section class="daily" aria-labelledby="in-flight-today">
+			<h2 id="in-flight-today">In flight today ({focus.today.length})</h2>
+			<p class="muted fold__note">
+				Owed before the night is out, the one with furthest to go first. Nothing here is late.
+			</p>
+			<ul class="flight">
+				{#each focus.today as row (row.snapshot.goal.id)}
+					<li>
+						{#if compact}
+							<GoalRow snapshot={row.snapshot} {logAction} />
+						{:else}
+							<GoalCard snapshot={row.snapshot} {logAction} />
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
+	<!--
+		Both folds draw compact rows rather than a line of text, whatever density
+		the pilot has chosen. A closed orbit is the reward the whole app is built
+		around and a filled ring says that in a way "closed today" never will, so
+		folding a goal away is allowed to cost its detail but not its dial.
+
 		Native `<details>`/`<summary>` rather than a button plus `aria-expanded`:
 		the element already maps to a disclosure whose state is announced and
 		which opens from the keyboard, and every ARIA role worth putting on a
@@ -172,15 +198,9 @@
 			<summary>
 				Closed ({focus.closed.length}) <span aria-hidden="true">✦</span>
 			</summary>
-			<ul class="compact">
+			<ul class="flight">
 				{#each focus.closed as snapshot (snapshot.goal.id)}
-					<li>
-						<a class="tap" href={resolve('/goals/[id]', { id: snapshot.goal.id })}
-							>{snapshot.goal.title}</a
-						>
-						<span class="muted">{standing(snapshot)}</span>
-						<span class="done">closed {CADENCE_LABEL[snapshot.current.period.cadence]}</span>
-					</li>
+					<li><GoalRow {snapshot} {logAction} /></li>
 				{/each}
 			</ul>
 		</details>
@@ -192,17 +212,12 @@
 				Flying steady ({focus.steady.length})
 			</summary>
 			<p class="muted fold__note">
-				Still in flight and on pace, the one furthest behind first. Nothing here is owed today.
+				Still in flight and on pace, with the deadline past tonight — the one furthest behind first.
+				Nothing here is owed today.
 			</p>
-			<ul class="compact">
+			<ul class="flight">
 				{#each focus.steady as row (row.snapshot.goal.id)}
-					<li>
-						<a class="tap" href={resolve('/goals/[id]', { id: row.snapshot.goal.id })}
-							>{row.snapshot.goal.title}</a
-						>
-						<span class="muted">{standing(row.snapshot)}</span>
-						<span class="muted">{timeLeft(row.snapshot)}</span>
-					</li>
+					<li><GoalRow snapshot={row.snapshot} {logAction} /></li>
 				{/each}
 			</ul>
 		</details>
@@ -248,7 +263,8 @@
 		max-width: 60ch;
 	}
 
-	.risk {
+	.risk,
+	.flight {
 		display: grid;
 		gap: var(--gap-list);
 		list-style: none;
@@ -257,7 +273,8 @@
 	}
 
 	/* Rows are a list, not a stack of cards, and read better close together. */
-	:global(html[data-density='compact']) .risk {
+	:global(html[data-density='compact']) .risk,
+	:global(html[data-density='compact']) .flight {
 		gap: 0.35rem;
 	}
 
@@ -314,38 +331,31 @@
 		padding: 0.68rem 0;
 	}
 
+	/*
+	 * Reads as the fold headings do, so the page has one voice for "here is a
+	 * group of goals" whether or not the group happens to open and shut. The
+	 * `summary` rule cannot simply be shared: it also carries the tap floor a
+	 * control needs, and a heading is not one.
+	 */
+	.daily h2 {
+		color: var(--text-bright);
+		font-size: inherit;
+		font-weight: 600;
+		margin: 0;
+	}
+
+	.daily .flight {
+		margin-top: 0.6rem;
+	}
+
 	.fold__note {
 		font-size: var(--text-secondary);
 		margin: 0.4rem 0 0;
 		max-width: 60ch;
 	}
 
-	.compact {
-		display: grid;
-		gap: 0.15rem;
-		list-style: none;
-		margin: 0.35rem 0 0;
-		padding: 0;
-	}
-
-	.compact li {
-		align-items: center;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0 0.6rem;
-		justify-content: space-between;
-	}
-
-	.compact a {
-		color: var(--text-bright);
-	}
-
-	.compact span {
-		font-size: var(--text-secondary);
-	}
-
-	.done {
-		color: var(--success);
-		font-size: var(--text-secondary);
+	/* A fold's rows sit in from its summary, and clear of it. */
+	.fold .flight {
+		margin: 0.35rem 0 0.6rem;
 	}
 </style>

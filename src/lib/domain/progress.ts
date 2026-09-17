@@ -285,11 +285,22 @@ export const PACE_TOLERANCE = 0.1;
  * Whether a goal is far enough behind pace to need attention with its deadline
  * still out of sight — a Universe goal at 35% half way through the year.
  *
- * Two guards keep this from crying wolf. Nothing is judged until a third of the
- * goal's own share of the period has run, because Monday evening is not behind
- * on a week and a goal launched yesterday is not behind on anything. Past that,
- * a tenth of the period's worth of slack is allowed on top, since work arrives
- * in bursts rather than at a constant rate.
+ * Three guards keep this from crying wolf.
+ *
+ * A day is never judged at all. Pace is a claim that the work should have been
+ * accruing steadily, and that claim holds over a quarter, roughly holds over a
+ * week, and is simply false inside one day: a day's work happens in a block or
+ * two at an hour of your own choosing, so the hours that have passed say
+ * nothing about whether you are behind. A satellite with nothing logged at ten
+ * in the morning is not behind — it is a satellite with the day ahead of it.
+ * What a day has instead of a pace is a deadline, and `isClosing` gives it the
+ * last quarter of itself for that.
+ *
+ * Past that, nothing is judged until a third of the goal's own share of the
+ * period has run, because Monday evening is not behind on a week and a goal
+ * launched yesterday is not behind on anything — and then a tenth of the
+ * period's worth of slack is allowed on top, since work arrives in bursts
+ * rather than at a constant rate.
  */
 export function isBehindPace(
 	orbit: Orbit,
@@ -298,6 +309,7 @@ export function isBehindPace(
 	tolerance = PACE_TOLERANCE
 ): boolean {
 	if (orbit.complete || orbit.dormant) return false;
+	if (orbit.period.cadence === 'day') return false;
 	if (periodElapsed(orbit.period, now, launchedAt) < PACE_GRACE) return false;
 	return paceDeficit(orbit, launchedAt, now) > tolerance;
 }
@@ -316,6 +328,13 @@ export interface FocusRow {
 export interface TodayFocus {
 	/** Needs attention now — running out of time, behind pace, or both. */
 	atRisk: FocusRow[];
+	/**
+	 * Open and owed before the night is out: a daily orbit that is not at risk
+	 * yet. Its own group because a satellite's deadline is tonight, so it is
+	 * never the "out of sight" that makes a goal steady, however far ahead of
+	 * its own pace it happens to be.
+	 */
+	today: FocusRow[];
 	/** Closed in their current period — kept for the reward, not for the work. */
 	closed: GoalSnapshot[];
 	/** In flight, on pace, with the deadline still out of sight. */
@@ -326,7 +345,7 @@ export interface TodayFocus {
  * Split goals into what today asks for, what it has already given, and what can
  * wait. Pass the same `now` the snapshots were computed with.
  *
- * Both open groups are ranked by urgency, so the goal closest to becoming work
+ * Every open group is ranked by urgency, so the goal closest to becoming work
  * sits at the top of the ones that can wait.
  */
 export function focusForToday(
@@ -334,6 +353,7 @@ export function focusForToday(
 	now: Date = new Date()
 ): TodayFocus {
 	const atRisk: FocusRow[] = [];
+	const today: FocusRow[] = [];
 	const closed: GoalSnapshot[] = [];
 	const steady: FocusRow[] = [];
 
@@ -348,10 +368,23 @@ export function focusForToday(
 			closing: isClosing(snapshot.current, now),
 			behindPace: isBehindPace(snapshot.current, snapshot.goal.createdAt, now)
 		};
-		(row.closing || row.behindPace ? atRisk : steady).push(row);
+		if (row.closing || row.behindPace) {
+			atRisk.push(row);
+			continue;
+		}
+		// A satellite closes tonight. Whatever it has logged, it is still owed
+		// today, so it can never join the group whose whole promise is that
+		// nothing in it is. A dormant one was not expected to fly at all.
+		const daily = snapshot.current.period.cadence === 'day' && !snapshot.current.dormant;
+		(daily ? today : steady).push(row);
 	}
 
-	return { atRisk: byUrgency(atRisk), closed, steady: byUrgency(steady) };
+	return {
+		atRisk: byUrgency(atRisk),
+		today: byUrgency(today),
+		closed,
+		steady: byUrgency(steady)
+	};
 }
 
 /** Most urgent first, ties going to the nearer deadline and then the pilot's own order. */

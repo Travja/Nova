@@ -116,8 +116,8 @@
 			{:else if pilot.mood === 'working'}
 				<h2>All on pace</h2>
 				<p class="muted">
-					{pilot.steady}
-					{pilot.steady === 1 ? 'orbit is' : 'orbits are'} in flight and none of them is behind.
+					{pilot.flying}
+					{pilot.flying === 1 ? 'orbit is' : 'orbits are'} in flight and none of them is behind.
 					{#if subject}
 						<a href={resolve('/goals/[id]', { id: subject.goal.id })}>{subject.goal.title}</a>
 						has {timeLeft}.

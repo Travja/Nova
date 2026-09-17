@@ -39,9 +39,18 @@ async function launchGoal(page: Page, title: string, tier: string, target: strin
 	await expect(page.getByRole('heading', { name: title })).toBeVisible();
 }
 
-/** The at-risk rows, in the order they are drawn. GoalCard is the only article. */
+/**
+ * The at-risk rows, in the order they are drawn. `GoalCard` is the only
+ * `article`, and the list is scoped because the goals still owed today are
+ * drawn the same way in a group of their own further down the page.
+ */
 function riskRows(page: Page) {
-	return page.getByRole('article');
+	return page.locator('ul.risk').getByRole('article');
+}
+
+/** The goals owed before tonight that are not in trouble yet. */
+function flightRows(page: Page) {
+	return page.locator('ul.flight').getByRole('article');
 }
 
 function riskRow(page: Page, title: string) {
@@ -87,9 +96,47 @@ test('the today view ranks what is at risk, logs inline and folds the closed awa
 	await expect(page.getByText('1 orbit needs attention')).toBeVisible();
 	await expect(riskRows(page)).toHaveCount(1);
 
+	// Folded away, and still drawn as a row with its dial: the filled ring is the
+	// reward, and a goal does not stop having earned it by being tidied up.
 	const closed = page.locator('details').filter({ hasText: 'Closed (1)' });
-	await expect(closed.getByRole('link', { name: 'Read pages' })).toBeVisible();
-	await expect(closed).toContainText('5 pages / 5 pages');
+	await expect(closed.getByRole('link', { name: /Read pages/ })).toBeVisible();
+	await expect(closed).toContainText('Orbit closed today');
+	await expect(closed.locator('.dial')).toBeVisible();
+});
+
+test('a satellite mid-morning is owed today, not behind pace and not steady', async ({ page }) => {
+	// Two halves of one mistake. A third of the day has gone by eight in the
+	// morning, which was enough to call every satellite behind pace all day; and
+	// a satellite that was doing fine fell into the fold whose whole promise is
+	// that nothing in it is owed today.
+	await pinClock(page, '10:00');
+	await register(page, 'Ines Varga');
+	await launchGoal(page, 'Read pages', 'Satellite', '10');
+	await launchGoal(page, 'Finish the novel', 'Universe', '12');
+
+	await page.goto('/today');
+	await hydrated(page);
+
+	// Ten in the morning is not running out of time and not behind anything.
+	await expect(riskRows(page)).toHaveCount(0);
+	await expect(page.getByText('Behind pace')).toHaveCount(0);
+
+	// The satellite is owed all the same, in a group of its own, out in the open.
+	await expect(page.getByRole('heading', { name: 'In flight today (1)' })).toBeVisible();
+	await expect(flightRows(page)).toHaveCount(1);
+	await expect(flightRows(page).first()).toContainText('Read pages');
+
+	// The yearly goal is the only thing here that can genuinely wait.
+	const steady = page.locator('details').filter({ hasText: 'Flying steady (1)' });
+	await steady.locator('summary').click();
+	await expect(steady.getByRole('link', { name: /Finish the novel/ })).toBeVisible();
+	await expect(steady.locator('.dial')).toBeVisible();
+	await expect(steady).not.toContainText('Read pages');
+
+	// And it can be logged from where it stands, which closes it out of the group.
+	await flightRows(page).first().getByRole('button', { name: '+10 pages', exact: true }).click();
+	await expect(page.getByRole('heading', { name: /In flight today/ })).toHaveCount(0);
+	await expect(page.locator('details').filter({ hasText: 'Closed (1)' })).toBeVisible();
 });
 
 test('a goal with a whole year to run waits in the steady fold', async ({ page }) => {
@@ -112,7 +159,7 @@ test('a goal with a whole year to run waits in the steady fold', async ({ page }
 	// Folded away rather than hidden: one tap opens it, with no JavaScript needed.
 	const steady = page.locator('details').filter({ hasText: 'Flying steady (1)' });
 	await steady.locator('summary').click();
-	await expect(steady.getByRole('link', { name: 'Finish the novel' })).toBeVisible();
+	await expect(steady.getByRole('link', { name: /Finish the novel/ })).toBeVisible();
 });
 
 test('the pilot reacts to the week, and can be sent away and asked back', async ({ page }) => {

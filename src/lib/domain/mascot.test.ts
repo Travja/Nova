@@ -72,7 +72,28 @@ describe('mascotFor', () => {
 		expect(state.mood).toBe('alert');
 		expect(state.subject?.goal.id).toBe('goal-1');
 		expect(state.atRisk).toBe(1);
-		expect(state.steady).toBe(1);
+		expect(state.flying).toBe(1);
+	});
+
+	it('is working, not resting, while a satellite is still owed today', () => {
+		// Ten in the morning with nothing logged. The day is not closing and the
+		// satellite is not behind, but it is owed before tonight — and a pilot who
+		// said "nothing is asking for you" would be wrong.
+		const morning = new Date('2026-09-12T10:00:00Z');
+		const state = mascotFor(focusForToday([snapshot(0)], morning));
+
+		expect(state.mood).toBe('working');
+		expect(state.subject?.goal.id).toBe('goal-1');
+		expect(state.flying).toBe(1);
+	});
+
+	it('points at today before it points at a goal with months to run', () => {
+		const morning = new Date('2026-09-12T10:00:00Z');
+		const state = mascotFor(focusForToday([yearly(70), snapshot(3)], morning));
+
+		expect(state.mood).toBe('working');
+		expect(state.subject?.goal.id).toBe('goal-1');
+		expect(state.flying).toBe(2);
 	});
 
 	it('drifts once a closing period is well short of its target', () => {

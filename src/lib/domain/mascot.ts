@@ -25,7 +25,12 @@ export interface MascotState {
 	subject: GoalSnapshot | null;
 	atRisk: number;
 	closed: number;
-	steady: number;
+	/**
+	 * Still in flight and not behind — the satellites owed before tonight along
+	 * with the longer cadences that can wait. `focus.steady` alone would leave
+	 * the pilot claiming nothing was owed on a morning full of satellites.
+	 */
+	flying: number;
 }
 
 /**
@@ -40,7 +45,7 @@ export function mascotFor(focus: TodayFocus): MascotState {
 	const counts = {
 		atRisk: focus.atRisk.length,
 		closed: focus.closed.length,
-		steady: focus.steady.length
+		flying: focus.today.length + focus.steady.length
 	};
 
 	const [urgent] = focus.atRisk;
@@ -48,7 +53,9 @@ export function mascotFor(focus: TodayFocus): MascotState {
 		return { mood: isAdrift(urgent) ? 'adrift' : 'alert', subject: urgent.snapshot, ...counts };
 
 	// Nothing needs attention. Still flying is work; everything closed is rest.
-	const [next] = focus.steady;
+	// Today's own orbits speak first: a satellite is owed before the night is
+	// out, which a quarter with two months left in it is not.
+	const [next] = focus.today.length > 0 ? focus.today : focus.steady;
 	if (next) return { mood: 'working', subject: next.snapshot, ...counts };
 	return { mood: 'resting', subject: focus.closed[0] ?? null, ...counts };
 }
