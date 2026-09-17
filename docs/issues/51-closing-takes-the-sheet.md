@@ -33,12 +33,18 @@ for (const snapshot of snapshots) {
 }
 ```
 
-A goal that closes leaves `focus.atRisk` and joins `focus.closed`, which renders
-a plain `<a>` and a bit of text rather than a `GoalRow`. The `{#each}` blocks are
-keyed by goal id, so Svelte destroys the `GoalRow` — and the `<dialog>` that
-holds the sheet lives inside it (`src/lib/components/GoalRow.svelte`). A modal
+A goal that closes leaves `focus.atRisk` and joins `focus.closed`, which is a
+different `{#each}` in a different list — the Closed fold. Both are keyed by goal
+id, so Svelte destroys the `GoalRow` the at-risk list was drawing and builds a
+fresh one in the fold. The `<dialog>` that holds the sheet lives inside that
+component (`src/lib/components/GoalRow.svelte`), so it goes with it. A modal
 dialog whose element is removed is simply gone; nothing closes it, there is
 nothing left to close.
+
+Moving the rows themselves would not help. Svelte keys within one `{#each}`, so
+a goal crossing from one list to another is a destroy and a create however the
+two are drawn — the fold now draws the same `GoalRow` the at-risk list does, and
+the sheet is lost exactly as before.
 
 **And the celebration is deliberately late.** `noteOrbits()` in
 `src/lib/celebration.svelte.ts` waits `SWEEP_MS` (700 ms) before raising
@@ -52,8 +58,9 @@ right, the delay is right. What is missing is that the list reorders itself on
 the same fact the celebration is about, and does it first.
 
 **Non-compact `/today` has the same bug without a sheet.** The `GoalCard` in
-`focus.atRisk` is replaced by a line of text mid-sweep, so the dial disappears
-partway round. Less startling than losing a modal, same cause.
+`focus.atRisk` is replaced mid-sweep by the fold's compact row, so the dial the
+sweep was running on is torn out and a second one starts from scratch in a
+collapsed-by-default fold. Less startling than losing a modal, same cause.
 
 **The dashboard at `/` is fine.** Its sections are built by tier and filtered by
 tier; a closing does not move a goal between them, so the row — and its open
@@ -68,7 +75,10 @@ The hold belongs to the page, not to `focusForToday()`. That function is a pure
 function over plain data, per the architectural rule, and teaching it about an
 animation clock would mean passing it a timer — the wrong direction entirely.
 `/today` already reads `celebration()` for its astronaut, so it has what it needs
-to know which goal is mid-moment. Two shapes both work:
+to know which goal is mid-moment. Note the hold has to cover the wait as well as
+the burst: `noteOrbits` sits on a closing for `SWEEP_MS` before it raises
+anything, and during that wait `celebration()` is still null while the row is
+already gone. Two shapes both work:
 
 - the page derives its partition and then patches it: a goal being celebrated
   stays in the bucket it held on the previous look
@@ -98,6 +108,8 @@ Two details that decide whether the fix actually delivers the moment:
   before.
 - Non-compact `/today` keeps its `GoalCard` through the sweep, for the same
   reason and by the same mechanism.
+- The pending list itself is unchanged: a satellite is on it because its period
+  ends tonight (`owedToday`), and it leaves it by closing, not by being held.
 - The dashboard at `/` still behaves as it does today.
 - A Playwright journey covers it: open a sheet on `/today`, log the amount that
   closes the orbit, assert the dialog is still open and the celebration rendered
