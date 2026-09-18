@@ -188,15 +188,43 @@ two things instead of one.
 
 ![The belt on a phone, compact](screenshots/30-asteroids/belt-on-a-phone-compact.png)
 
-Nothing in that is a media query. The drift sits in a wrapping flex line and
-moves under the endings by itself when the words no longer fit beside them —
-which is a question about this title at this density in this window, and not one
-a breakpoint can answer. Compact then does what compact does everywhere else:
-it changes the shape rather than the padding. The mark comes down to 52px, the
-drift drops to its number (`driftLabel(…, 'short')` — "6 weeks", not "Drifting 6
-weeks"), and the "at the edge" tag goes, because the band above the list already
-counts how many are out there and the rocks themselves say which. That is the
-difference between a row of three stacked bands and a row of two lines.
+The endings are marks rather than words: two labelled pills took most of a phone
+row for something a thumb knows by shape after a day, while two circles take
+88px — which is what bought the title a line it shares with them. Each still
+answers to a full sentence through its accessible name and its tooltip, and the
+sheet below spells both out.
+
+Letting go is not on the row at all until the rock has started to drift.
+Something written down an hour ago is a thing you meant to do, and offering to
+abandon it before it has had a chance is the app second-guessing a decision
+nobody made. `offersRelease()` puts the second mark on the row at the same
+boundary the drawing uses — the moment a rock leaves `fresh` and visibly moves
+outward — so the controls escalate in step with the picture. Before that it
+lives in the row's own disclosure, so the two taps the belt promises are always
+there.
+
+Nothing in that is a media query. Anything that will not fit wraps of its own
+accord, which is a question about this title at this density in this window, and
+not one a breakpoint can answer. Compact then does what compact does everywhere
+else: it changes the shape rather than the padding. The mark comes down to 48px,
+the drift drops to its number (`driftLabel(…, 'short')` — "6 weeks", not
+"Drifting 6 weeks"), and the "at the edge" tag goes, because the band above the
+list already counts how many are out there and the rocks themselves say which.
+
+And, as the goal row does, compact moves everything a row has no space for into
+a sheet: renaming, the note, the capture offer and letting go. `AsteroidDetails`
+is that content, written once and drawn twice — as the body of the row's
+disclosure at the default density, and as the body of `AsteroidSheet` in
+compact. Both copies are in the page, which is what keeps the disclosure
+working when the sheet cannot open, so the sheet's fields take an id prefix to
+stay unique.
+
+The dialog belongs to `AsteroidBelt` rather than to a row, for the reason #51
+found with goals: a `<dialog>` holds its place in the top layer only while its
+own element stays put, and a row's element does not. Unlike `GoalRowSheet` it
+is drawn only while it has something to show — nothing about the band moves, so
+there is no mid-flight destruction to guard against, and the Today view is left
+carrying one dialog rather than two.
 
 The explanation above the list is only drawn while the belt is empty. Four rocks
 say what a belt is better than three lines of prose above them, and on a phone
@@ -237,6 +265,8 @@ src/lib/components/Starfield.svelte     The backdrop, three parallax layers
 src/lib/components/Asteroid.svelte      One rock, and the belt it drifted out of
 src/lib/components/AsteroidRow.svelte   A one-off and its two endings
 src/lib/components/AsteroidBelt.svelte  The band, the capture offer, the Done fold
+src/lib/components/AsteroidDetails.svelte  Rename, note, capture and let go
+src/lib/components/AsteroidSheet.svelte The sheet a compact belt row opens
 src/lib/domain/bodies.ts                Which body a goal flies
 src/lib/domain/celebration.ts           Whether a closing just happened
 src/lib/domain/mascot.ts                What the week adds up to

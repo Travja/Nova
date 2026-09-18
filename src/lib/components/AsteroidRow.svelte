@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Asteroid from '$components/Asteroid.svelte';
+	import AsteroidDetails from '$components/AsteroidDetails.svelte';
 	import {
+		atBeltEdge,
 		driftBand,
 		driftFraction,
 		driftLabel,
@@ -8,7 +10,6 @@
 		type LabelStyle
 	} from '$domain/asteroids';
 	import type { Asteroid as AsteroidData } from '$domain/asteroids';
-	import { resolve } from '$app/paths';
 
 	/**
 	 * One rock on the belt: what it is, how long it has been out there, and the
@@ -23,16 +24,16 @@
 	 * the three terminal states are settled vocabulary the export in #17 is
 	 * scoped against, and what a person reads is a different question.
 	 *
-	 * The title gets a line to itself and the drift shares one with the two
-	 * endings, which is what keeps a phone row to two lines: the endings carry
-	 * the touch floor, so any line they are on is 44px whatever else is there —
-	 * and a line doing nothing but holding two buttons is the most expensive
-	 * kind of line a row can have. Sharing it with the drift makes that height
-	 * pay for two things instead of one.
+	 * Two lines, and both of them earn their height. The endings carry the touch
+	 * floor, so whichever line they are on is 44px tall whatever else is there —
+	 * which makes a line holding nothing but buttons the most expensive kind a
+	 * row can have. So they share the title's line, and the drift shares the
+	 * next one with the disclosure. Marks rather than words is what bought that:
+	 * two labelled pills took most of a phone row, two circles take 88px.
 	 *
-	 * No breakpoint anywhere. When the drift is too long to share, it wraps of
-	 * its own accord, which is a question about this title at this density in
-	 * this window — something the layout knows and a media query does not.
+	 * No breakpoint anywhere. Anything that will not fit wraps of its own
+	 * accord, which is a question about this title at this density in this
+	 * window — something the layout knows and a media query does not.
 	 */
 
 	interface Props {
@@ -50,9 +51,36 @@
 		clearAction: string;
 		releaseAction: string;
 		editAction: string;
+		/**
+		 * Asked to open this asteroid's sheet, which compact rows do instead of
+		 * expanding in place. Left out — the default density, no JavaScript, or
+		 * no `<dialog>` — and the disclosure below opens the ordinary way.
+		 */
+		onopen?: (id: string) => void;
 	}
 
-	let { asteroid, now, labels = 'long', clearAction, releaseAction, editAction }: Props = $props();
+	let {
+		asteroid,
+		now,
+		labels = 'long',
+		clearAction,
+		releaseAction,
+		editAction,
+		onopen
+	}: Props = $props();
+
+	/**
+	 * The disclosure is the enhancement's own fallback. Its contents are in the
+	 * page either way, so a browser that cannot open the sheet — no JavaScript,
+	 * no `<dialog>` — still has every one of them a tap away, which is what the
+	 * belt promises about letting a one-off go.
+	 */
+	function openSheet(event: MouseEvent) {
+		if (!onopen) return;
+		if (typeof HTMLDialogElement === 'undefined' || !HTMLDialogElement.prototype.showModal) return;
+		event.preventDefault();
+		onopen(asteroid.id);
+	}
 
 	const band = $derived(driftBand(asteroid, now));
 	const drift = $derived(driftFraction(asteroid, now));
@@ -65,20 +93,49 @@
 	 * which ones — so the row is repeating something twice said, and "at the
 	 * e…" is worse than either.
 	 */
-	const adrift = $derived(offersRelease(asteroid, now) && labels === 'long');
-	/** Inlined into the attribute below rather than pre-joined, so the resolve
-	    rule can see the route it is built from — the same shape the history
-	    pager and the archive confirmation use. */
-	const newGoalHref = resolve('/goals/new');
+	const adrift = $derived(atBeltEdge(asteroid, now) && labels === 'long');
+	/**
+	 * Whether letting go is one of the row's own controls yet. While it is not,
+	 * it is still one tap inside the disclosure below — hidden from the row, not
+	 * taken away.
+	 */
+	const canRelease = $derived(offersRelease(asteroid, now));
 </script>
 
 <li class="rock panel" data-band={band}>
 	<Asteroid seed={asteroid.id} {drift} {band} />
 
 	<div class="body">
-		<p class="title">{asteroid.title}</p>
+		<div class="line line--top">
+			<p class="title">{asteroid.title}</p>
+			<!--
+				Marks rather than words. Two labelled pills is most of a phone row's
+				width for something a thumb knows by shape after the first day, and
+				the arrow points the way the rock is already drifting. The name each
+				one answers to is still a full sentence — it is just carried by the
+				accessible name and the tooltip instead of by pixels.
+			-->
+			<div class="actions">
+				<form method="POST" action={clearAction}>
+					<input type="hidden" name="id" value={asteroid.id} />
+					<button class="tap act act--done" type="submit" title="Done">
+						<span aria-hidden="true">✓</span>
+						<span class="visually-hidden">Done {asteroid.title}</span>
+					</button>
+				</form>
+				{#if canRelease}
+					<form method="POST" action={releaseAction}>
+						<input type="hidden" name="id" value={asteroid.id} />
+						<button class="tap act" type="submit" title="Release — let this one go">
+							<span aria-hidden="true">↗</span>
+							<span class="visually-hidden">Release {asteroid.title}</span>
+						</button>
+					</form>
+				{/if}
+			</div>
+		</div>
 
-		<div class="line">
+		<div class="line line--under">
 			<!-- The separators are non-breaking on purpose: the space before a `·`
 			     sits at the start of an inline element, where ordinary whitespace
 			     is trimmed away and the dot ends up welded to the word before it. -->
@@ -87,53 +144,14 @@
 					>{/if}{#if asteroid.note}<span class="note">&nbsp;· {asteroid.note}</span>{/if}
 			</p>
 
-			<div class="actions">
-				<form method="POST" action={clearAction}>
-					<input type="hidden" name="id" value={asteroid.id} />
-					<button class="tap act act--done" type="submit">
-						<span aria-hidden="true">✓</span> Done<span class="visually-hidden">
-							{asteroid.title}</span
-						>
-					</button>
-				</form>
-				<form method="POST" action={releaseAction}>
-					<input type="hidden" name="id" value={asteroid.id} />
-					<button class="tap act" type="submit">
-						Release<span class="visually-hidden"> {asteroid.title}</span>
-					</button>
-				</form>
-			</div>
+			<details class="tweak">
+				<summary onclick={openSheet}>
+					More<span class="visually-hidden"> about {asteroid.title}</span>
+				</summary>
+				<AsteroidDetails {asteroid} {editAction} {releaseAction} />
+			</details>
 		</div>
 	</div>
-
-	<details class="tweak">
-		<summary>Edit</summary>
-		<form class="edit" method="POST" action={editAction}>
-			<input type="hidden" name="id" value={asteroid.id} />
-			<label class="visually-hidden" for="title-{asteroid.id}">Title</label>
-			<input id="title-{asteroid.id}" name="title" value={asteroid.title} maxlength="80" required />
-			<label class="visually-hidden" for="note-{asteroid.id}">Note</label>
-			<input
-				id="note-{asteroid.id}"
-				name="note"
-				value={asteroid.note ?? ''}
-				maxlength="500"
-				placeholder="A note, if it needs one"
-			/>
-			<button class="button button--ghost" type="submit">Save</button>
-		</form>
-		<p class="muted hint">
-			Rewriting the title starts the drift again — a different rock is a different age. Amending the
-			note leaves the clock where it is.
-		</p>
-		<!--
-			Available from the moment the rock exists, per decision #1, so it
-			cannot claim the rock keeps coming back — on the first one that is
-			simply untrue. The offer that has actually counted says so in its own
-			words; this one only offers.
-		-->
-		<a class="tap promote" href="{newGoalHref}?asteroid={asteroid.id}">Make this a goal instead</a>
-	</details>
 </li>
 
 <style>
@@ -147,11 +165,8 @@
 		align-items: center;
 		display: grid;
 		gap: 0 0.7rem;
-		grid-template-areas:
-			'mark body'
-			'mark foot';
 		grid-template-columns: auto minmax(0, 1fr);
-		padding: 0.45rem 0.7rem;
+		padding: 0.35rem 0.7rem;
 	}
 
 	/*
@@ -161,34 +176,53 @@
 	 */
 	.rock > :global(.asteroid) {
 		align-self: stretch;
-		grid-area: mark;
 	}
 
 	.body {
 		display: grid;
-		gap: 0.05rem;
-		grid-area: body;
+		gap: 0;
 		min-width: 0;
 	}
 
-	/* The drift and the two endings, sharing the line the endings pay for. */
 	.line {
 		align-items: center;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.2rem 0.6rem;
 		min-width: 0;
 	}
 
-	/* Enough to say how long it has been out there; it gives up the rest of a
-	   long form before it pushes the endings onto a line of their own. */
-	.meta {
+	/* The endings sit against the title, so this line is as tall as they are
+	   and the title is free inside it. */
+	.line--top {
+		gap: 0.2rem 0.5rem;
+		min-height: var(--tap-min);
+	}
+
+	/* Everything quiet, on one short line under it. */
+	.line--under {
+		gap: 0 0.7rem;
+	}
+
+	.title {
 		flex: 1 1 6rem;
+	}
+
+	.meta {
+		flex: 0 1 auto;
 	}
 
 	/* To the end of the line they share, or to the start of their own. */
 	.actions {
 		margin-left: auto;
+	}
+
+	/*
+	 * The disclosure is a flex item on the quiet line while it is shut, and
+	 * takes a line of its own the moment it opens — a panel of form fields has
+	 * no business being as wide as the word "Edit".
+	 */
+	.tweak[open] {
+		flex-basis: 100%;
 	}
 
 	.title {
@@ -224,26 +258,27 @@
 		gap: 0.3rem;
 	}
 
-	.tweak {
-		grid-area: foot;
-	}
-
 	/*
-	 * Both endings at the same weight. Neither is a `.button`: the belt is the
-	 * band you reach for when nothing is due, and two gradient pills per row
-	 * would out-shout the orbits above it.
+	 * A mark apiece, round, at the touch floor and no wider. Neither is a
+	 * `.button`: the belt is the band you reach for when nothing is due, and two
+	 * gradient pills per row would out-shout the orbits above it.
+	 *
+	 * Square at `--tap-min` rather than padded to it, so the two of them take
+	 * 88px of a phone row instead of the 130 the words took — which is what
+	 * bought the drift a place on the same line.
 	 */
 	.act {
 		background: transparent;
 		border: 1px solid var(--space-border);
-		border-radius: 999px;
+		border-radius: 50%;
 		color: var(--text);
 		cursor: pointer;
 		font: inherit;
-		font-size: var(--text-secondary);
-		gap: 0.3rem;
-		padding: 0.2rem 0.7rem;
-		white-space: nowrap;
+		font-size: 1rem;
+		height: var(--tap-min);
+		line-height: 1;
+		padding: 0;
+		width: var(--tap-min);
 	}
 
 	.act:hover {
@@ -254,6 +289,7 @@
 	/* Finishing is the likelier of the two, so it is the one that is lit. */
 	.act--done {
 		color: var(--text-bright);
+		font-size: 1.05rem;
 	}
 
 	.act--done:hover {
@@ -289,37 +325,6 @@
 		color: var(--text);
 	}
 
-	.edit {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.35rem;
-		margin: 0.25rem 0 0;
-	}
-
-	.edit input {
-		flex: 1 1 10rem;
-		min-width: 0;
-	}
-
-	.edit .button {
-		flex: none;
-		font-size: var(--text-secondary);
-		padding: 0.35rem 1rem;
-	}
-
-	.hint {
-		font-size: var(--text-label);
-		margin: 0.3rem 0 0;
-		max-width: 60ch;
-	}
-
-	.promote {
-		color: var(--accent);
-		display: inline-flex;
-		font-size: var(--text-secondary);
-		justify-content: flex-start;
-	}
-
 	/*
 	 * Compact is a different shape, not the same one with less padding — the
 	 * same move the goal row makes. The mark comes down, the row gives up the
@@ -328,22 +333,8 @@
 	 * default density wants.
 	 */
 	:global(html[data-density='compact']) .rock {
-		--mark-width: 52px;
-		padding: 0.25rem 0.55rem;
-	}
-
-	:global(html[data-density='compact']) .body {
-		gap: 0;
-	}
-
-	:global(html[data-density='compact']) .line {
-		gap: 0.1rem 0.5rem;
-	}
-
-	:global(html[data-density='compact']) .act {
-		font-size: var(--text-label);
-		letter-spacing: 0.02em;
-		padding: 0.15rem 0.55rem;
+		--mark-width: 48px;
+		padding: 0.2rem 0.55rem;
 	}
 
 	:global(html[data-density='compact']) .tweak {

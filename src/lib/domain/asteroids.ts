@@ -190,9 +190,38 @@ export function driftFraction(asteroid: DriftInput, now: Date): number {
 	return Math.min(1, driftAge(asteroid, now) / DRIFT_RELEASE_OFFER_MS);
 }
 
-/** Whether the belt should offer to let this one go. */
-export function offersRelease(asteroid: DriftInput, now: Date): boolean {
+/**
+ * Whether this one has drifted as far as the belt goes.
+ *
+ * The strongest form of the offer: the rock is at the outer edge, the band
+ * above the list counts how many are out there, and nothing further out is
+ * drawn because drift is a distance rather than a debt.
+ */
+export function atBeltEdge(asteroid: DriftInput, now: Date): boolean {
 	return driftAge(asteroid, now) >= DRIFT_RELEASE_OFFER_MS;
+}
+
+/**
+ * Whether the row carries letting go as one of its own controls yet.
+ *
+ * Not on a rock added an hour ago. Something you have only just written down
+ * is a thing you meant to do, and putting "let it go" beside it before it has
+ * had a chance is the app second-guessing a decision nobody has made — while
+ * the two controls also crowd a row that has to fit on a phone. Once the rock
+ * has visibly started to drift, letting go is a real answer and the row says
+ * so.
+ *
+ * The boundary is the one the drawing already uses. A rock leaves `fresh` and
+ * begins to move outward at the same moment its second ending appears, so the
+ * controls escalate in step with the picture rather than on a clock of their
+ * own — the same bargain `atBeltEdge` and the `faint` band strike.
+ *
+ * It is never the *only* way to let one go: while a rock is fresh, releasing
+ * lives in the row's own disclosure, so the two taps the belt promises are
+ * always there.
+ */
+export function offersRelease(asteroid: DriftInput, now: Date): boolean {
+	return driftBand(asteroid, now) !== 'fresh';
 }
 
 /**

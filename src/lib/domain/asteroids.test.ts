@@ -12,6 +12,7 @@ import {
 	DRIFT_RELEASE_OFFER_MS,
 	isAsteroidResolution,
 	normalizeTitle,
+	atBeltEdge,
 	offersRelease,
 	recurrenceCount,
 	shouldOfferCapture,
@@ -213,13 +214,27 @@ describe('drift', () => {
 		expect(boundary(DRIFT_RELEASE_OFFER_MS)).toBe('faint');
 	});
 
-	it('offers the release exactly where the belt goes faint', () => {
+	it('reaches the edge of the belt exactly where it goes faint', () => {
 		// One fact drawn twice rather than two facts that can disagree — the
 		// same move the orbit dial makes with position and fill.
 		for (const days of [0, 6, 7, 20, 21, 90]) {
 			const rock = asteroid({ driftAnchorAt: daysAgo(days) });
-			expect(offersRelease(rock, now)).toBe(driftBand(rock, now) === 'faint');
+			expect(atBeltEdge(rock, now)).toBe(driftBand(rock, now) === 'faint');
 		}
+	});
+
+	it('puts letting go on the row the moment the rock starts moving', () => {
+		// The controls escalate with the picture: nothing to let go of while it
+		// is still fresh, a second ending the moment it visibly drifts.
+		for (const days of [0, 6, 7, 20, 21, 90]) {
+			const rock = asteroid({ driftAnchorAt: daysAgo(days) });
+			expect(offersRelease(rock, now)).toBe(driftBand(rock, now) !== 'fresh');
+		}
+	});
+
+	it('keeps letting go off a rock added today', () => {
+		expect(offersRelease(asteroid({ driftAnchorAt: daysAgo(0) }), now)).toBe(false);
+		expect(offersRelease(asteroid({ driftAnchorAt: daysAgo(7) }), now)).toBe(true);
 	});
 
 	it('travels from the inner edge to the outer one, then stops', () => {

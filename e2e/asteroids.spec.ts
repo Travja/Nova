@@ -22,21 +22,37 @@ async function register(page: Page, name: string) {
 	await expect(page.getByRole('heading', { name: 'Launch a goal' })).toBeVisible();
 }
 
-/** Two taps: into the field, and Add. */
+/**
+ * Two taps: into the field, and Add.
+ *
+ * The add form navigates, so this waits for the new page to hydrate as well as
+ * to render. The row is server-rendered and visible before Svelte takes over,
+ * and a click that lands in that window gets the markup's own behaviour rather
+ * than the enhancement's — which is correct of the app and confusing in a test.
+ */
 async function addAsteroid(page: Page, title: string) {
 	await page.getByLabel('Add a one-off').fill(title);
 	await page.getByRole('button', { name: 'Add', exact: true }).click();
 	await expect(rock(page, title)).toBeVisible();
+	await hydrated(page);
 }
 
 function belt(page: Page) {
 	return page.locator('.belt');
 }
 
-/** One row on the belt. Each rock names itself three times — once in the row
-    and once inside each of its two endings — so the row is what to match. */
+/** One row on the belt. Each rock names itself more than once — in the row and
+    inside each of its controls — so the row is what to match. */
 function rock(page: Page, title: string) {
 	return belt(page).getByRole('listitem').filter({ hasText: title });
+}
+
+async function chooseCompact(page: Page) {
+	await page.goto('/settings');
+	await hydrated(page);
+	await page.getByLabel('Density').selectOption('compact');
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByText('Saved.')).toBeVisible();
 }
 
 test('a one-off is added, ticked off and let go, without ever becoming an orbit', async ({
@@ -74,8 +90,14 @@ test('a one-off is added, ticked off and let go, without ever becoming an orbit'
 	await expect(settled.getByText('Return the library books')).toBeVisible();
 	await expect(settled.getByText('Done today')).toBeVisible();
 
-	// One tap to let go, on equal footing with finishing.
-	await page.getByRole('button', { name: 'Release Cancel the gym trial' }).click();
+	// Letting go is not on the row of a rock added a minute ago — it is a real
+	// answer to something that has sat there a while. It is still a tap away,
+	// in the disclosure, which is what keeps the belt's promise that a one-off
+	// can be let go without hunting for it.
+	const gym = rock(page, 'Cancel the gym trial');
+	await expect(gym.getByRole('button', { name: /^Release/ })).toHaveCount(0);
+	await gym.locator('summary').click();
+	await gym.getByRole('button', { name: /^Release/ }).click();
 	await expect(belt(page).getByText('Released.')).toBeVisible();
 
 	// And released means gone from every list, not filed under a gentler name —
@@ -172,4 +194,38 @@ test('the third time the same one-off is done, Nova offers to make it a habit', 
 	await page.getByRole('button', { name: 'Done Water the plants' }).click();
 	await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
 	await expect(belt(page).getByText('has cleared')).toHaveCount(0);
+});
+
+test('compact puts everything but finishing into a sheet, the way a goal row does', async ({
+	page
+}) => {
+	await pinClock(page, EVENING);
+	await register(page, 'Mira Solberg');
+	await chooseCompact(page);
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/today');
+	await hydrated(page);
+	await addAsteroid(page, 'Return the library books');
+
+	// A rock added today has one ending on the row. Letting go is a real answer
+	// to something that has sat there a while, not to something written down a
+	// minute ago — so it waits until the rock has visibly started to drift.
+	const row = rock(page, 'Return the library books');
+	await expect(row.getByRole('button', { name: /^Done/ })).toBeVisible();
+	await expect(row.getByRole('button', { name: /^Release/ })).toHaveCount(0);
+
+	// Everything else is a tap away, in a sheet rather than in the row — and the
+	// sheet is a real dialog, so the page behind it is inert.
+	await row.locator('summary').click();
+	// Scoped to the band: the page carries the goal row's sheet as well.
+	const sheet = belt(page).getByRole('dialog');
+	await expect(sheet).toBeVisible();
+	await expect(sheet.getByRole('heading', { name: 'Return the library books' })).toBeVisible();
+	await expect(sheet.getByRole('link', { name: 'Make this a goal instead' })).toBeVisible();
+
+	// Including letting go, spelled out in the words the row's mark stands for.
+	await sheet.getByRole('button', { name: /^Release/ }).click();
+	await expect(belt(page).getByText('Released.')).toBeVisible();
+	await expect(rock(page, 'Return the library books')).toHaveCount(0);
 });

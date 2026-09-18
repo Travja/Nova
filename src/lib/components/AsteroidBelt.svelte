@@ -2,7 +2,8 @@
 	import AsteroidRow from '$components/AsteroidRow.svelte';
 	import FieldError from '$components/FieldError.svelte';
 	import Asteroid from '$components/Asteroid.svelte';
-	import { doneLabel, offersRelease, type Asteroid as AsteroidData } from '$domain/asteroids';
+	import AsteroidSheet from '$components/AsteroidSheet.svelte';
+	import { atBeltEdge, doneLabel, type Asteroid as AsteroidData } from '$domain/asteroids';
 	import { describedBy, type FormErrors } from '$domain/validation';
 	import { resolve } from '$app/paths';
 
@@ -61,8 +62,22 @@
 	}: Props = $props();
 
 	const newGoalHref = resolve('/goals/new');
+
+	/**
+	 * Which rock's sheet a compact row asked to open, if any. An id rather than
+	 * the asteroid itself, so the sheet keeps reading the current row — the
+	 * list is reloaded on every action, and a held object would go stale the
+	 * moment one was edited from inside the sheet.
+	 *
+	 * The dialog lives here rather than in the row for the reason #51 found
+	 * with goals: a `<dialog>` keeps its place in the top layer only while its
+	 * own element stays put, and a row's element does not. This band is drawn
+	 * once and never moves.
+	 */
+	let openId = $state<string | null>(null);
+	const openAsteroid = $derived(asteroids.find((rock) => rock.id === openId) ?? null);
 	/** How many rocks have drifted as far as the belt goes. */
-	const atEdge = $derived(asteroids.filter((rock) => offersRelease(rock, now)).length);
+	const atEdge = $derived(asteroids.filter((rock) => atBeltEdge(rock, now)).length);
 </script>
 
 <section class="belt" aria-labelledby="belt-heading">
@@ -144,11 +159,32 @@
 					{clearAction}
 					{releaseAction}
 					{editAction}
+					onopen={compact ? (id) => (openId = id) : undefined}
 				/>
 			{/each}
 		</ul>
 	{:else}
 		<p class="muted empty">Nothing adrift.</p>
+	{/if}
+
+	<!--
+		Only while there is something to show, which is where this parts company
+		with `GoalRowSheet`. That one is permanent because the row it belongs to
+		is not: a goal moving between sections used to destroy its dialog
+		mid-flight and cost it the top layer (#51). Nothing here moves — the band
+		is drawn once — so the dialog can be built when it opens and taken away
+		when it closes, and the Today view is left carrying one dialog rather
+		than two, including at the default density, where this one can never open
+		at all.
+	-->
+	{#if openAsteroid}
+		<AsteroidSheet
+			asteroid={openAsteroid}
+			{now}
+			{editAction}
+			{releaseAction}
+			onclose={() => (openId = null)}
+		/>
 	{/if}
 
 	{#if done.length > 0}
