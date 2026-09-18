@@ -242,7 +242,7 @@
 		display: flex;
 		flex: none;
 		position: relative;
-		width: var(--mark-width, 60px);
+		width: var(--mark-width, 52px);
 	}
 
 	/*
@@ -261,7 +261,7 @@
 		top: 0;
 		/* The strip's share of the mark, kept in the same proportion the two
 		   viewBoxes are written in, so one number sets both. */
-		width: calc(var(--mark-width, 60px) * 34 / 96);
+		width: calc(var(--mark-width, 52px) * 34 / 96);
 	}
 
 	/* Over the strip, so a settled rock sits among the rubble rather than

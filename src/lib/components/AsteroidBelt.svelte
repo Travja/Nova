@@ -30,7 +30,7 @@
 
 	interface Props {
 		asteroids: readonly AsteroidData[];
-		/** Compact rows say less, so the drift fits beside the two endings. */
+		/** Compact opens a sheet where the default density expands in place. */
 		compact?: boolean;
 		/** Recently finished, newest first — bounded by the service. */
 		done?: readonly AsteroidData[];
@@ -155,7 +155,6 @@
 				<AsteroidRow
 					{asteroid}
 					{now}
-					labels={compact ? 'short' : 'long'}
 					{clearAction}
 					{releaseAction}
 					{editAction}
@@ -181,6 +180,7 @@
 		<AsteroidSheet
 			asteroid={openAsteroid}
 			{now}
+			{clearAction}
 			{editAction}
 			{releaseAction}
 			onclose={() => (openId = null)}

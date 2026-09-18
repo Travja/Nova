@@ -177,54 +177,74 @@ The belt never raises its voice. Both endings are outline pills rather than
 and no burst, and finishing one says "Done." in a muted line. Closing an orbit
 is the biggest moment in the app and nothing on this band may compete with it.
 
-### The row, and why it has no breakpoint
+### The row, and the swipe
 
-Both endings have to stay one tap from the Today view, so both stay on the row —
-and a control carries the touch floor, which means any line they are on is 44px
-tall whatever else is on it. A line holding nothing but two buttons is the most
-expensive line a row can have, so the drift shares it: the title takes a line of
-its own, the drift and the two endings take the next, and the height pays for
-two things instead of one.
+A belt row is a rock, a title and how long it has been out there. It carries no
+controls at all: its two endings are a swipe — right to finish, left to let go —
+and everything else is a tap on the words, which are themselves the disclosure.
 
 ![The belt on a phone, compact](screenshots/30-asteroids/belt-on-a-phone-compact.png)
 
-The endings are marks rather than words: two labelled pills took most of a phone
-row for something a thumb knows by shape after a day, while two circles take
-88px — which is what bought the title a line it shares with them. Each still
-answers to a full sentence through its accessible name and its tooltip, and the
-sheet below spells both out.
+That is what bought the row its size. A control carries the touch floor, so any
+line one sits on is 44px tall whatever else is on it, and a line holding nothing
+but two buttons is the most expensive line a row can have. Without them a
+compact row is two lines and 50px, against the 61px a goal row takes and the
+128px this one took when the endings were labelled pills.
 
-Letting go is not on the row at all until the rock has started to drift.
-Something written down an hour ago is a thing you meant to do, and offering to
-abandon it before it has had a chance is the app second-guessing a decision
-nobody made. `offersRelease()` puts the second mark on the row at the same
-boundary the drawing uses — the moment a rock leaves `fresh` and visibly moves
-outward — so the controls escalate in step with the picture. Before that it
-lives in the row's own disclosure, so the two taps the belt promises are always
-there.
+Under the card lie the two endings, each the colour of what it does — green for
+finishing, stone for letting go. They are drawn only while a finger is on the
+row, because a `.panel` is glass and a colour lying under one shows faintly
+through it; and while a row is being dragged the card is opaque, so the colour
+reads as a layer the card is moving off rather than as a stain spreading through
+it. Both sides are muted until the drag commits and then lit, which is the whole
+of the feedback.
 
-Nothing in that is a media query. Anything that will not fit wraps of its own
-accord, which is a question about this title at this density in this window, and
-not one a breakpoint can answer. Compact then does what compact does everywhere
-else: it changes the shape rather than the padding. The mark comes down to 48px,
-the drift drops to its number (`driftLabel(…, 'short')` — "6 weeks", not
-"Drifting 6 weeks"), and the "at the edge" tag goes, because the band above the
-list already counts how many are out there and the rocks themselves say which.
+![A row mid-swipe](screenshots/30-asteroids/swipe-right.png)
 
-And, as the goal row does, compact moves everything a row has no space for into
-a sheet: renaming, the note, the capture offer and letting go. `AsteroidDetails`
-is that content, written once and drawn twice — as the body of the row's
-disclosure at the default density, and as the body of `AsteroidSheet` in
-compact. Both copies are in the page, which is what keeps the disclosure
-working when the sheet cannot open, so the sheet's fields take an id prefix to
-stay unique.
+Standing still, each end of the card carries a wash of the colour a drag that
+way would uncover — feathered far enough that there is no edge anywhere to read
+as a status stripe. A row simply has a warm end and a cool one, and the first
+swipe explains why. The cool end is drawn only where letting go is on offer.
+
+**Letting go is not on offer until the rock has started to drift.** Something
+written down an hour ago is a thing you meant to do, and offering to abandon it
+before it has had a chance is the app second-guessing a decision nobody made.
+`offersRelease()` opens that direction at the same boundary the drawing uses —
+the moment a rock leaves `fresh` and visibly moves outward — so what the row
+will accept escalates in step with the picture.
+
+Stone rather than red, throughout. Letting go is a legitimate ending on equal
+footing with finishing, and a colour that means danger everywhere else in an
+interface would make it the one thing on the belt that looks like a mistake.
+
+### A gesture is never the only way through a door
+
+A swipe needs a pointer, a script and a hand, and the belt has to work without
+any of the three. So every ending is also a plain button inside the row's
+disclosure — where a keyboard, a screen reader and a browser running no script
+find them — and what a committed swipe actually does is `requestSubmit()` the
+same form that button posts. The row keeps two buttonless forms for exactly
+that: one path to each ending, whichever way it was asked for.
+
+The disclosure is the same content either way. `AsteroidDetails` holds renaming,
+the note, both endings and the capture offer, drawn twice: as the body of the
+row's disclosure at the default density, and as the body of `AsteroidSheet` in
+compact — which is the move the goal row makes. Both copies are in the page,
+which is what keeps the disclosure working when the sheet cannot open, so the
+sheet's fields take an id prefix to stay unique.
 
 The dialog belongs to `AsteroidBelt` rather than to a row, for the reason #51
 found with goals: a `<dialog>` holds its place in the top layer only while its
-own element stays put, and a row's element does not. Unlike `GoalRowSheet` it
-is drawn only while it has something to show — nothing about the band moves, so
+own element stays put, and a row's element does not. Unlike `GoalRowSheet` it is
+drawn only while it has something to show — nothing about the band moves, so
 there is no mid-flight destruction to guard against, and the Today view is left
 carrying one dialog rather than two.
+
+Nothing in the row is a media query. Compact does what compact does everywhere
+else — it changes the shape rather than the padding: the mark comes down to
+44px and the title to `--text-secondary`. The drift always takes its short form
+("6 weeks", not "Drifting 6 weeks"); the long one is a sentence, and the sheet's
+header is where there is room for a sentence.
 
 The explanation above the list is only drawn while the belt is empty. Four rocks
 say what a belt is better than three lines of prose above them, and on a phone
@@ -235,7 +255,10 @@ those three lines cost more than the rock they describe.
 Four of these are load-bearing, and breaking any of them shows up immediately:
 
 - **Everything yields to `prefers-reduced-motion`**, handled globally in
-  `src/lib/styles/app.css`. Position has to carry the meaning without motion,
+  `src/lib/styles/app.css`. A drag is the exception that proves it: the row
+  following a finger is direct manipulation rather than decoration and stays
+  whatever the setting says, while the snap back afterwards is a transition and
+  is damped to nothing along with everything else. Position has to carry the meaning without motion,
   which is why a body is placed by the arc's angle and never by an animation,
   why the drifting pose is a static transform with the drift animated on top of
   it, and why the closing burst is simply not drawn.

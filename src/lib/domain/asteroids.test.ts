@@ -17,6 +17,10 @@ import {
 	recurrenceCount,
 	shouldOfferCapture,
 	sortBelt,
+	swipeIntent,
+	swipeOffset,
+	swipeThreshold,
+	SWIPE_COMMIT_MIN,
 	type Asteroid,
 	type ResolvedAsteroid
 } from './asteroids';
@@ -278,6 +282,49 @@ describe('doneLabel', () => {
 
 	it('keeps the fold bounded, so it cannot become a flattering ledger', () => {
 		expect(DONE_VISIBLE).toBe(12);
+	});
+});
+
+describe('swiping a row', () => {
+	const wide = { width: 600, canRelease: true };
+	const phone = { width: 340, canRelease: true };
+
+	it('scales the commit with the row, but never below the floor', () => {
+		expect(swipeThreshold(600)).toBeCloseTo(156, 5);
+		// A narrow row would ask for 36px on the fraction alone, which is a
+		// twitch — the floor is what stops the same gesture meaning two things.
+		expect(swipeThreshold(140)).toBe(SWIPE_COMMIT_MIN);
+	});
+
+	it('answers nothing until the drag has committed', () => {
+		expect(swipeIntent(40, wide)).toBeNull();
+		expect(swipeIntent(-40, wide)).toBeNull();
+		expect(swipeIntent(swipeThreshold(600) - 1, wide)).toBeNull();
+	});
+
+	it('reads right as finishing and left as letting go', () => {
+		expect(swipeIntent(swipeThreshold(600), wide)).toBe('done');
+		expect(swipeIntent(-swipeThreshold(600), wide)).toBe('release');
+		expect(swipeIntent(500, phone)).toBe('done');
+	});
+
+	it('refuses to let go of a rock that is still fresh', () => {
+		const fresh = { width: 340, canRelease: false };
+		expect(swipeIntent(-500, fresh)).toBeNull();
+		// Finishing one is always on offer, whichever way it has drifted.
+		expect(swipeIntent(500, fresh)).toBe('done');
+	});
+
+	it('bounds the travel and damps the direction that commits to nothing', () => {
+		const limit = swipeThreshold(340) * 1.5;
+		expect(swipeOffset(9999, phone)).toBeCloseTo(limit, 5);
+		expect(swipeOffset(-9999, phone)).toBeCloseTo(-limit, 5);
+
+		// A fresh rock still gives, just barely — a row that answers a gesture
+		// with nothing at all reads as broken rather than as an answer.
+		const fresh = { width: 340, canRelease: false };
+		expect(swipeOffset(-100, fresh)).toBeCloseTo(-22, 5);
+		expect(swipeOffset(100, fresh)).toBe(100);
 	});
 });
 

@@ -26,13 +26,14 @@
 		/** The request's clock, for the drift line in the header. */
 		now: Date;
 		/** `?/…` paths on the page that owns the band. */
+		clearAction: string;
 		editAction: string;
 		releaseAction: string;
 		/** Asked to clear whichever asteroid this was showing. */
 		onclose?: () => void;
 	}
 
-	let { asteroid, now, editAction, releaseAction, onclose }: Props = $props();
+	let { asteroid, now, clearAction, editAction, releaseAction, onclose }: Props = $props();
 
 	let dialog: HTMLDialogElement | null = $state(null);
 
@@ -75,7 +76,7 @@
 				</div>
 			</header>
 
-			<AsteroidDetails {asteroid} {editAction} {releaseAction} idPrefix="sheet-" />
+			<AsteroidDetails {asteroid} {clearAction} {editAction} {releaseAction} idPrefix="sheet-" />
 
 			<button class="button button--ghost close" type="button" onclick={() => dialog?.close()}>
 				Close
