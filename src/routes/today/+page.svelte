@@ -290,6 +290,7 @@
 		asteroids={data.asteroids}
 		done={data.doneAsteroids}
 		now={data.now}
+		{compact}
 		errors={form?.errors ?? null}
 		message={form?.belt ?? null}
 		offer={form?.offer ?? null}

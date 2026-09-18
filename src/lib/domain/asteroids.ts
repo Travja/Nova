@@ -160,6 +160,9 @@ export const DRIFT_DRIFTING_MS = 7 * DAY_MS;
  */
 export type DriftBand = 'fresh' | 'drifting' | 'faint';
 
+/** How much room the label has: a sentence, or the number on its own. */
+export type LabelStyle = 'long' | 'short';
+
 /** The little of an asteroid that drift depends on. */
 export interface DriftInput {
 	driftAnchorAt: Date;
@@ -187,9 +190,97 @@ export function driftFraction(asteroid: DriftInput, now: Date): number {
 	return Math.min(1, driftAge(asteroid, now) / DRIFT_RELEASE_OFFER_MS);
 }
 
-/** Whether the belt should offer to let this one go. */
-export function offersRelease(asteroid: DriftInput, now: Date): boolean {
+/**
+ * Whether this one has drifted as far as the belt goes.
+ *
+ * The strongest form of the offer: the rock is at the outer edge, the band
+ * above the list counts how many are out there, and nothing further out is
+ * drawn because drift is a distance rather than a debt.
+ */
+export function atBeltEdge(asteroid: DriftInput, now: Date): boolean {
 	return driftAge(asteroid, now) >= DRIFT_RELEASE_OFFER_MS;
+}
+
+/**
+ * Whether the row carries letting go as one of its own controls yet.
+ *
+ * Not on a rock added an hour ago. Something you have only just written down
+ * is a thing you meant to do, and putting "let it go" beside it before it has
+ * had a chance is the app second-guessing a decision nobody has made — while
+ * the two controls also crowd a row that has to fit on a phone. Once the rock
+ * has visibly started to drift, letting go is a real answer and the row says
+ * so.
+ *
+ * The boundary is the one the drawing already uses. A rock leaves `fresh` and
+ * begins to move outward at the same moment its second ending appears, so the
+ * controls escalate in step with the picture rather than on a clock of their
+ * own — the same bargain `atBeltEdge` and the `faint` band strike.
+ *
+ * It is never the *only* way to let one go: while a rock is fresh, releasing
+ * lives in the row's own disclosure, so the two taps the belt promises are
+ * always there.
+ */
+export function offersRelease(asteroid: DriftInput, now: Date): boolean {
+	return driftBand(asteroid, now) !== 'fresh';
+}
+
+/**
+ * How far across a row a drag has to travel before it means anything, as a
+ * fraction of the row's own width, and the floor in pixels that fraction is
+ * never allowed to fall below.
+ *
+ * A fraction alone asks for a 30px drag on a narrow phone and a 90px one on a
+ * tablet, which is the same gesture feeling twice as committal on the smaller
+ * screen; a fixed distance alone is most of a phone row and a twitch on a
+ * desktop. The larger of the two is the one that behaves.
+ */
+export const SWIPE_COMMIT_FRACTION = 0.26;
+export const SWIPE_COMMIT_MIN = 56;
+
+/** What a drag would do if it were let go where it is. */
+export type SwipeIntent = 'done' | 'release' | null;
+
+/** The little of a row a swipe has to know about. */
+export interface SwipeContext {
+	/** The row's own width, so the threshold scales with the screen. */
+	width: number;
+	/** Whether letting go is on offer at all — it is not, while a rock is fresh. */
+	canRelease: boolean;
+}
+
+/** How far this row has to be dragged before the drag commits to anything. */
+export function swipeThreshold(width: number): number {
+	return Math.max(SWIPE_COMMIT_MIN, width * SWIPE_COMMIT_FRACTION);
+}
+
+/**
+ * What letting go here would do.
+ *
+ * Right is finishing and left is letting go, which is the direction each one
+ * already reads in: a tick is something you push across a list, and a rock you
+ * release goes back the way it came. Left answers null while the rock is fresh
+ * for the same reason the row has no second mark yet — there is nothing there
+ * to commit to.
+ */
+export function swipeIntent(offset: number, { width, canRelease }: SwipeContext): SwipeIntent {
+	const committed = Math.abs(offset) >= swipeThreshold(width);
+	if (!committed) return null;
+	if (offset > 0) return 'done';
+	return canRelease ? 'release' : null;
+}
+
+/**
+ * How far the row actually moves for a drag of `dx`.
+ *
+ * Bounded, so a long drag does not throw the row off its own card, and heavily
+ * damped in the direction that will not commit to anything: a fresh rock still
+ * gives a little to the left, because a gesture that answers with nothing at
+ * all reads as a broken row rather than as an answer.
+ */
+export function swipeOffset(dx: number, { width, canRelease }: SwipeContext): number {
+	const limit = Math.max(swipeThreshold(width) * 1.5, SWIPE_COMMIT_MIN);
+	const travelled = !canRelease && dx < 0 ? dx * 0.22 : dx;
+	return Math.max(-limit, Math.min(limit, travelled));
 }
 
 /**
@@ -234,12 +325,23 @@ export function sortBelt<T extends DriftInput>(asteroids: readonly T[]): T[] {
 	return [...asteroids].sort((a, b) => a.driftAnchorAt.getTime() - b.driftAnchorAt.getTime());
 }
 
-/** How the belt says how long something has been out there. */
-export function driftLabel(asteroid: DriftInput, now: Date): string {
+/**
+ * How the belt says how long something has been out there.
+ *
+ * Two lengths, because compact is a different shape and not the same one with
+ * less padding round it: at that density the row puts this on the same line as
+ * the two endings, and a sentence does not fit beside two buttons on a phone.
+ * The long form is the sentence; the short form is the number, which is all the
+ * words were ever carrying — the rock's own distance from the belt says the
+ * rest.
+ */
+export function driftLabel(asteroid: DriftInput, now: Date, style: LabelStyle = 'long'): string {
 	const days = Math.floor(driftAge(asteroid, now) / DAY_MS);
-	if (days < 1) return 'Added today';
-	if (days === 1) return 'Drifting a day';
-	if (days < 14) return `Drifting ${days} days`;
+	const short = style === 'short';
+
+	if (days < 1) return short ? 'Today' : 'Added today';
+	if (days === 1) return short ? '1 day' : 'Drifting a day';
+	if (days < 14) return short ? `${days} days` : `Drifting ${days} days`;
 	const weeks = Math.round(days / 7);
-	return `Drifting ${weeks} weeks`;
+	return short ? `${weeks} weeks` : `Drifting ${weeks} weeks`;
 }

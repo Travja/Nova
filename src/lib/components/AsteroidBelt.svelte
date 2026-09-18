@@ -2,7 +2,8 @@
 	import AsteroidRow from '$components/AsteroidRow.svelte';
 	import FieldError from '$components/FieldError.svelte';
 	import Asteroid from '$components/Asteroid.svelte';
-	import { doneLabel, offersRelease, type Asteroid as AsteroidData } from '$domain/asteroids';
+	import AsteroidSheet from '$components/AsteroidSheet.svelte';
+	import { atBeltEdge, doneLabel, type Asteroid as AsteroidData } from '$domain/asteroids';
 	import { describedBy, type FormErrors } from '$domain/validation';
 	import { resolve } from '$app/paths';
 
@@ -29,6 +30,8 @@
 
 	interface Props {
 		asteroids: readonly AsteroidData[];
+		/** Compact opens a sheet where the default density expands in place. */
+		compact?: boolean;
 		/** Recently finished, newest first — bounded by the service. */
 		done?: readonly AsteroidData[];
 		now: Date;
@@ -45,6 +48,7 @@
 
 	let {
 		asteroids,
+		compact = false,
 		done = [],
 		now,
 		errors = null,
@@ -58,26 +62,48 @@
 	}: Props = $props();
 
 	const newGoalHref = resolve('/goals/new');
+
+	/**
+	 * Which rock's sheet a compact row asked to open, if any. An id rather than
+	 * the asteroid itself, so the sheet keeps reading the current row — the
+	 * list is reloaded on every action, and a held object would go stale the
+	 * moment one was edited from inside the sheet.
+	 *
+	 * The dialog lives here rather than in the row for the reason #51 found
+	 * with goals: a `<dialog>` keeps its place in the top layer only while its
+	 * own element stays put, and a row's element does not. This band is drawn
+	 * once and never moves.
+	 */
+	let openId = $state<string | null>(null);
+	const openAsteroid = $derived(asteroids.find((rock) => rock.id === openId) ?? null);
 	/** How many rocks have drifted as far as the belt goes. */
-	const atEdge = $derived(asteroids.filter((rock) => offersRelease(rock, now)).length);
+	const atEdge = $derived(asteroids.filter((rock) => atBeltEdge(rock, now)).length);
 </script>
 
 <section class="belt" aria-labelledby="belt-heading">
 	<h2 id="belt-heading">
 		The belt{#if asteroids.length > 0}&nbsp;({asteroids.length}){/if}
 	</h2>
-	<p class="muted lede">
-		One-offs that never became a cycle — no tier, no target, no streak. Tick one off when nothing is
-		due, or let it go.
-	</p>
+	<!--
+		The explanation, only while there is nothing to explain it against. Four
+		rocks on the belt say what a belt is better than three lines of prose
+		above them do, and on a phone those three lines cost more than the rock
+		they describe.
+	-->
+	{#if asteroids.length === 0}
+		<p class="muted lede">
+			One-offs that never became a cycle — no tier, no target, no streak. Tick one off when nothing
+			is due, or let it go.
+		</p>
+	{/if}
 
 	{#if atEdge > 0}
 		<!-- Said once, by the band, rather than once per rock. What it is saying
 		     is that letting go is an ending, not a verdict — and a sentence
 		     repeated down a list stops reading that way by the third time. -->
 		<p class="muted lede">
-			{atEdge === 1 ? 'One of these has' : `${atEdge} of these have`} drifted as far as the belt goes.
-			Letting one go is as good an ending as finishing it.
+			{atEdge === 1 ? 'One is' : `${atEdge} are`} out at the edge. Letting one go is as good an ending
+			as finishing it.
 		</p>
 	{/if}
 
@@ -126,11 +152,39 @@
 	{#if asteroids.length > 0}
 		<ul class="rocks">
 			{#each asteroids as asteroid (asteroid.id)}
-				<AsteroidRow {asteroid} {now} {clearAction} {releaseAction} {editAction} />
+				<AsteroidRow
+					{asteroid}
+					{now}
+					{clearAction}
+					{releaseAction}
+					{editAction}
+					onopen={compact ? (id) => (openId = id) : undefined}
+				/>
 			{/each}
 		</ul>
 	{:else}
 		<p class="muted empty">Nothing adrift.</p>
+	{/if}
+
+	<!--
+		Only while there is something to show, which is where this parts company
+		with `GoalRowSheet`. That one is permanent because the row it belongs to
+		is not: a goal moving between sections used to destroy its dialog
+		mid-flight and cost it the top layer (#51). Nothing here moves — the band
+		is drawn once — so the dialog can be built when it opens and taken away
+		when it closes, and the Today view is left carrying one dialog rather
+		than two, including at the default density, where this one can never open
+		at all.
+	-->
+	{#if openAsteroid}
+		<AsteroidSheet
+			asteroid={openAsteroid}
+			{now}
+			{clearAction}
+			{editAction}
+			{releaseAction}
+			onclose={() => (openId = null)}
+		/>
 	{/if}
 
 	{#if done.length > 0}
@@ -264,8 +318,16 @@
 	}
 
 	.rocks--done {
+		/* The fold's marks are smaller than a row's: a finished one-off is a
+		   line, not a card. */
+		--mark-width: 56px;
+
 		gap: 0.15rem;
 		margin: 0 0 0.5rem;
+	}
+
+	:global(html[data-density='compact']) .rocks--done {
+		--mark-width: 44px;
 	}
 
 	/*

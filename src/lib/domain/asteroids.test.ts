@@ -12,10 +12,15 @@ import {
 	DRIFT_RELEASE_OFFER_MS,
 	isAsteroidResolution,
 	normalizeTitle,
+	atBeltEdge,
 	offersRelease,
 	recurrenceCount,
 	shouldOfferCapture,
 	sortBelt,
+	swipeIntent,
+	swipeOffset,
+	swipeThreshold,
+	SWIPE_COMMIT_MIN,
 	type Asteroid,
 	type ResolvedAsteroid
 } from './asteroids';
@@ -213,13 +218,27 @@ describe('drift', () => {
 		expect(boundary(DRIFT_RELEASE_OFFER_MS)).toBe('faint');
 	});
 
-	it('offers the release exactly where the belt goes faint', () => {
+	it('reaches the edge of the belt exactly where it goes faint', () => {
 		// One fact drawn twice rather than two facts that can disagree — the
 		// same move the orbit dial makes with position and fill.
 		for (const days of [0, 6, 7, 20, 21, 90]) {
 			const rock = asteroid({ driftAnchorAt: daysAgo(days) });
-			expect(offersRelease(rock, now)).toBe(driftBand(rock, now) === 'faint');
+			expect(atBeltEdge(rock, now)).toBe(driftBand(rock, now) === 'faint');
 		}
+	});
+
+	it('puts letting go on the row the moment the rock starts moving', () => {
+		// The controls escalate with the picture: nothing to let go of while it
+		// is still fresh, a second ending the moment it visibly drifts.
+		for (const days of [0, 6, 7, 20, 21, 90]) {
+			const rock = asteroid({ driftAnchorAt: daysAgo(days) });
+			expect(offersRelease(rock, now)).toBe(driftBand(rock, now) !== 'fresh');
+		}
+	});
+
+	it('keeps letting go off a rock added today', () => {
+		expect(offersRelease(asteroid({ driftAnchorAt: daysAgo(0) }), now)).toBe(false);
+		expect(offersRelease(asteroid({ driftAnchorAt: daysAgo(7) }), now)).toBe(true);
 	});
 
 	it('travels from the inner edge to the outer one, then stops', () => {
@@ -236,6 +255,15 @@ describe('drift', () => {
 		expect(at(1)).toBe('Drifting a day');
 		expect(at(9)).toBe('Drifting 9 days');
 		expect(at(21)).toBe('Drifting 3 weeks');
+	});
+
+	it('has a short form for a row that has to share its line', () => {
+		const at = (days: number) =>
+			driftLabel(asteroid({ driftAnchorAt: daysAgo(days) }), now, 'short');
+		expect(at(0)).toBe('Today');
+		expect(at(1)).toBe('1 day');
+		expect(at(9)).toBe('9 days');
+		expect(at(21)).toBe('3 weeks');
 	});
 });
 
@@ -254,6 +282,49 @@ describe('doneLabel', () => {
 
 	it('keeps the fold bounded, so it cannot become a flattering ledger', () => {
 		expect(DONE_VISIBLE).toBe(12);
+	});
+});
+
+describe('swiping a row', () => {
+	const wide = { width: 600, canRelease: true };
+	const phone = { width: 340, canRelease: true };
+
+	it('scales the commit with the row, but never below the floor', () => {
+		expect(swipeThreshold(600)).toBeCloseTo(156, 5);
+		// A narrow row would ask for 36px on the fraction alone, which is a
+		// twitch — the floor is what stops the same gesture meaning two things.
+		expect(swipeThreshold(140)).toBe(SWIPE_COMMIT_MIN);
+	});
+
+	it('answers nothing until the drag has committed', () => {
+		expect(swipeIntent(40, wide)).toBeNull();
+		expect(swipeIntent(-40, wide)).toBeNull();
+		expect(swipeIntent(swipeThreshold(600) - 1, wide)).toBeNull();
+	});
+
+	it('reads right as finishing and left as letting go', () => {
+		expect(swipeIntent(swipeThreshold(600), wide)).toBe('done');
+		expect(swipeIntent(-swipeThreshold(600), wide)).toBe('release');
+		expect(swipeIntent(500, phone)).toBe('done');
+	});
+
+	it('refuses to let go of a rock that is still fresh', () => {
+		const fresh = { width: 340, canRelease: false };
+		expect(swipeIntent(-500, fresh)).toBeNull();
+		// Finishing one is always on offer, whichever way it has drifted.
+		expect(swipeIntent(500, fresh)).toBe('done');
+	});
+
+	it('bounds the travel and damps the direction that commits to nothing', () => {
+		const limit = swipeThreshold(340) * 1.5;
+		expect(swipeOffset(9999, phone)).toBeCloseTo(limit, 5);
+		expect(swipeOffset(-9999, phone)).toBeCloseTo(-limit, 5);
+
+		// A fresh rock still gives, just barely — a row that answers a gesture
+		// with nothing at all reads as broken rather than as an answer.
+		const fresh = { width: 340, canRelease: false };
+		expect(swipeOffset(-100, fresh)).toBeCloseTo(-22, 5);
+		expect(swipeOffset(100, fresh)).toBe(100);
 	});
 });
 

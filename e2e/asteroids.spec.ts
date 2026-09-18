@@ -22,21 +22,81 @@ async function register(page: Page, name: string) {
 	await expect(page.getByRole('heading', { name: 'Launch a goal' })).toBeVisible();
 }
 
-/** Two taps: into the field, and Add. */
+/**
+ * Two taps: into the field, and Add.
+ *
+ * The add form navigates, so this waits for the new page to hydrate as well as
+ * to render. The row is server-rendered and visible before Svelte takes over,
+ * and a click that lands in that window gets the markup's own behaviour rather
+ * than the enhancement's — which is correct of the app and confusing in a test.
+ */
 async function addAsteroid(page: Page, title: string) {
 	await page.getByLabel('Add a one-off').fill(title);
 	await page.getByRole('button', { name: 'Add', exact: true }).click();
 	await expect(rock(page, title)).toBeVisible();
+	await hydrated(page);
 }
 
 function belt(page: Page) {
 	return page.locator('.belt');
 }
 
-/** One row on the belt. Each rock names itself three times — once in the row
-    and once inside each of its two endings — so the row is what to match. */
+/** One row on the belt. Each rock names itself more than once — in the row and
+    inside each of its controls — so the row is what to match. */
 function rock(page: Page, title: string) {
 	return belt(page).getByRole('listitem').filter({ hasText: title });
+}
+
+/**
+ * Drag a row sideways with a synthetic pointer.
+ *
+ * Dispatched rather than driven through `page.mouse`, so the gesture carries a
+ * touch pointer type and lands on the row's own handlers the way a thumb does.
+ * The moves are stepped because the row only decides a drag is sideways once it
+ * has travelled past its slop, and one jump from nowhere to everywhere never
+ * gives it that chance.
+ */
+async function swipeRow(page: Page, title: string, dx: number) {
+	const row = rock(page, title);
+	const box = (await row.boundingBox())!;
+	const y = box.y + box.height / 2;
+	const from = dx > 0 ? box.x + 30 : box.x + box.width - 30;
+	const at = (x: number) => ({
+		pointerId: 7,
+		pointerType: 'touch',
+		isPrimary: true,
+		clientX: x,
+		clientY: y,
+		button: 0,
+		buttons: 1
+	});
+
+	await row.dispatchEvent('pointerdown', at(from));
+	for (const step of [0.35, 0.7, 1]) {
+		await row.dispatchEvent('pointermove', at(from + dx * step));
+	}
+	await row.dispatchEvent('pointerup', { ...at(from + dx), buttons: 0 });
+}
+
+/**
+ * Open a row's disclosure and hand back the row, endings and all.
+ *
+ * The row carries no controls of its own — they are a swipe — so every ending a
+ * test presses is the one a keyboard or a screen reader would reach, which is
+ * the point of them still being there.
+ */
+async function endings(page: Page, title: string) {
+	const row = rock(page, title);
+	await row.locator('summary').click();
+	return row;
+}
+
+async function chooseCompact(page: Page) {
+	await page.goto('/settings');
+	await hydrated(page);
+	await page.getByLabel('Density').selectOption('compact');
+	await page.getByRole('button', { name: 'Save' }).click();
+	await expect(page.getByText('Saved.')).toBeVisible();
 }
 
 test('a one-off is added, ticked off and let go, without ever becoming an orbit', async ({
@@ -62,8 +122,17 @@ test('a one-off is added, ticked off and let go, without ever becoming an orbit'
 	await expect(belt(page).locator('.asteroid .strip')).toHaveCount(2);
 	await expect(belt(page).locator('.dial')).toHaveCount(0);
 
-	// One tap to clear. Quieter than a closing orbit: a line, not a burst.
-	await page.getByRole('button', { name: 'Done Return the library books' }).click();
+	// The row itself is a rock, a title and a drift. Its endings are a swipe,
+	// and every one of them is also a plain button a tap away — which is what
+	// anyone without a pointer, a script or a hand uses instead.
+	const books = rock(page, 'Return the library books');
+	await expect(books.getByRole('button')).toHaveCount(0);
+
+	await (
+		await endings(page, 'Return the library books')
+	)
+		.getByRole('button', { name: /^Done —/ })
+		.click();
 	await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
 	await expect(rock(page, 'Return the library books')).toHaveCount(0);
 
@@ -74,8 +143,13 @@ test('a one-off is added, ticked off and let go, without ever becoming an orbit'
 	await expect(settled.getByText('Return the library books')).toBeVisible();
 	await expect(settled.getByText('Done today')).toBeVisible();
 
-	// One tap to let go, on equal footing with finishing.
-	await page.getByRole('button', { name: 'Release Cancel the gym trial' }).click();
+	// Letting go is the other ending, on the same footing and in the same list.
+	await hydrated(page);
+	await (
+		await endings(page, 'Cancel the gym trial')
+	)
+		.getByRole('button', { name: /^Release —/ })
+		.click();
 	await expect(belt(page).getByText('Released.')).toBeVisible();
 
 	// And released means gone from every list, not filed under a gentler name —
@@ -101,9 +175,10 @@ test('an asteroid captured into a goal is a goal like any other', async ({ page 
 	await addAsteroid(page, 'Clean the garage');
 
 	// The manual offer, available from the moment the rock exists rather than
-	// only after Nova has counted to three.
+	// only after Nova has counted to three — and worded as an offer, because on
+	// the first one "this keeps coming back" is simply not true yet.
 	await belt(page).locator('details > summary').first().click();
-	await page.getByRole('link', { name: 'This keeps coming back — make it a goal' }).click();
+	await page.getByRole('link', { name: 'Make this a goal instead' }).click();
 
 	await expect(page.getByRole('heading', { name: 'Capture into orbit' })).toBeVisible();
 	await hydrated(page);
@@ -154,7 +229,11 @@ test('the third time the same one-off is done, Nova offers to make it a habit', 
 	// for years and is never going to be a Planet.
 	for (const pass of [1, 2]) {
 		await addAsteroid(page, 'Water the plants');
-		await page.getByRole('button', { name: 'Done Water the plants' }).click();
+		await (
+			await endings(page, 'Water the plants')
+		)
+			.getByRole('button', { name: /^Done —/ })
+			.click();
 		await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
 		expect(await belt(page).getByText('has cleared').count(), `pass ${pass}`).toBe(0);
 	}
@@ -162,13 +241,75 @@ test('the third time the same one-off is done, Nova offers to make it a habit', 
 	// Three is a cadence, and the offer arrives inline on the clear itself —
 	// where somebody is already looking at "done".
 	await addAsteroid(page, 'Water the plants');
-	await page.getByRole('button', { name: 'Done Water the plants' }).click();
+	await (await endings(page, 'Water the plants')).getByRole('button', { name: /^Done —/ }).click();
 	await expect(belt(page).getByText('Water the plants has cleared 3 times')).toBeVisible();
 
 	// Turned down, and not asked again on the next clear of the same title.
 	await page.getByRole('button', { name: 'No, it is a one-off' }).click();
 	await addAsteroid(page, 'Water the plants');
-	await page.getByRole('button', { name: 'Done Water the plants' }).click();
+	await (await endings(page, 'Water the plants')).getByRole('button', { name: /^Done —/ }).click();
 	await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
 	await expect(belt(page).getByText('has cleared')).toHaveCount(0);
+});
+
+test('compact puts every ending into a sheet, the way a goal row does', async ({ page }) => {
+	await pinClock(page, EVENING);
+	await register(page, 'Mira Solberg');
+	await chooseCompact(page);
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/today');
+	await hydrated(page);
+	await addAsteroid(page, 'Return the library books');
+
+	// The row is a rock, a title and a drift, and carries no controls at all.
+	const row = rock(page, 'Return the library books');
+	await expect(row.getByRole('button')).toHaveCount(0);
+
+	// Everything it can do is a tap away, in a sheet rather than in the row —
+	// and the sheet is a real dialog, so the page behind it is inert.
+	await row.locator('summary').click();
+	// Scoped to the band: the page carries the goal row's sheet as well.
+	const sheet = belt(page).getByRole('dialog');
+	await expect(sheet).toBeVisible();
+	await expect(sheet.getByRole('heading', { name: 'Return the library books' })).toBeVisible();
+	await expect(sheet.getByRole('link', { name: 'Make this a goal instead' })).toBeVisible();
+
+	// Both endings, spelled out in the words the swipe stands for.
+	await expect(sheet.getByRole('button', { name: /^Done —/ })).toBeVisible();
+	await sheet.getByRole('button', { name: /^Release —/ }).click();
+	await expect(belt(page).getByText('Released.')).toBeVisible();
+	await expect(rock(page, 'Return the library books')).toHaveCount(0);
+});
+
+test('a row can be swiped: right to finish, and never left while it is fresh', async ({ page }) => {
+	await pinClock(page, EVENING);
+	await register(page, 'Ola Kristiansen');
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/today');
+	await hydrated(page);
+	await addAsteroid(page, 'Return the library books');
+	await addAsteroid(page, 'Book the dentist');
+
+	// Right is finishing, and it presses the same button a thumb would have.
+	await swipeRow(page, 'Return the library books', 150);
+	await expect(belt(page).getByText('Done.', { exact: true })).toBeVisible();
+	await expect(rock(page, 'Return the library books')).toHaveCount(0);
+	await expect(belt(page).locator('details').filter({ hasText: 'Done (1)' })).toBeVisible();
+
+	// Left is letting go, which a rock added a minute ago is not offering — so
+	// the gesture gives a little and answers with nothing, exactly as the row's
+	// missing stone edge says it would.
+	await hydrated(page);
+	await swipeRow(page, 'Book the dentist', -150);
+	await expect(rock(page, 'Book the dentist')).toBeVisible();
+	await expect(belt(page).getByText('Released.')).toHaveCount(0);
+
+	// And the gesture never turns the page sideways under itself.
+	expect(
+		await page.evaluate(
+			() => document.documentElement.scrollWidth > document.documentElement.clientWidth
+		)
+	).toBe(false);
 });
