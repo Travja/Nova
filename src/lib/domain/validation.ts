@@ -92,6 +92,33 @@ export const asteroidSchema = z.object({
 		.transform((value) => (value ? value : null))
 });
 
+/** How long a reflection on a period may run. */
+export const ORBIT_NOTE_MAX_LENGTH = 2000;
+
+/**
+ * A note on one period of one goal — see #18.
+ *
+ * `body` is trimmed and capped, same as an entry's note, but with far more
+ * room: this is the place for "why the week went badly", not a caption. An
+ * empty body is valid here — the service reads that as "delete", not "store
+ * nothing" — so there is no `min()` on it.
+ *
+ * `periodKey` and `periodStart` are not really user input — they come from
+ * whichever orbit's row the pilot was looking at when they wrote the note —
+ * but they still arrive as form fields, so they are validated here rather
+ * than trusted blind.
+ */
+export const orbitNoteSchema = z.object({
+	periodKey: z.string().trim().min(1, 'That orbit could not be found.').max(80),
+	periodStart: z.coerce.date('Nova could not read that period.'),
+	body: z
+		.string()
+		.trim()
+		.max(ORBIT_NOTE_MAX_LENGTH, `Keep it under ${ORBIT_NOTE_MAX_LENGTH} characters.`)
+});
+
+export type OrbitNoteInput = z.infer<typeof orbitNoteSchema>;
+
 /** A phone with a slightly fast clock should still be able to log "now". */
 export const CLOCK_SKEW_MS = 5 * 60 * 1000;
 

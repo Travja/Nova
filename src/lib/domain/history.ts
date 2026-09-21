@@ -33,18 +33,35 @@ export interface HistoryDetail {
 	at: Date;
 }
 
+/**
+ * A pilot's reflection on the period, once it reaches the page — see
+ * `$lib/server/orbit-notes`, which is where the rest of the row lives. Only
+ * what the history page draws belongs here.
+ */
+export interface OrbitNote {
+	body: string;
+	updatedAt: Date;
+}
+
 export interface HistoryCell {
 	orbit: Orbit;
 	/** What is behind the cell. Empty for a period nothing landed in. */
 	details: HistoryDetail[];
+	/** The note written against this period, if any. */
+	note: OrbitNote | null;
 }
 
-/** Pair each orbit with whatever landed in its period. */
+/** Pair each orbit with whatever landed in its period, and its note if it has one. */
 export function historyCells(
 	history: readonly Orbit[],
-	detailsByPeriod: ReadonlyMap<string, HistoryDetail[]>
+	detailsByPeriod: ReadonlyMap<string, HistoryDetail[]>,
+	notesByPeriod: ReadonlyMap<string, OrbitNote> = new Map()
 ): HistoryCell[] {
-	return history.map((orbit) => ({ orbit, details: detailsByPeriod.get(orbit.period.key) ?? [] }));
+	return history.map((orbit) => ({
+		orbit,
+		details: detailsByPeriod.get(orbit.period.key) ?? [],
+		note: notesByPeriod.get(orbit.period.key) ?? null
+	}));
 }
 
 type EntryLike = { amount: number; note: string | null; occurredAt: Date };

@@ -19,6 +19,7 @@ import {
 } from '$domain/history';
 import type { Goal, MetricDefinition, ProgressEntry } from '$domain/types';
 import type { GoalInput } from '$domain/validation';
+import { notesForGoal } from '$lib/server/orbit-notes';
 import { db } from '$lib/server/db';
 import {
 	entries,
@@ -374,12 +375,13 @@ export async function getGoalHistoryPage(
 					options
 				)
 			: detailsFromEntries(forest.entriesByGoal.get(goal.id) ?? [], cadence, options);
+	const notesByPeriod = await notesForGoal(user.id, goalId);
 
 	return {
 		goal,
 		derived: children.length > 0,
 		metric: children.length > 0 ? ORBIT_METRIC : goal.metric,
-		cells: historyCells(window, detailsByPeriod),
+		cells: historyCells(window, detailsByPeriod, notesByPeriod),
 		page: safePage,
 		hasOlder: offset + windowLength < lifetimePeriods,
 		hasNewer: safePage > 0
