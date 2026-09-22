@@ -117,6 +117,11 @@
 		Looking for your password or the devices you are signed in on?
 		<a href={resolve('/settings/security')}>Security settings</a>.
 	</p>
+
+	<p class="muted">
+		Want the whole record as a file, or none of it at all?
+		<a href={resolve('/settings/data')}>Export, import and delete</a>.
+	</p>
 </section>
 
 <style>

@@ -162,3 +162,44 @@ Ownership is re-checked inside the service functions, as everywhere else.
 - An export taken before this issue's own schema version exists is either
   imported or refused with a clear message — never half-read.
 - Account deletion leaves no orphaned rows, in any table.
+
+## As built
+
+Three things the Decisions above left to the build session, recorded here so the
+next reader does not have to infer them from the code.
+
+**The cap is 16 MB.** An entry serialises to roughly 200 bytes — two ids, two
+timestamps, an amount and usually a null note — so the cap holds on the order of
+80,000 entries: ten logs every day for more than twenty years, with everything
+else costing a rounding error beside that. It is `MAX_BUNDLE_BYTES` in
+`$domain/transfer` and the number appears in the refusal. The uploaded file's
+byte length is checked in the route before it is read, and the decoded string
+again in `readBundle()`.
+
+Raising it has a second half: `BODY_SIZE_LIMIT` on the Node adapter, and any
+reverse proxy's own limit, must sit above it, or an oversized import is a bare
+413 with no message rather than Nova saying what the cap is. `compose.yaml`,
+`.env.example` and `DEPLOYMENT.md` were moved from 512K to 17M together.
+
+**Ids are always minted, never reused — and minting is deterministic.** Keeping
+an exported id when the importing account happens to own it would be a cheap way
+to make a repeat import a no-op, but it would also let a file's claim about a
+goal's tier land on an edge pointing at a real goal with a different one. So
+every goal that is written is a new row whose parent is another goal from the
+same file, which makes the file's own graph the whole of what `parentProblem()`
+has to check. Idempotency comes from the id being a SHA-256 of
+`(account, table, the file's own row id)` instead: the same file mints the same
+ids the second time, so every row collides with the one already there and the
+merge adds nothing. The cost is that importing a file into the account that
+exported it, without deleting anything first, adds a second copy — which is what
+"merge adds, and never edits" means.
+
+**Merge leaves the profile alone; replace restores it.** Merge does not touch
+the display name, time zone, week start or preferences, for the same reason it
+does not touch any other row that is already there. Replace restores all four,
+because a period boundary is drawn in the account's own zone and a restored
+record whose weeks start on a different day is not the record that was exported.
+Neither mode writes the email address or the password: the address is the
+account's identity, and the file's may belong to somebody else. A time zone in a
+file is validated against `Intl` like any other field, since a zone no runtime
+recognises is not a bad field but an account whose periods cannot be computed.
