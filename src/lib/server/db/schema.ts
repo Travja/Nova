@@ -4,6 +4,7 @@ import {
 	real,
 	sqliteTable,
 	text,
+	unique,
 	uniqueIndex,
 	type AnySQLiteColumn
 } from 'drizzle-orm/sqlite-core';
@@ -320,6 +321,43 @@ export const reminderSettings = sqliteTable('reminder_settings', {
 	updatedAt: timestamp('updated_at').notNull()
 });
 
+/**
+ * A pilot's reflection on one period of one goal — see #18.
+ *
+ * Keyed on `(goalId, periodKey)` rather than on an orbit id, because an orbit
+ * is not a row: it is computed from entries by `periodFor()` and
+ * `bucketByPeriod()`, and `period.key` is the only stable handle one has. That
+ * is also how `historyCells()` already joins period-shaped data onto orbits,
+ * so a note joins the same way.
+ *
+ * `periodStart` travels with the key because the key's own shape depends on
+ * the pilot's week start and time zone — `week:2026-W38` on a Monday week,
+ * `week:2026-09-20` on any other. Changing either preference orphans notes
+ * keyed to the old shape: they stop matching a freshly computed orbit, but the
+ * row is never deleted, and `periodStart` plus the goal's cadence is enough to
+ * find what period a note was actually written against.
+ *
+ * Cascades from `goals` rather than from `users`: a note is about one goal's
+ * period and means nothing without it, unlike an asteroid.
+ */
+export const orbitNotes = sqliteTable(
+	'orbit_notes',
+	{
+		id: text('id').primaryKey(),
+		goalId: text('goal_id')
+			.notNull()
+			.references(() => goals.id, { onDelete: 'cascade' }),
+		/** `period.key` — `week:2026-W38`, `month:2026-09`. The join. */
+		periodKey: text('period_key').notNull(),
+		/** The same period's start, so the note is recoverable when a key is not. */
+		periodStart: timestamp('period_start').notNull(),
+		body: text('body').notNull(),
+		createdAt: timestamp('created_at').notNull(),
+		updatedAt: timestamp('updated_at').notNull()
+	},
+	(table) => [unique('orbit_notes_goal_period_idx').on(table.goalId, table.periodKey)]
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type GoalRow = typeof goals.$inferSelect;
 export type EntryRow = typeof entries.$inferSelect;
@@ -329,3 +367,4 @@ export type SessionRow = typeof sessions.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type ReminderSettingsRow = typeof reminderSettings.$inferSelect;
+export type OrbitNoteRow = typeof orbitNotes.$inferSelect;

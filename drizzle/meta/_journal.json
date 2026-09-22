@@ -64,6 +64,13 @@
       "when": 1789681580592,
       "tag": "0008_bent_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790030070703,
+      "tag": "0009_secret_mesmero",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,8 @@ import {
 	detailsFromClosures,
 	detailsFromEntries,
 	historyCells,
-	type HistoryCell
+	type HistoryCell,
+	type OrbitNote
 } from './history';
 import { parentPeriodFor } from './nesting';
 import { periodFor, recentPeriods } from './period';
@@ -34,6 +35,21 @@ describe('historyCells', () => {
 		expect(cells[0].details).toEqual([]);
 		expect(cells[1].details).toEqual([{ label: 'note', amount: 1, at: now }]);
 		expect(cells[2].details).toEqual([]);
+		// No notes map was passed, so every cell reads as unnoted.
+		expect(cells.every((cell) => cell.note === null)).toBe(true);
+	});
+
+	it('pairs each orbit with the note keyed to its period, the same way it pairs details', () => {
+		const now = new Date('2026-09-20T12:00:00Z');
+		const history = recentPeriods(now, 'week', 3, utc).map((period) => orbit(period, 1));
+		const noted: OrbitNote = { body: 'knee played up all week, so this was a win', updatedAt: now };
+		const notes = new Map([[history[1].period.key, noted]]);
+
+		const cells = historyCells(history, new Map(), notes);
+
+		expect(cells[0].note).toBeNull();
+		expect(cells[1].note).toBe(noted);
+		expect(cells[2].note).toBeNull();
 	});
 });
 
@@ -102,7 +118,11 @@ describe('dayGrid', () => {
 		const days = ['14', '15', '16', '17', '18', '19', '20'].map((day) =>
 			periodFor(new Date(`2026-09-${day}T12:00:00Z`), 'day', utc)
 		);
-		const cells: HistoryCell[] = days.map((period) => ({ orbit: orbit(period, 1), details: [] }));
+		const cells: HistoryCell[] = days.map((period) => ({
+			orbit: orbit(period, 1),
+			details: [],
+			note: null
+		}));
 
 		const grid = dayGrid(cells, 'UTC');
 
@@ -116,7 +136,11 @@ describe('dayGrid', () => {
 		const days = ['06', '07', '08', '09'].map((day) =>
 			periodFor(new Date(`2026-03-${day}T12:00:00Z`), 'day', denver)
 		);
-		const cells: HistoryCell[] = days.map((period) => ({ orbit: orbit(period, 1), details: [] }));
+		const cells: HistoryCell[] = days.map((period) => ({
+			orbit: orbit(period, 1),
+			details: [],
+			note: null
+		}));
 
 		const grid = dayGrid(cells, 'America/Denver');
 

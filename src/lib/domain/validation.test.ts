@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CLOCK_SKEW_MS, entrySchemaFor, occurredAtBounds, safeNextPath } from './validation';
+import {
+	CLOCK_SKEW_MS,
+	entrySchemaFor,
+	occurredAtBounds,
+	ORBIT_NOTE_MAX_LENGTH,
+	orbitNoteSchema,
+	safeNextPath
+} from './validation';
 
 const now = new Date('2026-09-12T18:00:00Z');
 const utc = { timeZone: 'UTC' };
@@ -78,6 +85,45 @@ describe('entrySchemaFor', () => {
 
 	it('parses without bounds, which is what quick-logging needs', () => {
 		expect(entrySchemaFor().parse({ amount: '5' })).toMatchObject({ amount: 5, note: null });
+	});
+});
+
+describe('orbitNoteSchema', () => {
+	it('trims the body and reads a period start from an ISO string', () => {
+		const parsed = orbitNoteSchema.parse({
+			periodKey: 'week:2026-W38',
+			periodStart: '2026-09-14T00:00:00.000Z',
+			body: '  ran a good week despite the knee  '
+		});
+		expect(parsed.body).toBe('ran a good week despite the knee');
+		expect(parsed.periodStart.toISOString()).toBe('2026-09-14T00:00:00.000Z');
+	});
+
+	it('accepts an empty body — that is how a note is cleared, not a rejected one', () => {
+		const parsed = orbitNoteSchema.parse({
+			periodKey: 'week:2026-W38',
+			periodStart: '2026-09-14T00:00:00.000Z',
+			body: '   '
+		});
+		expect(parsed.body).toBe('');
+	});
+
+	it('rejects a body over the length cap', () => {
+		const result = orbitNoteSchema.safeParse({
+			periodKey: 'week:2026-W38',
+			periodStart: '2026-09-14T00:00:00.000Z',
+			body: 'x'.repeat(ORBIT_NOTE_MAX_LENGTH + 1)
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it('rejects a missing period key', () => {
+		const result = orbitNoteSchema.safeParse({
+			periodKey: '',
+			periodStart: '2026-09-14T00:00:00.000Z',
+			body: 'a note'
+		});
+		expect(result.success).toBe(false);
 	});
 });
 

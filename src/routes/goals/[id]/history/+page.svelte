@@ -5,13 +5,19 @@
 	import { cadenceOf, TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
 
-	let { data }: PageProps = $props();
+	let { data, form }: PageProps = $props();
 
 	const goal = $derived(data.goal);
 	const cadence = $derived(cadenceOf(goal.tier));
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
 	const goalHref = $derived(resolve('/goals/[id]', { id: goal.id }));
 	const historyHref = $derived(resolve('/goals/[id]/history', { id: goal.id }));
+	/**
+	 * Which period's note is open. The URL drives it, same as the entry editor
+	 * on the goal page, so a note survives a submit without JavaScript; a saved
+	 * note closes it again.
+	 */
+	const editingNote = $derived(form?.noteSaved ? null : data.editingNote);
 </script>
 
 <svelte:head><title>History · {goal.title} · Nova</title></svelte:head>
@@ -49,7 +55,14 @@
 	<section class="panel block">
 		<h2>Orbits</h2>
 		{#key data.page}
-			<OrbitList cells={data.cells} metric={data.metric} />
+			<OrbitList
+				cells={data.cells}
+				metric={data.metric}
+				{historyHref}
+				page={data.page}
+				{editingNote}
+				noteErrors={form?.errors}
+			/>
 		{/key}
 
 		<nav class="pager">
