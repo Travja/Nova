@@ -1,4 +1,3 @@
-import { DEFAULT_PREFERENCES, mergePreferences, writePreferences } from '$domain/preferences';
 import {
 	entryKey,
 	noteKey,
@@ -12,15 +11,7 @@ import {
 	type TransferTable
 } from '$domain/transfer';
 import { db } from '$lib/server/db';
-import {
-	asteroids,
-	entries,
-	goalArchiveWindows,
-	goals,
-	orbitNotes,
-	reminderSettings,
-	users
-} from '$lib/server/db/schema';
+import { asteroids, entries, goalArchiveWindows, goals, orbitNotes } from '$lib/server/db/schema';
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 
@@ -40,6 +31,11 @@ import { eq } from 'drizzle-orm';
  * scopes the shape that is loaded, the rows that replace deletes, and the rows
  * that are written. An id inside the file is never trusted — every one of them
  * is remapped on the way in.
+ *
+ * Nothing here writes to `users`, `reminder_settings` or any other account
+ * table, in either mode. A bundle carries goals and asteroids, so importing
+ * one cannot change the name, zone, week start, preferences or reminder terms
+ * of the account it lands in — the goals adopt those instead.
  */
 
 /**
@@ -104,12 +100,6 @@ export async function loadAccountShape(userId: string): Promise<AccountShape> {
 		.from(asteroids)
 		.where(eq(asteroids.userId, userId));
 
-	const [reminders] = await db
-		.select({ userId: reminderSettings.userId })
-		.from(reminderSettings)
-		.where(eq(reminderSettings.userId, userId))
-		.limit(1);
-
 	const counts: Record<TransferTable, number> = {
 		goals: goalRows.length,
 		goalArchiveWindows: windowRows.length,
@@ -128,7 +118,6 @@ export async function loadAccountShape(userId: string): Promise<AccountShape> {
 		),
 		asteroidIds: new Set(asteroidRows.map((rock) => rock.id)),
 		noteKeys: new Set(noteRows.map((note) => noteKey(note.goalId, note.periodKey))),
-		hasReminderSettings: reminders !== undefined,
 		highestSortOrder: goalRows.reduce((highest, goal) => Math.max(highest, goal.sortOrder), -1),
 		counts
 	};
@@ -181,27 +170,14 @@ export async function applyImport(
 
 	db.transaction((tx) => {
 		if (plan.wipeFirst) {
-			// Asteroids first: they point at goals, and dropping the rows rather
-			// than letting `set null` run is one less thing for the delete of the
-			// goals to do. Everything under a goal — archive windows, entries,
-			// notes — goes with the goal, by cascade.
+			// Goals and asteroids, and nothing else — replace clears what an import
+			// can write, not the account around it. Asteroids go first because they
+			// point at goals, and dropping the rows rather than letting `set null`
+			// run is one less thing for the delete of the goals to do. Everything
+			// under a goal — archive windows, entries, notes — goes with the goal,
+			// by cascade.
 			tx.delete(asteroids).where(eq(asteroids.userId, userId)).run();
 			tx.delete(goals).where(eq(goals.userId, userId)).run();
-			tx.delete(reminderSettings).where(eq(reminderSettings.userId, userId)).run();
-		}
-
-		if (plan.profile) {
-			tx.update(users)
-				.set({
-					displayName: plan.profile.displayName,
-					timeZone: plan.profile.timeZone,
-					weekStartsOn: plan.profile.weekStartsOn,
-					preferences: plan.profile.preferences
-						? writePreferences(mergePreferences(DEFAULT_PREFERENCES, plan.profile.preferences))
-						: null
-				})
-				.where(eq(users.id, userId))
-				.run();
 		}
 
 		// Parents first, so the self-reference on `goals.parent_id` always has
@@ -242,13 +218,6 @@ export async function applyImport(
 
 		for (const note of plan.orbitNotes) {
 			tx.insert(orbitNotes).values(note).onConflictDoNothing().run();
-		}
-
-		if (plan.reminderSettings) {
-			tx.insert(reminderSettings)
-				.values({ ...plan.reminderSettings, userId, lastSentAt: null })
-				.onConflictDoNothing()
-				.run();
 		}
 	});
 

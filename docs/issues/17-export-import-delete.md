@@ -24,31 +24,53 @@ while it writes an importer.
 
 ### 1. What is in the file, and what must never be
 
-**Exported:** the profile (`email`, `displayName`, `timeZone`, `weekStartsOn`,
-`preferences`, `createdAt`), `goals`, `goalArchiveWindows`, `entries`,
-`asteroids`, `orbitNotes`, and `reminderSettings` minus `lastSentAt`.
+**This restores goals, not accounts.** That is the line, and everything below
+follows from it.
 
-**Never exported:**
+**Exported:** `goals` and `asteroids`, plus the rows that are part of a goal
+rather than beside it — `entries`, `goalArchiveWindows` and `orbitNotes`.
 
-| Not in the file               | Why                                                    |
-| ----------------------------- | ------------------------------------------------------ |
-| `users.passwordHash`          | A credential. Nothing about a restore needs it.        |
-| `sessions`                    | Live bearer tokens — the file would be a set of keys.  |
-| `passwordResetTokens`         | Same, with a shorter fuse.                             |
-| `pushSubscriptions`           | Endpoint plus auth keys: anyone holding them can push. |
-| `reminderSettings.lastSentAt` | Server bookkeeping, not the pilot's record.            |
+**Never exported:** anything that describes the account. Not the email
+address, the display name, the time zone, the week start, the preferences or
+the reminder terms; and not, obviously, the password hash, the sessions, the
+reset tokens or the push subscriptions.
 
-This is the decision most worth getting right, because getting it wrong is
-invisible. An export is a plaintext file that lands in a Downloads folder and
-often gets mailed to its owner "to keep safe". A session that serialises "the
-user row" ships an argon2 hash and a working set of push credentials with it.
+| Not in the file                                 | Why                                                      |
+| ----------------------------------------------- | -------------------------------------------------------- |
+| `users.passwordHash`                            | A credential. Nothing about a restore needs it.          |
+| `sessions`                                      | Live bearer tokens — the file would be a set of keys.    |
+| `passwordResetTokens`                           | Same, with a shorter fuse.                               |
+| `pushSubscriptions`                             | Endpoint plus auth keys: anyone holding them can push.   |
+| `reminderSettings`                              | How the account wants to be interrupted, not its record. |
+| `users.email`, `displayName`                    | Identifies a person. A file about goals names no one.    |
+| `users.timeZone`, `weekStartsOn`, `preferences` | Settings of the account it lands in, not of the goals.   |
+
+An earlier draft of this spec exported the profile and the reminder terms too,
+on the theory that an export should be "everything the account owns". That was
+the wrong theory. An export is a plaintext file that lands in a Downloads
+folder and often gets mailed onwards "to keep safe", and the narrower the file,
+the less there is to get wrong: with no account in the shape at all there is no
+`users` row to serialise by accident, and the blast radius of a future mistake
+in the allowlist is the goal tables, which hold nothing the pilot did not type
+into their own goals.
+
 Build the export from an explicit allowlist of columns per table, never
-`select *` minus a deny-list, so the next column added to `users` is absent by
-default rather than present by accident.
+`select *` minus a deny-list, so the next column added is absent by default
+rather than present by accident. Better still, do not query the account tables
+at all — the strongest guarantee about a column is one the code never reads.
 
-Devices are deliberately not portable. Restoring an account leaves it with no
-sessions and no push subscriptions: you sign in again and re-enable reminders
-on the device you are holding, which is the correct outcome and not a gap.
+Two consequences worth naming, both of them correct:
+
+- **Periods are recomputed in the importing account's zone.** Entries carry
+  absolute instants, so the orbits they fall into are drawn by whatever zone
+  and week start the importing account keeps. Importing a file exported by
+  somebody on the other side of the world gives you _your_ weeks, which is
+  what restoring a goal into your account should mean. Streaks read the same
+  as they did whenever the two accounts agree on a zone, which is the ordinary
+  case of one person moving their own goals.
+- **Devices and settings stay where they are.** Restoring leaves the account
+  with its own name, zone, preferences, reminder terms, sign-ins and push
+  subscriptions untouched. Nothing about the file can change them.
 
 ### 2. Ids, on the way back in
 
@@ -76,8 +98,9 @@ be an export is one.
 ### 3. What merge means
 
 **Merge adds; it never edits or deletes anything already there.** Replace wipes
-the account's own rows first, in one transaction, then imports as if merging
-into an empty account.
+the account's goals and asteroids first, in one transaction, then imports as if
+merging into an empty account. Neither mode touches the account itself — there
+is nothing in the file that could.
 
 Two specifics that decide whether a merge is safe to run twice:
 
@@ -194,12 +217,10 @@ merge adds nothing. The cost is that importing a file into the account that
 exported it, without deleting anything first, adds a second copy — which is what
 "merge adds, and never edits" means.
 
-**Merge leaves the profile alone; replace restores it.** Merge does not touch
-the display name, time zone, week start or preferences, for the same reason it
-does not touch any other row that is already there. Replace restores all four,
-because a period boundary is drawn in the account's own zone and a restored
-record whose weeks start on a different day is not the record that was exported.
-Neither mode writes the email address or the password: the address is the
-account's identity, and the file's may belong to somebody else. A time zone in a
-file is validated against `Intl` like any other field, since a zone no runtime
-recognises is not a bad field but an account whose periods cannot be computed.
+**Neither mode touches the account.** An earlier build of this had merge leave
+the profile alone and replace restore the display name, zone, week start and
+preferences from the file. Decision 1 settled that differently: the file has no
+account in it, so there is nothing to restore and nothing to leave alone, and
+`ImportPlan` has no field a writer could use to change one. `replace` clears
+goals and asteroids only. Nova is, as a result, the same account before and
+after an import — only its goals change.

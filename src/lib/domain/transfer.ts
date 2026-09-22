@@ -14,21 +14,40 @@ import type { MetricKind } from './types';
  * browser is holding but has not uploaded yet, so a bad file can be named as
  * bad before it is ever sent.
  *
+ * ## This restores goals, not accounts
+ *
+ * The file carries goals and asteroids, and the things that are part of a
+ * goal rather than beside it: the entries logged against it, the spans it
+ * spent archived, and the notes written on its periods. Nothing about the
+ * account it came from travels — not the email address, not the display
+ * name, not the time zone or week start, not the preferences, and not the
+ * reminder terms. An export is therefore a file about goals, and the only
+ * personal thing in it is what its owner typed into their own goals.
+ *
+ * That is a narrower line than "everything the account owns" and it is the
+ * right one. A file with no account in it cannot leak an account: there is no
+ * argon2 hash to ship by accident because there is no `users` row in the
+ * shape at all, and the blast radius of getting the allowlist wrong later
+ * shrinks to the goal tables, which hold nothing the pilot did not write.
+ *
+ * Because the zone does not travel, periods are recomputed in whatever zone
+ * the importing account keeps. Entries carry absolute instants, so the orbits
+ * they fall into are the importing account's own — which is what restoring a
+ * goal *into your account* should mean.
+ *
  * ## The file is an allowlist
  *
- * Every field that ships is named below, once. `users.passwordHash`,
- * `sessions`, `passwordResetTokens`, `pushSubscriptions` and
- * `reminderSettings.lastSentAt` are absent, and the point of naming the
- * included columns rather than excluding those is that the next column added
- * to `users` is absent by default rather than present by accident — an export
- * is a plaintext file that lands in a Downloads folder and is often mailed
- * onwards "to keep safe".
+ * Every field that ships is named below, once. The point of naming the
+ * included columns rather than excluding the dangerous ones is that the next
+ * column added to any of these tables is absent by default rather than
+ * present by accident — an export is a plaintext file that lands in a
+ * Downloads folder and is often mailed onwards "to keep safe".
  *
  * `bundleSchema` is the enforcement as well as the declaration: Zod strips
- * what it does not know, so a row that somehow picks up a credential on the
- * way out loses it again before it is serialised. `transfer.test.ts` asserts
- * the key set of each table against a written-out list, so widening the
- * allowlist has to be deliberate.
+ * what it does not know, so a row that somehow picks up a column on the way
+ * out loses it again before it is serialised. `transfer.test.ts` asserts the
+ * key set of each table against a written-out list, so widening the allowlist
+ * has to be deliberate.
  *
  * ## Ids are remapped, always
  *
@@ -86,36 +105,6 @@ const epochMs = z
 const nullableEpochMs = epochMs.nullable();
 
 const optionalText = (max: number) => z.string().max(max).nullable();
-
-/**
- * The profile, minus the credential and minus the id.
- *
- * `email` travels so a restored file can say whose it is, but importing never
- * writes it: an account's address is its identity and the file's may belong to
- * somebody else entirely.
- */
-export const profileSchema = z.object({
-	email: z.string().max(254),
-	displayName: z.string().max(64),
-	// Checked rather than stored blind: every period boundary in Nova is drawn
-	// through `Intl` in this zone, so a zone no runtime recognises would not be
-	// a bad field, it would be an account whose weeks cannot be computed.
-	timeZone: z
-		.string()
-		.max(64)
-		.refine((value) => {
-			try {
-				new Intl.DateTimeFormat('en-US', { timeZone: value });
-				return true;
-			} catch {
-				return false;
-			}
-		}, 'That is not a time zone Nova recognises.'),
-	weekStartsOn: z.number().int().min(0).max(6),
-	/** The preference blob, already parsed. Unknown keys fall back on the way in. */
-	preferences: z.record(z.string(), z.string()).nullable(),
-	createdAt: epochMs
-});
 
 export const goalBundleSchema = z.object({
 	id: rowId,
@@ -210,23 +199,6 @@ export const orbitNoteBundleSchema = z.object({
 	updatedAt: epochMs
 });
 
-export const reminderSettingsBundleSchema = z.object({
-	enabled: z.boolean(),
-	quietFrom: z
-		.number()
-		.int()
-		.min(0)
-		.max(24 * 60),
-	quietUntil: z
-		.number()
-		.int()
-		.min(0)
-		.max(24 * 60),
-	updatedAt: epochMs
-	// `lastSentAt` is deliberately absent: server bookkeeping for the one
-	// reminder a day cap, not the pilot's record.
-});
-
 /**
  * Ids have to be unique within their own table — they are about to become keys,
  * and the old-to-new map an import keeps would quietly lose one of a pair.
@@ -246,16 +218,21 @@ const uniqueList = <T extends z.ZodType<{ id: string }>>(row: T) =>
 		});
 	});
 
+/**
+ * The envelope, and the five tables under it.
+ *
+ * There is no `profile` and no `reminderSettings`: an export says what the
+ * goals were, never whose they were. Adding either back would make this a
+ * file about an account, which is the thing it is deliberately not.
+ */
 export const bundleSchema = z.object({
 	schemaVersion: z.number().int(),
 	exportedAt: epochMs,
-	profile: profileSchema,
 	goals: uniqueList(goalBundleSchema),
 	goalArchiveWindows: uniqueList(archiveWindowBundleSchema),
 	entries: uniqueList(entryBundleSchema),
 	asteroids: uniqueList(asteroidBundleSchema),
-	orbitNotes: uniqueList(orbitNoteBundleSchema),
-	reminderSettings: reminderSettingsBundleSchema.nullable()
+	orbitNotes: uniqueList(orbitNoteBundleSchema)
 });
 
 export type Bundle = z.infer<typeof bundleSchema>;
@@ -264,7 +241,6 @@ export type BundleEntry = z.infer<typeof entryBundleSchema>;
 export type BundleAsteroid = z.infer<typeof asteroidBundleSchema>;
 export type BundleArchiveWindow = z.infer<typeof archiveWindowBundleSchema>;
 export type BundleOrbitNote = z.infer<typeof orbitNoteBundleSchema>;
-export type BundleReminderSettings = z.infer<typeof reminderSettingsBundleSchema>;
 
 /* -------------------------------------------------------------------------- */
 /* Reading a file                                                              */
@@ -401,7 +377,6 @@ export interface AccountShape {
 	asteroidIds: ReadonlySet<string>;
 	/** `noteKey(goalId, periodKey)`, the pair the table is unique on. */
 	noteKeys: ReadonlySet<string>;
-	hasReminderSettings: boolean;
 	/** The highest `sortOrder` in use, so imported goals land after what is here. */
 	highestSortOrder: number;
 	/** How many rows replace would delete, per table. */
@@ -415,7 +390,6 @@ export const EMPTY_ACCOUNT: AccountShape = {
 	entryKeys: new Set(),
 	asteroidIds: new Set(),
 	noteKeys: new Set(),
-	hasReminderSettings: false,
 	highestSortOrder: -1,
 	counts: { goals: 0, goalArchiveWindows: 0, entries: 0, asteroids: 0, orbitNotes: 0 }
 };
@@ -495,21 +469,6 @@ export interface PlannedOrbitNote {
 	updatedAt: Date;
 }
 
-export interface PlannedReminderSettings {
-	enabled: boolean;
-	quietFrom: number;
-	quietUntil: number;
-	updatedAt: Date;
-}
-
-/** What the profile does, which on a merge is nothing. */
-export interface PlannedProfile {
-	displayName: string;
-	timeZone: string;
-	weekStartsOn: number;
-	preferences: Record<string, string> | null;
-}
-
 export interface TableSummary {
 	/** Rows of this table in the file. */
 	inFile: number;
@@ -526,9 +485,6 @@ export interface TableSummary {
 export interface ImportSummary {
 	mode: ImportMode;
 	tables: Record<TransferTable, TableSummary>;
-	reminderSettings: { inFile: boolean; written: boolean; deleted: boolean };
-	/** True when the import restores the file's display name, zone and week start. */
-	profileRestored: boolean;
 }
 
 export interface ImportPlan {
@@ -539,9 +495,7 @@ export interface ImportPlan {
 	entries: PlannedEntry[];
 	asteroids: PlannedAsteroid[];
 	orbitNotes: PlannedOrbitNote[];
-	reminderSettings: PlannedReminderSettings | null;
-	profile: PlannedProfile | null;
-	/** True when the write clears the account's own rows first. */
+	/** True when the write clears the account's goals and asteroids first. */
 	wipeFirst: boolean;
 	summary: ImportSummary;
 }
@@ -589,13 +543,7 @@ export function planImport(
 			entries: emptySummary(bundle.entries.length, replacing ? account.counts.entries : 0),
 			asteroids: emptySummary(bundle.asteroids.length, replacing ? account.counts.asteroids : 0),
 			orbitNotes: emptySummary(bundle.orbitNotes.length, replacing ? account.counts.orbitNotes : 0)
-		},
-		reminderSettings: {
-			inFile: bundle.reminderSettings !== null,
-			written: false,
-			deleted: replacing && account.hasReminderSettings
-		},
-		profileRestored: replacing
+		}
 	};
 
 	/** Every goal in the file, old id to the id it will be written under. */
@@ -764,36 +712,10 @@ export function planImport(
 	}
 	summary.tables.orbitNotes.added = orbitNotes.length;
 
-	// Reminder terms are one row per account, so merging into an account that
-	// already has one would be editing it. Replace has already cleared it.
-	const reminderSettings =
-		bundle.reminderSettings && !target.hasReminderSettings
-			? {
-					enabled: bundle.reminderSettings.enabled,
-					quietFrom: bundle.reminderSettings.quietFrom,
-					quietUntil: bundle.reminderSettings.quietUntil,
-					updatedAt: new Date(bundle.reminderSettings.updatedAt)
-				}
-			: null;
-	summary.reminderSettings.written = reminderSettings !== null;
-
-	/*
-	 * Merge leaves the profile alone for the same reason it leaves every other
-	 * existing row alone. Replace restores the name, the zone, the week start
-	 * and the preferences, because a period boundary is drawn in the account's
-	 * zone and a restored record whose weeks start on a different day is not the
-	 * record that was exported. The email never moves either way: it is the
-	 * account's identity, and the file's may belong to somebody else.
-	 */
-	const profile: PlannedProfile | null = replacing
-		? {
-				displayName: bundle.profile.displayName,
-				timeZone: bundle.profile.timeZone,
-				weekStartsOn: bundle.profile.weekStartsOn,
-				preferences: bundle.profile.preferences
-			}
-		: null;
-
+	// Nothing about the account is planned, in either mode. An import moves
+	// goals between accounts; the account it lands in keeps its own name, zone,
+	// week start, preferences and reminder terms, and that is why periods are
+	// recomputed rather than carried.
 	return {
 		ok: true,
 		plan: {
@@ -803,8 +725,6 @@ export function planImport(
 			entries,
 			asteroids,
 			orbitNotes,
-			reminderSettings,
-			profile,
 			wipeFirst: replacing,
 			summary
 		}
@@ -834,17 +754,4 @@ function parentsFirst(goals: readonly PlannedGoal[]): PlannedGoal[] {
 
 	for (const goal of goals) place(goal);
 	return ordered;
-}
-
-/** Whether a plan would write anything at all — what the confirm button asks. */
-export function planIsEmpty(plan: ImportPlan): boolean {
-	return (
-		!plan.wipeFirst &&
-		plan.goals.length === 0 &&
-		plan.archiveWindows.length === 0 &&
-		plan.entries.length === 0 &&
-		plan.asteroids.length === 0 &&
-		plan.orbitNotes.length === 0 &&
-		plan.reminderSettings === null
-	);
 }

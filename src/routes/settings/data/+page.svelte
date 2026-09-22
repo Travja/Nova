@@ -45,23 +45,6 @@
 			sentences.push(`${TRANSFER_TABLE_LABEL[table]}: ${parts.join(', ')}.`);
 		}
 
-		const reminders = summary.reminderSettings;
-		if (reminders.inFile || reminders.deleted) {
-			if (reminders.written) {
-				sentences.push(`Reminder terms: ${written ? 'restored' : 'would be restored'}.`);
-			} else if (reminders.deleted) {
-				sentences.push(`Reminder terms: ${written ? 'cleared' : 'would be cleared'}.`);
-			} else {
-				sentences.push('Reminder terms: left as they are — this account already has some.');
-			}
-		}
-
-		if (summary.profileRestored) {
-			sentences.push(
-				`Profile: name, time zone and week start ${written ? 'restored' : 'would be restored'} from the file. Your email address and password never change.`
-			);
-		}
-
 		return sentences;
 	}
 
@@ -76,8 +59,8 @@
 		<div>
 			<h1>Your data</h1>
 			<p class="muted">
-				Nova is yours and so is the record in it. Take the whole thing out as one file, put one
-				back, or close the account and leave nothing behind.
+				Your goals are yours. Take them out as one file, put a file back, or close the account and
+				leave nothing behind.
 			</p>
 		</div>
 		<a class="button button--ghost" href={resolve('/settings')}>Flight settings</a>
@@ -92,9 +75,13 @@
 	<div class="panel form">
 		<h2>Export</h2>
 		<p class="muted">
-			One JSON file with your goals, entries, archive spans, asteroids, orbit notes and reminder
-			terms in it. It carries no password, no sign-in and no push subscription — devices are not
-			portable, so a restored account signs in again and re-enables reminders where it is standing.
+			One JSON file with your goals and asteroids in it, and the things that belong to a goal — the
+			entries logged against it, the spans it spent archived, and the notes on its orbits.
+		</p>
+		<p class="muted">
+			Nothing about your account travels with it: no email address, no name, no password, no
+			sign-in, no time zone, no reminder terms and no push subscription. It is a file about goals,
+			so the only personal thing in it is what you typed into your own.
 		</p>
 
 		{#if held.length > 0}
@@ -104,7 +91,7 @@
 				{/each}
 			</ul>
 		{:else}
-			<p class="muted">Nothing is in orbit yet, so the file would only carry your profile.</p>
+			<p class="muted">Nothing is in orbit yet, so the file would come out empty.</p>
 		{/if}
 
 		<a class="button" href={exportHref} download>Download my data</a>
@@ -150,8 +137,8 @@
 					<span>
 						<strong>Replace</strong>
 						<span class="muted">
-							Clears this account's goals, entries, asteroids, notes and reminder terms first, then
-							imports the file into the empty account.
+							Clears the goals, entries, asteroids and notes you have now, then imports the file in
+							their place. Your account settings are left alone either way.
 						</span>
 					</span>
 				</label>

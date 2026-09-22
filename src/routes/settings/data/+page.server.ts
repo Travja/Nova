@@ -26,6 +26,10 @@ import type { Actions, PageServerLoad } from './$types';
  * what is on screen describes the write that is about to happen rather than
  * one like it.
  *
+ * Deleting the account lives here too, but it is the one action on this screen
+ * that touches the account rather than its goals: an import moves goals, and
+ * the file it reads has no account in it to restore.
+ *
  * Nothing in this file builds a query or decides what a row becomes. The
  * services do, and they re-check ownership while they do it.
  */
@@ -40,7 +44,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const account = await loadAccountShape(locals.user.id);
 	return {
 		counts: account.counts,
-		hasReminderSettings: account.hasReminderSettings,
 		/** Typed back, character for character, before anything is deleted. */
 		email: locals.user.email,
 		maxBytes: MAX_BUNDLE_BYTES,

@@ -231,10 +231,11 @@ test('a record survives export, deletion, a new account and import', async ({ pa
 	expect(exported.text).toContain('Renew the passport');
 	expect(exported.text).toContain('Slow week, but it closed.');
 
-	// And what must never be. A column added to `users`, `sessions` or
-	// `push_subscriptions` fails here rather than shipping in a file that lands
-	// in a Downloads folder and gets mailed onwards.
+	// And what must never be. The real file, scanned: the account that owns
+	// these goals is not described anywhere in it, so there is nothing here to
+	// leak when it lands in a Downloads folder and gets mailed onwards.
 	for (const forbidden of [
+		// Credentials and devices, which were never exportable.
 		'passwordHash',
 		'password_hash',
 		'argon2',
@@ -247,7 +248,19 @@ test('a record survives export, deletion, a new account and import', async ({ pa
 		'lastSentAt',
 		'lastSeenAt',
 		'expiresAt',
-		'userId'
+		'userId',
+		// The account itself. This file restores goals, not accounts.
+		'profile',
+		'email',
+		'@example.com',
+		pilot,
+		'Orla Vance',
+		'displayName',
+		'timeZone',
+		'weekStartsOn',
+		'preferences',
+		'reminderSettings',
+		'quietFrom'
 	]) {
 		expect(exported.text, `the export must not carry ${forbidden}`).not.toContain(forbidden);
 	}

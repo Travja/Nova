@@ -1,4 +1,3 @@
-import { readPreferences } from '$domain/preferences';
 import { bundleSchema, TRANSFER_SCHEMA_VERSION, type Bundle } from '$domain/transfer';
 import { db } from '$lib/server/db';
 import {
@@ -7,7 +6,6 @@ import {
 	goalArchiveWindows,
 	goals,
 	orbitNotes,
-	reminderSettings,
 	users
 } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
@@ -15,12 +13,17 @@ import { eq } from 'drizzle-orm';
 /**
  * The export, built from an allowlist of columns.
  *
- * Every `select()` below names the columns it wants. That is the whole of the
- * protection and it is deliberate: `select *` minus a deny-list ships whatever
- * column is added next, and the columns that would be added next to `users` or
- * `push_subscriptions` are credentials. The file lands in a Downloads folder
- * and is often mailed onwards, so what is absent matters more than what is
- * present — see the table in `docs/issues/17-export-import-delete.md`.
+ * Note what this file does not query. There is no select against `users`
+ * beyond checking the account still exists, and none at all against
+ * `sessions`, `password_reset_tokens`, `push_subscriptions` or
+ * `reminder_settings`. An export says what the goals were, never whose they
+ * were, so the tables that could leak an account are not read in the first
+ * place — which is a stronger guarantee than reading them and remembering to
+ * drop the wrong columns.
+ *
+ * What is left names its columns anyway. `select *` minus a deny-list ships
+ * whatever column is added next, and the file lands in a Downloads folder and
+ * is often mailed onwards, so what is absent matters more than what is present.
  *
  * `bundleSchema.parse()` at the end is the second half of the same guarantee.
  * Zod strips what it does not declare, so a column that finds its way into one
@@ -42,26 +45,22 @@ function atOrNull(value: Date | null): number | null {
 }
 
 /**
- * Everything the account owns, as one bundle — or null when there is no such
- * user, which only happens if the account was deleted mid-request.
+ * Every goal and asteroid the account owns, as one bundle — or null when there
+ * is no such user, which only happens if the account was deleted mid-request.
  */
 export async function exportBundle(
 	userId: string,
 	exportedAt: Date = new Date()
 ): Promise<Bundle | null> {
-	const [profile] = await db
-		.select({
-			email: users.email,
-			displayName: users.displayName,
-			timeZone: users.timeZone,
-			weekStartsOn: users.weekStartsOn,
-			preferences: users.preferences,
-			createdAt: users.createdAt
-		})
+	// The id and nothing else: this asks whether the account is still there, so
+	// a download that raced a delete is a 404 rather than an empty file. No
+	// column of `users` reaches the bundle.
+	const [account] = await db
+		.select({ id: users.id })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
-	if (!profile) return null;
+	if (!account) return null;
 
 	const goalRows = await db
 		.select({
@@ -135,32 +134,9 @@ export async function exportBundle(
 		.from(asteroids)
 		.where(eq(asteroids.userId, userId));
 
-	// `lastSentAt` is left out on purpose: it is the server's one-a-day cap,
-	// not part of anybody's record.
-	const [reminders] = await db
-		.select({
-			enabled: reminderSettings.enabled,
-			quietFrom: reminderSettings.quietFrom,
-			quietUntil: reminderSettings.quietUntil,
-			updatedAt: reminderSettings.updatedAt
-		})
-		.from(reminderSettings)
-		.where(eq(reminderSettings.userId, userId))
-		.limit(1);
-
 	return bundleSchema.parse({
 		schemaVersion: TRANSFER_SCHEMA_VERSION,
 		exportedAt: at(exportedAt),
-		profile: {
-			email: profile.email,
-			displayName: profile.displayName,
-			timeZone: profile.timeZone,
-			weekStartsOn: profile.weekStartsOn,
-			// Stored as a blob; read through the preference table so a withdrawn
-			// or malformed value never travels.
-			preferences: readPreferences(profile.preferences),
-			createdAt: at(profile.createdAt)
-		},
 		goals: goalRows.map((goal) => ({
 			...goal,
 			createdAt: at(goal.createdAt),
@@ -188,8 +164,7 @@ export async function exportBundle(
 			periodStart: at(note.periodStart),
 			createdAt: at(note.createdAt),
 			updatedAt: at(note.updatedAt)
-		})),
-		reminderSettings: reminders ? { ...reminders, updatedAt: at(reminders.updatedAt) } : null
+		}))
 	});
 }
 

@@ -12,9 +12,7 @@ import {
 	noteKey,
 	orbitNoteBundleSchema,
 	planImport,
-	profileSchema,
 	readBundle,
-	reminderSettingsBundleSchema,
 	TRANSFER_SCHEMA_VERSION,
 	EMPTY_ACCOUNT,
 	type AccountShape,
@@ -34,20 +32,11 @@ function bundle(patch: Partial<Bundle> = {}): Bundle {
 	return {
 		schemaVersion: TRANSFER_SCHEMA_VERSION,
 		exportedAt: T0,
-		profile: {
-			email: 'pilot@example.com',
-			displayName: 'Pilot',
-			timeZone: 'America/Denver',
-			weekStartsOn: 1,
-			preferences: { density: 'compact' },
-			createdAt: T0 - 400 * DAY
-		},
 		goals: [],
 		goalArchiveWindows: [],
 		entries: [],
 		asteroids: [],
 		orbitNotes: [],
-		reminderSettings: null,
 		...patch
 	};
 }
@@ -115,7 +104,6 @@ function accountAfter(applied: ImportPlan): AccountShape {
 		entryKeys: new Set(applied.entries.map((row) => entryKey(row.goalId, row.clientId))),
 		asteroidIds: new Set(applied.asteroids.map((row) => row.id)),
 		noteKeys: new Set(applied.orbitNotes.map((row) => noteKey(row.goalId, row.periodKey))),
-		hasReminderSettings: applied.reminderSettings !== null,
 		highestSortOrder: applied.goals.reduce((high, row) => Math.max(high, row.sortOrder), -1),
 		counts: {
 			goals: applied.goals.length,
@@ -134,15 +122,13 @@ function accountAfter(applied: ImportPlan): AccountShape {
 /**
  * The file is an allowlist, and this is the list.
  *
- * Adding a column to `users`, `goals` or any other table cannot widen the
+ * Adding a column to `goals`, `entries` or any other table cannot widen the
  * export without also widening `$domain/transfer` — and widening that fails
  * here, which is the point. The failure is the prompt to ask whether the new
- * column is a credential before it ships in a plaintext file that lands in a
- * Downloads folder.
+ * column belongs in a plaintext file that lands in a Downloads folder.
  */
 describe('the exported shape', () => {
 	const expected: Record<string, string[]> = {
-		profile: ['email', 'displayName', 'timeZone', 'weekStartsOn', 'preferences', 'createdAt'],
 		goals: [
 			'id',
 			'title',
@@ -170,18 +156,15 @@ describe('the exported shape', () => {
 			'capturedGoalId',
 			'captureDismissedAt'
 		],
-		orbitNotes: ['id', 'goalId', 'periodKey', 'periodStart', 'body', 'createdAt', 'updatedAt'],
-		reminderSettings: ['enabled', 'quietFrom', 'quietUntil', 'updatedAt']
+		orbitNotes: ['id', 'goalId', 'periodKey', 'periodStart', 'body', 'createdAt', 'updatedAt']
 	};
 
 	const shapes: Record<string, { shape: Record<string, unknown> }> = {
-		profile: profileSchema,
 		goals: goalBundleSchema,
 		goalArchiveWindows: archiveWindowBundleSchema,
 		entries: entryBundleSchema,
 		asteroids: asteroidBundleSchema,
-		orbitNotes: orbitNoteBundleSchema,
-		reminderSettings: reminderSettingsBundleSchema
+		orbitNotes: orbitNoteBundleSchema
 	};
 
 	for (const [table, keys] of Object.entries(expected)) {
@@ -190,7 +173,13 @@ describe('the exported shape', () => {
 		});
 	}
 
-	it('has no table beyond the envelope and these', () => {
+	/**
+	 * The one that matters most: this fails the moment somebody adds `profile`,
+	 * `reminderSettings`, or any other account-shaped table back to the bundle.
+	 * A file about goals has no account in it, and that is what keeps an export
+	 * from being able to leak one.
+	 */
+	it('carries goals and asteroids, and nothing about the account', () => {
 		expect(Object.keys(bundleSchema.shape).sort()).toEqual(
 			['schemaVersion', 'exportedAt', ...Object.keys(expected)].sort()
 		);
@@ -198,16 +187,24 @@ describe('the exported shape', () => {
 });
 
 /**
- * The same guarantee read the other way round: serialise a bundle assembled
- * out of whole database rows and scan the string. Zod strips what it does not
- * declare, so the credentials that came in with those rows are gone by the
- * time anything is written to disk.
+ * The same guarantee read the other way round: serialise a bundle somebody
+ * tried to stuff whole database rows and whole account tables into, and scan
+ * the string. Zod strips what it does not declare, so none of it survives to
+ * the file.
  */
 describe('what never reaches the file', () => {
-	/** Column names that must not appear in a bundle, whatever else changes. */
+	/**
+	 * Names that must not appear in a bundle, whatever else changes.
+	 *
+	 * Two groups. The credentials and device rows were never exportable. The
+	 * rest — the address, the name, the zone, the preferences, the reminder
+	 * terms — are the account itself, which an export deliberately does not
+	 * describe: this restores goals, not accounts.
+	 */
 	const forbidden = [
 		'passwordHash',
 		'password_hash',
+		'argon2',
 		'sessions',
 		'sessionToken',
 		'passwordResetTokens',
@@ -219,12 +216,27 @@ describe('what never reaches the file', () => {
 		'lastSentAt',
 		'lastSeenAt',
 		'userAgent',
-		'userId'
+		'userId',
+		'profile',
+		'email',
+		'@example.com',
+		'displayName',
+		'timeZone',
+		'weekStartsOn',
+		'preferences',
+		'reminderSettings',
+		'quietFrom',
+		'quietUntil'
 	];
 
 	const contaminated = {
 		schemaVersion: TRANSFER_SCHEMA_VERSION,
 		exportedAt: T0,
+		goals: [{ ...goal(), userId: 'user-1' }],
+		goalArchiveWindows: [],
+		entries: [],
+		asteroids: [{ ...asteroid(), userId: 'user-1' }],
+		orbitNotes: [],
 		// The whole `users` row, as `select *` would hand it over.
 		profile: {
 			id: 'user-1',
@@ -233,23 +245,11 @@ describe('what never reaches the file', () => {
 			displayName: 'Pilot',
 			timeZone: 'UTC',
 			weekStartsOn: 1,
-			preferences: null,
+			preferences: { density: 'compact' },
 			createdAt: T0
 		},
-		goals: [{ ...goal(), userId: 'user-1' }],
-		goalArchiveWindows: [],
-		entries: [],
-		asteroids: [{ ...asteroid(), userId: 'user-1' }],
-		orbitNotes: [],
-		reminderSettings: {
-			enabled: true,
-			quietFrom: 1320,
-			quietUntil: 420,
-			updatedAt: T0,
-			userId: 'user-1',
-			lastSentAt: T0
-		},
 		// Whole tables that have no business travelling at all.
+		reminderSettings: { enabled: true, quietFrom: 1320, quietUntil: 420, lastSentAt: T0 },
 		sessions: [{ id: 'abc', userId: 'user-1', expiresAt: T0 }],
 		passwordResetTokens: [{ id: 'def', userId: 'user-1', usedAt: null }],
 		pushSubscriptions: [{ id: 'ghi', endpoint: 'https://push.example/x', p256dh: 'k', auth: 's' }]
@@ -263,10 +263,9 @@ describe('what never reaches the file', () => {
 		});
 	}
 
-	it('keeps the record it is for', () => {
-		expect(serialised).toContain('"displayName":"Pilot"');
+	it('keeps the goals it is for', () => {
 		expect(serialised).toContain('"title":"Read"');
-		expect(serialised).toContain('"quietFrom":1320');
+		expect(serialised).toContain('"title":"Fix the shed"');
 	});
 });
 
@@ -307,7 +306,7 @@ describe('readBundle', () => {
 	});
 
 	it('refuses an older format with a plain message', () => {
-		const read = readBundle(JSON.stringify({ schemaVersion: 0, profile: {} }));
+		const read = readBundle(JSON.stringify({ schemaVersion: 0, goals: [] }));
 		expect(read.ok).toBe(false);
 		if (!read.ok) expect(importProblemMessage(read.problem)).toContain('not a Nova export');
 	});
@@ -335,16 +334,20 @@ describe('readBundle', () => {
 		}
 	});
 
-	it('refuses a time zone no period could be drawn in', () => {
-		const source = JSON.stringify(
-			bundle({ profile: { ...bundle().profile, timeZone: 'Mars/Olympus' } })
-		);
+	it('ignores an account somebody added to a file by hand', () => {
+		// A file is about goals. One carrying a profile or reminder terms is not
+		// refused — it is read for its goals and the rest is dropped on the floor,
+		// because there is nowhere in the bundle for it to land.
+		const source = JSON.stringify({
+			...bundle({ goals: [goal()] }),
+			profile: { email: 'someone@example.com', displayName: 'Someone', timeZone: 'UTC' },
+			reminderSettings: { enabled: true, quietFrom: 60, quietUntil: 120 }
+		});
 		const read = readBundle(source);
-		expect(read.ok).toBe(false);
-		if (!read.ok && read.problem.kind === 'schema') {
-			expect(read.problem.issues[0]).toContain('profile.timeZone');
-		} else {
-			throw new Error('expected a schema problem');
+		expect(read.ok).toBe(true);
+		if (read.ok) {
+			expect(read.bundle.goals).toHaveLength(1);
+			expect(JSON.stringify(read.bundle)).not.toContain('someone@example.com');
 		}
 	});
 
@@ -554,8 +557,7 @@ describe('a merge run twice', () => {
 				createdAt: T0,
 				updatedAt: T0
 			}
-		],
-		reminderSettings: { enabled: true, quietFrom: 1320, quietUntil: 420, updatedAt: T0 }
+		]
 	});
 
 	const first = plan(source);
@@ -566,7 +568,6 @@ describe('a merge run twice', () => {
 		expect(first.asteroids).toHaveLength(1);
 		expect(first.orbitNotes).toHaveLength(1);
 		expect(first.archiveWindows).toHaveLength(1);
-		expect(first.reminderSettings).not.toBeNull();
 	});
 
 	it('gives an entry that never had a client id a deterministic one', () => {
@@ -586,7 +587,6 @@ describe('a merge run twice', () => {
 		expect(second.asteroids).toHaveLength(0);
 		expect(second.orbitNotes).toHaveLength(0);
 		expect(second.archiveWindows).toHaveLength(0);
-		expect(second.reminderSettings).toBeNull();
 	});
 
 	it('counts the second run as duplicates rather than additions', () => {
@@ -612,16 +612,24 @@ describe('a merge run twice', () => {
 });
 
 describe('merge never edits what is already there', () => {
-	it('leaves the profile alone', () => {
-		expect(plan(bundle()).profile).toBeNull();
-	});
-
-	it('leaves reminder terms alone when the account already has some', () => {
-		const source = bundle({
-			reminderSettings: { enabled: true, quietFrom: 60, quietUntil: 120, updatedAt: T0 }
-		});
-		const account: AccountShape = { ...EMPTY_ACCOUNT, hasReminderSettings: true };
-		expect(plan(source, account).reminderSettings).toBeNull();
+	it('plans nothing but goal and asteroid rows, in either mode', () => {
+		// The plan is the whole of what the writer applies, so a plan with no
+		// account in it is an import that cannot change one.
+		for (const mode of ['merge', 'replace'] as const) {
+			const applied = plan(bundle({ goals: [goal()] }), EMPTY_ACCOUNT, mode);
+			expect(Object.keys(applied).sort()).toEqual(
+				[
+					'archiveWindows',
+					'asteroids',
+					'entries',
+					'goals',
+					'mode',
+					'orbitNotes',
+					'summary',
+					'wipeFirst'
+				].sort()
+			);
+		}
 	});
 
 	it('lands imported goals after the ones already in the account', () => {
@@ -641,7 +649,6 @@ describe('replace', () => {
 	const source = bundle({ goals: [goal()], entries: [entry()] });
 	const account: AccountShape = {
 		...EMPTY_ACCOUNT,
-		hasReminderSettings: true,
 		highestSortOrder: 9,
 		counts: { goals: 3, goalArchiveWindows: 1, entries: 40, asteroids: 2, orbitNotes: 5 }
 	};
@@ -651,7 +658,6 @@ describe('replace', () => {
 		expect(applied.wipeFirst).toBe(true);
 		expect(applied.summary.tables.entries.deleted).toBe(40);
 		expect(applied.summary.tables.goals.deleted).toBe(3);
-		expect(applied.summary.reminderSettings.deleted).toBe(true);
 	});
 
 	it('imports into the cleared account, so nothing counts as a duplicate', () => {
@@ -664,19 +670,13 @@ describe('replace', () => {
 		expect(plan(source, account, 'replace').goals[0].sortOrder).toBe(0);
 	});
 
-	it('restores the zone and week start, because the streaks are drawn in them', () => {
+	it('clears goals and asteroids, and leaves the account settings alone', () => {
+		// `wipeFirst` is the only deletion the writer performs, and it is scoped
+		// to the two tables an import can write. Nothing here says anything about
+		// the name, the zone, the week start or the reminder terms.
 		const applied = plan(source, account, 'replace');
-		expect(applied.profile).toEqual({
-			displayName: 'Pilot',
-			timeZone: 'America/Denver',
-			weekStartsOn: 1,
-			preferences: { density: 'compact' }
-		});
-	});
-
-	it('does not carry the email across, whatever the file says', () => {
-		const applied = plan(source, account, 'replace');
-		expect(JSON.stringify(applied.profile)).not.toContain('pilot@example.com');
+		expect(applied.wipeFirst).toBe(true);
+		expect(JSON.stringify(applied)).not.toContain('timeZone');
 	});
 });
 
