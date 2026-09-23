@@ -35,7 +35,7 @@ import { hash } from '$domain/hash';
 import { TIER_DEFINITIONS, isTier } from '$domain/tiers';
 import type { DriftBand } from '$domain/asteroids';
 import type { UniverseNode, UniverseTree } from '$domain/universe';
-import type { BodyArt } from './art';
+import { core, galaxyDisc, goalBody, palette, universeInterior, type Kit } from './bodies';
 import { projectToScreen, type Viewport } from './pick';
 
 /**
@@ -61,8 +61,6 @@ import { projectToScreen, type Viewport } from './pick';
 export interface SceneGoal {
 	title: string;
 	color: string;
-	/** Which of the dial's bodies this goal flies, as a key into `BodyArt`. */
-	art: string;
 	/** Rounded, as the dial's own text says it. */
 	percent: number;
 }
@@ -91,8 +89,10 @@ export interface SceneNode {
 	lapStart: number | null;
 	/** A closing being drawn on this body, if any. */
 	burst: Group | null;
-	/** The dial's drawing on a billboard, for a goal; null for an anchor. */
-	sprite: Sprite | null;
+	/** A goal's model at unit size, scaled here so it is never lost as a speck. Null otherwise. */
+	model: Object3D | null;
+	/** What brings the body to life, frame by frame; null for anything that never moves. */
+	live: ((seconds: number) => void) | null;
 }
 
 export interface SceneRock {
@@ -173,24 +173,8 @@ class Builder {
 	constructor(
 		readonly glow: Texture,
 		readonly pixelRatio: number,
-		readonly art: BodyArt
+		readonly kit: Kit
 	) {}
-
-	/**
-	 * The goal's own body from its dial, on a billboard that always faces the
-	 * camera. The drawings fill a circle of radius 1 inside a 4-wide square —
-	 * room for rings and panels — so the sprite is four body radii across.
-	 */
-	body(node: UniverseNode, goal: SceneGoal | null): Sprite | null {
-		const map = goal ? this.art.texture(goal.art) : null;
-		if (!map) return null;
-		const sprite = new Sprite(
-			new SpriteMaterial({ map, transparent: true, depthWrite: false, alphaTest: 0.02 })
-		);
-		sprite.scale.setScalar(node.bodyRadius * 4);
-		sprite.userData.body = true;
-		return sprite;
-	}
 
 	/** A glow held at a pixel radius however far away the camera is. */
 	halo(color: Color | string | number, pixels: number, opacity = 1): Sprite {
@@ -244,28 +228,45 @@ class Builder {
 	}
 }
 
+interface BuiltBody {
+	group: Group;
+	model: Object3D | null;
+	live: ((seconds: number) => void) | null;
+}
+
 /**
- * The body at a node's centre. A goal's is its dial's own drawing (see
- * `art.ts`), with the scale's scenery around it — a galaxy's particle disc, a
- * universe's shell — and a glow held at a pixel size so it is never lost to
- * distance. Anchors are grey scenery and have no dial to borrow from.
+ * The body at a node's centre. A goal's is its dial's body built in 3D (see
+ * `bodies.ts`) — the same silhouette and palette, solid and alive — with a
+ * glow held at a pixel size so it is never lost to distance. Galaxy and
+ * universe goals are regions as much as bodies: a disc or an interior sized by
+ * extent, with a bright core. Anchors are grey scenery and never move.
  */
-function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Group {
+function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): BuiltBody {
 	const group = new Group();
 	const radius = node.bodyRadius;
 	const color = new Color(goal?.color ?? '#9aa0b4');
 	const white = new Color('#ffffff');
+	const colors = palette(goal?.color ?? '#9aa0b4', node.dormant);
+	const lives: ((seconds: number) => void)[] = [];
+	let model: Object3D | null = null;
 
-	const body = build.body(node, goal);
+	if (goal && (node.kind === 'satellite' || node.kind === 'planet' || node.kind === 'starSystem')) {
+		const made = goalBody(node.kind, node.variant, colors, node.id, build.kit);
+		if (made) {
+			model = new Group();
+			model.add(made.object);
+			model.scale.setScalar(radius);
+			group.add(model);
+			if (made.live && !node.dormant) lives.push(made.live);
+		}
+	}
 
 	switch (node.kind) {
 		case 'satellite':
-			if (body) group.add(body);
-			group.add(build.halo(color, 12, 0.45));
+			group.add(build.halo(color, 10, 0.35));
 			break;
 		case 'planet':
-			if (body) group.add(body);
-			group.add(build.halo(color, 16, 0.4));
+			group.add(build.halo(color, 14, 0.3));
 			break;
 		case 'dwarf': {
 			group.add(
@@ -288,10 +289,28 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Gr
 			break;
 		}
 		case 'starSystem':
-			if (body) group.add(body);
-			group.add(build.halo(color, 34, 0.5));
+			group.add(build.halo(color, 30, 0.55));
 			break;
-		case 'galaxy':
+		case 'galaxy': {
+			const disc = galaxyDisc(
+				node.variant,
+				node.extent,
+				colors,
+				node.id,
+				build.pixelRatio,
+				build.kit
+			);
+			// In the galaxy's own orbital plane, so its goals orbit within the
+			// disc and a fly-to, which looks down on that plane, sees the arms.
+			const inPlane = new Group();
+			inPlane.rotation.set(node.tilt, node.spin, 0);
+			inPlane.add(disc.object);
+			group.add(inPlane);
+			if (disc.live && !node.dormant) lives.push(disc.live);
+			group.add(core(colors, build.kit, radius));
+			group.add(build.halo(colors.pale, 30, 0.6));
+			break;
+		}
 		case 'core': {
 			const anchor = node.kind === 'core';
 			const tint = anchor ? new Color('#8e93a8') : color;
@@ -309,8 +328,10 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Gr
 					Math.sin(angle) * distance
 				);
 			}
-			group.add(build.pointCloud(positions, tint, 1.6, anchor ? 0.28 : 0.5));
-			if (body) group.add(body);
+			const inPlane = new Group();
+			inPlane.rotation.set(node.tilt, node.spin, 0);
+			inPlane.add(build.pointCloud(positions, tint, 1.6, anchor ? 0.28 : 0.5));
+			group.add(inPlane);
 			group.add(build.halo(tint.clone().lerp(white, 0.4), anchor ? 22 : 30, anchor ? 0.8 : 0.6));
 			break;
 		}
@@ -341,7 +362,18 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Gr
 			);
 			skin.userData.shell = true;
 			group.add(wire, skin, build.halo(tint, anchor ? 24 : 34, anchor ? 0.35 : 0.7));
-			if (body) group.add(body);
+			if (!anchor && goal) {
+				const inside = universeInterior(
+					node.variant,
+					node.extent,
+					colors,
+					node.id,
+					build.pixelRatio,
+					build.kit
+				);
+				group.add(inside.object, core(colors, build.kit, radius));
+				if (inside.live && !node.dormant) lives.push(inside.live);
+			}
 			break;
 		}
 		case 'cluster':
@@ -353,7 +385,13 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Gr
 			group.add(build.halo(0xdfe4ff, 10, 0.5));
 			break;
 	}
-	return group;
+	const live =
+		lives.length === 0
+			? null
+			: (seconds: number) => {
+					for (const step of lives) step(seconds);
+				};
+	return { group, model, live };
 }
 
 /** A label: the title and percentage beside the body (decision 9). Text only — never markup. */
@@ -372,7 +410,7 @@ function labelFor(goal: SceneGoal): CSS2DObject {
 
 export interface BuildOptions {
 	glow: Texture;
-	art: BodyArt;
+	kit: Kit;
 	pixelRatio: number;
 	viewport: Viewport;
 	/** Where to measure labels before they are first shown. */
@@ -390,12 +428,17 @@ export function buildScene(
 	options: BuildOptions
 ): UniverseScene {
 	const scene = new Scene();
-	scene.add(new AmbientLight(0xb8c4ff, 0.9));
-	const sunlight = new DirectionalLight(0xffffff, 1.6);
+	// One key light and a cool fill, so every world has a day side and a night
+	// side — the dial's terminator, in the round.
+	scene.add(new AmbientLight(0x8a96d8, 0.55));
+	const sunlight = new DirectionalLight(0xfff4e6, 2.4);
 	sunlight.position.set(1, 1.4, 0.8);
 	scene.add(sunlight);
+	const rim = new DirectionalLight(0x9fb4ff, 0.6);
+	rim.position.set(-1, -0.3, -1);
+	scene.add(rim);
 
-	const build = new Builder(options.glow, options.pixelRatio, options.art);
+	const build = new Builder(options.glow, options.pixelRatio, options.kit);
 	const byId = new Map<string, SceneNode>();
 	const byGoal = new Map<string, SceneNode>();
 	const everything: SceneNode[] = [];
@@ -410,7 +453,8 @@ export function buildScene(
 		const holder = new Group();
 		parent.add(holder);
 		const goal = node.goalId ? (goals[node.goalId] ?? null) : null;
-		const body = bodyFor(node, goal, build);
+		const built = bodyFor(node, goal, build);
+		const body = built.group;
 		holder.add(body);
 
 		const plane = new Group();
@@ -439,8 +483,8 @@ export function buildScene(
 			sweep: from !== target ? { from, to: target, start: options.now } : null,
 			lapStart: node.closed && from === target ? (before?.lapStart ?? options.now) : null,
 			burst: null,
-			sprite:
-				(body.children.find((child) => child.userData.body === true) as Sprite | undefined) ?? null
+			model: built.model,
+			live: built.live
 		};
 		byId.set(node.id, entry);
 		if (node.goalId) byGoal.set(node.goalId, entry);
@@ -647,17 +691,15 @@ const nodeAt = new Vector3();
 const eyeTo = new Vector3();
 
 /**
- * The smallest a goal's drawing is ever shown, in pixels across its billboard
- * (twice the body itself, which fills the middle half). The drawing is the
- * dial's, and a dial's body is never a speck: under this, a planet a few
- * scene units wide would be two pixels of colour lost in its own glow.
+ * The smallest a goal's body is ever shown, in pixels across. Scale is the
+ * point of the universe, so bodies are true to it while there is room; under
+ * this, a planet a few scene units wide would be two pixels of colour lost in
+ * its own glow, and a model nobody can see is not bringing anything to life.
  */
 export const MIN_BODY_PX: Record<string, number> = {
-	satellite: 22,
-	planet: 30,
-	starSystem: 38,
-	galaxy: 46,
-	universe: 54
+	satellite: 12,
+	planet: 16,
+	starSystem: 22
 };
 
 /** Under this many pixels from its host, a system folds into its host's glow (decision 6). */
@@ -696,10 +738,12 @@ export function levelOfDetail(
 	const worldPerPixelAtUnit = (2 * viewport.tanHalfFov) / viewport.height;
 	for (const entry of universe.everything) {
 		entry.holder.getWorldPosition(nodeAt);
-		if (entry.sprite) {
+		if (entry.model) {
 			const least =
-				(MIN_BODY_PX[entry.node.kind] ?? 0) * worldPerPixelAtUnit * eye.distanceTo(nodeAt);
-			entry.sprite.scale.setScalar(Math.max(entry.node.bodyRadius * 4, least));
+				((MIN_BODY_PX[entry.node.kind] ?? 0) / 2) * worldPerPixelAtUnit * eye.distanceTo(nodeAt);
+			entry.model.scale.setScalar(Math.max(entry.node.bodyRadius, least));
+			// Above the body, however big it is drawn, rather than across it.
+			if (entry.label) entry.label.position.y = entry.model.scale.x * 1.4;
 		}
 		if (entry.host) {
 			entry.host.holder.getWorldPosition(hostAt);

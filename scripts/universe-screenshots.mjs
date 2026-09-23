@@ -236,11 +236,36 @@ async function zoomTo(page, label) {
 }
 
 async function tap(page, id) {
-	const at = await page.evaluate((target) => window.__novaUniverse.where(target), id);
+	let at = await page.evaluate((target) => window.__novaUniverse.where(target), id);
+	if (!at) {
+		// Off screen or folded into its host: go there first, as a focused row would.
+		await page.evaluate((target) => window.__novaUniverse.flyTo(target), id);
+		await settle(page);
+		at = await page.evaluate((target) => window.__novaUniverse.where(target), id);
+	}
 	if (!at) throw new Error(`${id} is not on screen`);
 	await page.mouse.click(at.x, at.y);
 	await settle(page);
 	await page.waitForTimeout(950);
+}
+
+/** `bodyVariant`, as the app computes it: FNV-1a of the id, modulo the tier's three bodies. */
+function variantOf(id) {
+	let value = 2_166_136_261;
+	for (let index = 0; index < id.length; index += 1) {
+		value ^= id.charCodeAt(index);
+		value =
+			(value + ((value << 1) + (value << 4) + (value << 7) + (value << 8) + (value << 24))) >>> 0;
+	}
+	return (value >>> 0) % 3;
+}
+
+/** Fly to a goal, as a tap would, and photograph it close up once it is framed. */
+async function closeUp(page, id, name) {
+	await page.evaluate((target) => window.__novaUniverse.flyTo(target), id);
+	await settle(page);
+	await page.waitForTimeout(400);
+	await shoot(page, name);
 }
 
 async function shoot(page, name) {
@@ -338,6 +363,12 @@ async function context(options = {}) {
 	);
 	await page.waitForTimeout(180);
 	await shoot(page, 'app-12-closing');
+
+	await openUniverse(page);
+	await closeUp(page, ids.get('s2'), 'close-12-satellite');
+	await closeUp(page, ids.get('m1'), 'close-12-star-system');
+	await closeUp(page, ids.get('q1'), 'close-12-galaxy');
+	await closeUp(page, ids.get('y1'), 'close-12-universe');
 	await ctx.close();
 }
 
@@ -353,13 +384,37 @@ async function context(options = {}) {
 {
 	const ctx = await context();
 	const page = await ctx.newPage();
-	await seed(page, 40);
+	const { ids: ids40 } = await seed(page, 40);
 	await openUniverse(page);
 	await shoot(page, 'app-40');
 	await zoomTo(page, 'Galaxy');
 	await shoot(page, 'app-40-galaxy');
 	await zoomTo(page, 'Multiverse');
 	await shoot(page, 'app-40-multiverse');
+
+	await openUniverse(page);
+	// Ids are fresh on every seed, and so is which body each goal flies, so
+	// pick the subjects by tier and variant rather than by name.
+	const subjects = [
+		['satellite', 0, 'close-comsat'],
+		['satellite', 2, 'close-probe'],
+		['planet', 0, 'close-banded-planet'],
+		['planet', 1, 'close-ringed-planet'],
+		['planet', 2, 'close-ice-world'],
+		['starSystem', 1, 'close-binary'],
+		['starSystem', 2, 'close-star-and-world'],
+		['galaxy', 0, 'close-galaxy-spiral'],
+		['galaxy', 1, 'close-galaxy-barred'],
+		['universe', 1, 'close-universe-nebula'],
+		['universe', 2, 'close-universe-web']
+	];
+	for (const [tier, variant, name] of subjects) {
+		const goal = SCENARIOS[40].goals.find(
+			(g) => g.tier === tier && variantOf(ids40.get(g.id)) === variant
+		);
+		if (goal) await closeUp(page, ids40.get(goal.id), name);
+		else console.log(`no ${tier} flies variant ${variant} in this seed`);
+	}
 	await ctx.close();
 }
 

@@ -124,21 +124,31 @@ Rejected:
 
 ### 2. Hosts: what each goal orbits
 
-| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                                    |
-| ----------- | --------------------------------- | ----------------------------- | ----------------------------------------------------------- |
-| Satellite   | its parent                        | a **dwarf planet** anchor     | its dial's body, its glow held at 12px                      |
-| Planet      | its parent                        | a **star** anchor             | its dial's body                                             |
-| Star System | its parent                        | a **galactic core** anchor    | its dial's body, its own system round it                    |
-| Galaxy      | its parent                        | a **cluster** anchor          | its dial's body in a two-armed particle disc                |
-| Universe    | —                                 | the **multiverse barycentre** | its dial's body in a faint shell, the largest body there is |
+| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                                                        |
+| ----------- | --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| Satellite   | its parent                        | a **dwarf planet** anchor     | a comsat, a cratered moon or a dish probe, its glow held at 10px                |
+| Planet      | its parent                        | a **star** anchor             | a banded, ringed or ice world with an atmosphere                                |
+| Star System | its parent                        | a **galactic core** anchor    | a flaring star with its little worlds, a binary, or a star and one ringed world |
+| Galaxy      | its parent                        | a **cluster** anchor          | a spiral, barred or elliptical disc of stars, swirling                          |
+| Universe    | —                                 | the **multiverse barycentre** | a haze, a nebula or a cosmic web inside a faint shell                           |
 
-**A goal's body is its dial's body.** The page renders each distinct `TierBody`
-(#10) once, hidden, with the variant `bodyVariant` pins to the goal and the
-goal's colour; the renderer copies that drawing onto a billboard that always
-faces the camera, as the flat drawing always faces the reader. One drawing of each
-body, not a 3D set that would drift from it. The billboard never shrinks below a
-tier's minimum pixel size, so the drawing reads rather than dissolving into its
-glow.
+**A goal's body is its dial's body, built in 3D.** Each tier's three variants
+(#10, pinned to the goal by `bodyVariant`, which `universeTree` carries as
+`variant`) keep their flat drawing's silhouette and palette — the dial's lit,
+pale and deep shades of the goal's colour — so a goal is recognisably the same
+thing in both views. In the universe they are solid, lit from one side so every
+world has a day side and a night side, and alive: worlds turn on tilted axes,
+craft rock on their struts and blink their beacons, stars breathe their
+four-point flare, little worlds go round their stars, galaxies swirl, a
+universe's far stars breathe. The motion is the dials' own, at their pace; none
+of it says anything about progress, which is the orbit's and the trail's job.
+Bodies are true to scale while there is room and never shrink below a tier's
+minimum pixel size (12px a satellite, 16px a planet, 22px a star system), so a
+model is never lost as a speck in its own glow.
+
+The build first copied the flat drawings onto billboards. It read as 2D art
+pasted into a 3D space rather than the bodies brought to life, so it was
+replaced.
 
 And the anchors themselves: a dwarf planet orbits a star anchor, a star a
 galactic-core anchor, a core a cluster, a cluster the **home universe**, and the
@@ -307,11 +317,16 @@ girder at "Home".
   moment goals are added.
 - **Fly-to:** 900ms, ease-in-out, target and eye together. It frames the host's
   whole extent across the narrower side of the view — on a phone, the width — with
-  the camera above the host's plane at a slant, so rings read as rings. A goal
-  with nothing orbiting it is framed with its own orbit's neighbourhood in view,
-  so its trail comes with it.
-- **The camera never moves on its own.** No idle auto-rotate, no intro fly-through,
-  no following a lapping body.
+  the camera above the host's plane at a slant, so rings read as rings. A galaxy
+  or universe goal is a region and is framed by its extent. A world with nothing
+  orbiting it is framed close — three body radii — near enough to see it turn,
+  with its own orbit running through the frame beside it.
+- **A tapped body stays in view.** A closed body keeps lapping, and framed close
+  it would leave the frame a second after the tap, so the camera keeps the body
+  it was sent to where it is until the next gesture, scrub or tap. An open body
+  is parked, so this moves nothing; under reduced motion nothing laps.
+- **Otherwise the camera never moves on its own.** No idle auto-rotate, no intro
+  fly-through.
 
 Rejected:
 
@@ -373,14 +388,19 @@ The dial's rules, kept:
   galaxy and fifteen for a universe (`UNIVERSE_LAP_SECONDS`). A lapping host
   carries its children with it; their angles are relative to it, so they stay
   true.
-- **Anchors, galaxy discs and the belt are still.** Nothing moves that is not a
-  goal saying something.
+- **Goals' bodies are alive** (decision 2): worlds turn, craft rock, stars flare,
+  galaxies swirl — the dials' own idle motion, which says nothing about
+  progress and never moves a body along its orbit.
+- **Anchors and the belt are still.** They are scenery, not goals.
 
-**The frame loop** runs continuously only while motion is allowed and a closed
-body is on screen; otherwise it renders on demand — when the controls change, a
-flight is in progress, or the data does. It stops when the tab is hidden or the
-canvas is scrolled out of view (`IntersectionObserver`). A phone left on the
-dashboard should not run a GPU at 60fps for a picture that is not moving.
+**The frame loop** runs continuously only while motion is allowed and a goal's
+body or a closed orbit is on screen, and then at 30fps: nothing but the
+universe's own life is moving, and half the frame rate is plenty for a world
+turning and half the battery on a phone. It goes to full rate while the controls
+move, a flight or a sweep is in progress, or a closing plays, and renders on
+demand otherwise. It stops when the tab is hidden or the canvas is scrolled out of
+view (`IntersectionObserver`). Under reduced motion it draws only on demand, and
+a still universe costs no frames.
 
 Rejected: continuous orbiting of every goal (position would stop meaning
 progress), an entry animation (every visit, loudest thing on screen, competes with
@@ -396,8 +416,8 @@ browser helper (`$lib/motion.ts`, `motionAllowed()`) rather than inside the scen
 so the next canvas does not re-derive it.
 
 When motion is not allowed: closed bodies stay at the start mark on their full
-ring, which is what 100% looks like; fly-to is an instant cut; damping is off; the
-closing is the lit ring without rays or flash. Gestures still work — moving the
+ring, which is what 100% looks like; every body holds its rest pose; fly-to is an
+instant cut; damping is off; the closing is the lit ring without rays or flash. Gestures still work — moving the
 camera yourself is not motion the app imposes.
 
 Nothing in the universe carries information in motion, so the still frame is the
@@ -650,7 +670,7 @@ same input twice.
 
 ### Browser: `src/lib/universe/`
 
-Everything three, nothing else: `scene.ts` builds meshes, lines and sprites from a
+Everything three, nothing else: `bodies.ts` builds each tier's bodies; `scene.ts` builds meshes, lines and sprites from a
 `UniverseNode` tree; `camera.ts` holds controls, framing and fly-to; `pick.ts` the
 screen-space nearest; `loop.ts` the on-demand frame loop. It holds no maths about
 progress — if it needs a number about a goal, the domain tree should already carry
@@ -658,9 +678,8 @@ it.
 
 ### Components and route
 
-- `$components/Universe.svelte` — the view container, zoom, live region, note,
-  the hidden `TierBody` drawings the renderer copies, and the belt's
-  `AsteroidSheet`; dynamically imports `src/lib/universe` in `onMount`; asks the
+- `$components/Universe.svelte` — the view container, zoom, live region, note and
+  the belt's `AsteroidSheet`; dynamically imports `src/lib/universe` in `onMount`; asks the
   page, which holds `openGoalId`, for the one `GoalRowSheet`.
 - `/+page.server.ts` loads `listAsteroids(locals.user.id)` when the preference is
   `universe`, and adds the `view` action.

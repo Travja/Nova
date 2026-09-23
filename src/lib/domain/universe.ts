@@ -1,4 +1,5 @@
 import { driftBand, driftFraction, sortBelt, type DriftBand, type DriftInput } from './asteroids';
+import { bodyVariant } from './bodies';
 import { hash } from './hash';
 import type { GoalSnapshot } from './progress';
 import { TIERS, type Tier } from './tiers';
@@ -135,6 +136,11 @@ export interface UniverseNode {
 	 * turns a closed body by this and nothing else.
 	 */
 	lapSeconds: number;
+	/**
+	 * Which of its tier's bodies a goal flies — `bodyVariant`, the same pick its
+	 * dial makes, so the universe draws the same world. 0 for an anchor.
+	 */
+	variant: number;
 	/** This node's own orbital plane, seeded. */
 	tilt: number;
 	spin: number;
@@ -180,6 +186,7 @@ function makeAnchor(kind: AnchorKind, index: number): Draft {
 		closed: false,
 		dormant: false,
 		lapSeconds: 0,
+		variant: 0,
 		tilt: 0,
 		spin: 0,
 		children: [],
@@ -205,6 +212,7 @@ function makeGoalNode(snapshot: GoalSnapshot): Draft {
 		closed: current.complete,
 		dormant: current.dormant,
 		lapSeconds: UNIVERSE_LAP_SECONDS[goal.tier],
+		variant: bodyVariant(goal.tier, goal.id),
 		tilt: 0,
 		spin: 0,
 		children: [],
@@ -266,6 +274,7 @@ function toPublic(node: Draft): UniverseNode {
 		closed: node.closed,
 		dormant: node.dormant,
 		lapSeconds: node.lapSeconds,
+		variant: node.variant,
 		tilt: node.tilt,
 		spin: node.spin,
 		children: node.children.map(toPublic),

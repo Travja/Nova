@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { bodyVariant } from './bodies';
 import { buildOrbit, type GoalSnapshot } from './progress';
 import type { Goal } from './types';
 import type { Tier } from './tiers';
@@ -326,6 +327,24 @@ describe('universeTree', () => {
 		expect(byId.get('sat')!.lapSeconds).toBe(UNIVERSE_LAP_SECONDS.satellite);
 		expect(byId.get('week')!.lapSeconds).toBe(UNIVERSE_LAP_SECONDS.planet);
 		expect(byId.get('year')!.lapSeconds).toBe(UNIVERSE_LAP_SECONDS.universe);
+	});
+
+	it("carries each goal's body variant as its dial picks it, and gives anchors 0", () => {
+		const snapshots = [
+			goal('sat-a', 'satellite'),
+			goal('sat-b', 'satellite', { sortOrder: 1 }),
+			goal('world', 'planet'),
+			goal('year', 'universe')
+		];
+		const { root } = universeTree(snapshots, [], NOW);
+
+		for (const node of walk(root)) {
+			if (node.goalId === null) expect(node.variant).toBe(0);
+			else if (node.kind !== 'dwarf') {
+				const tier = snapshots.find((snapshot) => snapshot.goal.id === node.goalId)!.goal.tier;
+				expect(node.variant).toBe(bodyVariant(tier, node.goalId));
+			}
+		}
 	});
 
 	it('names the zoom stops on the home chain, and only the ones that exist', () => {

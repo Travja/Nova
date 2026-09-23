@@ -114,10 +114,28 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	await expect(zoom).toHaveAttribute('aria-valuetext', 'Home');
 	await expect(page.getByText('1 asteroid circles the home star.')).toBeVisible();
 
-	// Nothing is moving, so nothing is drawn: a still universe costs no frames.
-	const before = await frames(page);
+	// The bodies are alive — worlds turn, craft rock — but that is all that is
+	// moving, so the loop draws it at half rate: never more than 30fps.
+	const living = await frames(page);
 	await page.waitForTimeout(1000);
-	expect(await frames(page), 'a still universe drew frames').toBe(before);
+	const drawn = (await frames(page)) - living;
+	expect(drawn, 'living bodies drew no frames').toBeGreaterThan(0);
+	expect(drawn, 'ambient motion ran faster than 30fps').toBeLessThanOrEqual(33);
+
+	// Scrolled out of sight, the universe costs no frames at all. A short
+	// window, so two goals' worth of list is enough to scroll past it.
+	await page.setViewportSize({ width: PHONE.width, height: 420 });
+	await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+	await expect
+		.poll(async () => (await view.boundingBox())!.y + (await view.boundingBox())!.height)
+		.toBeLessThan(0);
+	await page.waitForTimeout(300);
+	const hidden = await frames(page);
+	await page.waitForTimeout(1000);
+	expect(await frames(page), 'a universe out of sight drew frames').toBe(hidden);
+	await page.setViewportSize(PHONE);
+	await view.scrollIntoViewIfNeeded();
+	await settled(page);
 
 	// An axe pass over the view, the zoom and the list.
 	const results = await new AxeBuilder({ page })

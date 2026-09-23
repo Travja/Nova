@@ -16,7 +16,7 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { SWEEP_MS } from '$domain/celebration';
 import type { UniverseTree } from '$domain/universe';
 import { motionAllowed, onMotionChange } from '$lib/motion';
-import { BodyArt } from './art';
+import { Kit } from './bodies';
 import { CameraRig } from './camera';
 import { createLoop } from './loop';
 import { TAP_SLOP_PX, nearestOnScreen, projectToScreen, type Viewport } from './pick';
@@ -78,8 +78,6 @@ export interface MountOptions {
 	/** Where the zoom now sits, 0–1, after a gesture or a flight moved the camera. */
 	onzoom(value: number): void;
 	onstate(state: RendererState): void;
-	/** The hidden SVG of the dial body a `SceneGoal.art` key names, drawn by the page. */
-	art?: (key: string) => SVGSVGElement | null;
 	/** Elements over the view that labels must not be drawn across, such as the zoom. */
 	avoid?: () => readonly Element[];
 }
@@ -104,7 +102,12 @@ export interface UniverseProbe {
 	frames(): number;
 	/** No flight and no closing in progress. */
 	settled(): boolean;
+	/** Fly to a goal, as a tap on it would. */
+	flyTo(goalId: string): void;
 }
+
+/** The frame interval when only ambient motion is running: 30fps. */
+const AMBIENT_FRAME_MS = 1000 / 30 - 2;
 
 /** How far a closing's rays reach, in the body's own radii (decision 12). */
 const BURST_REACH = 6;
@@ -145,9 +148,8 @@ export function mountUniverse(
 	let animate = motionAllowed();
 	const rig = new CameraRig(canvas, animate);
 	const glow: Texture = glowTexture();
-	// The dial's bodies, drawn from the page's hidden SVGs; each asks for a frame
-	// once its pixels are in, since nothing else would.
-	const art = new BodyArt(options.art ?? (() => null), () => loop.request());
+	// Planet bands, ring lanes, flares: drawn once, kept across rebuilds.
+	const kit = new Kit(glow);
 
 	let input = initial;
 	let viewport: Viewport = { width: 1, height: 1, tanHalfFov: Math.tan(Math.PI / 7.2) };
@@ -176,7 +178,7 @@ export function mountUniverse(
 		}
 		universe = buildScene(input.tree, input.goals, {
 			glow,
-			art,
+			kit,
 			pixelRatio,
 			viewport,
 			labelLayer: labels.domElement,
@@ -339,23 +341,46 @@ export function mountUniverse(
 		);
 	}
 
-	/** Move every goal for this frame. True while anything is still moving on screen. */
-	function advance(time: number): boolean {
+	/** Sweep every goal a log moved. True while any sweep is still under way. */
+	function sweep(time: number): boolean {
 		let more = false;
 		for (const entry of universe.byGoal.values()) {
-			if (entry.sweep) {
-				const t = animate ? Math.min(1, (time - entry.sweep.start) / SWEEP_MS) : 1;
-				const { from, to } = entry.sweep;
-				setShown(entry, from + (to - from) * easeInOut(t));
-				if (t >= 1) {
-					entry.sweep = null;
-					if (entry.node.closed) entry.lapStart = time;
-				} else {
+			if (!entry.sweep) continue;
+			const t = animate ? Math.min(1, (time - entry.sweep.start) / SWEEP_MS) : 1;
+			const { from, to } = entry.sweep;
+			setShown(entry, from + (to - from) * easeInOut(t));
+			if (t >= 1) {
+				entry.sweep = null;
+				if (entry.node.closed) entry.lapStart = time;
+			} else {
+				more = true;
+			}
+		}
+		return more;
+	}
+
+	/** Bodies put back in their rest pose since motion was last stopped. */
+	const resting = new WeakSet<SceneNode>();
+
+	/**
+	 * The motion that runs by itself: closed orbits lapping, and every body's
+	 * own life — worlds turning, craft rocking, stars flaring. True while any of
+	 * it is on screen. None of it runs under reduced motion.
+	 */
+	function ambient(time: number): boolean {
+		let more = false;
+		for (const entry of universe.everything) {
+			if (entry.live) {
+				if (!animate) {
+					if (!resting.has(entry)) entry.live(0);
+					resting.add(entry);
+				} else if (drawn(entry.holder) && (entry.model === null || onScreen(entry))) {
+					resting.delete(entry);
+					entry.live(time / 1000);
 					more = true;
 				}
-				continue;
 			}
-			if (!entry.node.closed || entry.lapStart === null || !entry.pivot) continue;
+			if (entry.sweep || !entry.node.closed || entry.lapStart === null || !entry.pivot) continue;
 			if (!animate) {
 				// The still universe: a closed body waits at its start mark on the
 				// full ring, which is what 100% looks like, and laps from there
@@ -375,16 +400,27 @@ export function mountUniverse(
 	 * The frame.
 	 * ------------------------------------------------------------------ */
 
+	let lastDrawn = -Infinity;
+	let alive = false;
+
 	function frame(time: number): boolean {
-		let more = rig.step(time);
-		if (rig.controls.update()) more = true;
-		if (advance(time)) more = true;
+		let busy = rig.step(time);
+		if (rig.controls.update()) busy = true;
+		if (sweep(time)) busy = true;
+		if (closing) busy = true;
+		// Nothing but the universe's own life moving: half the frame rate is
+		// plenty for a world turning, and half the battery on a phone.
+		if (!busy && alive && time - lastDrawn < AMBIENT_FRAME_MS) return true;
+
+		alive = ambient(time);
 		universe.scene.updateMatrixWorld();
-		if (stepClosing(time)) more = true;
+		follow();
+		const closingMore = stepClosing(time);
 		levelOfDetail(universe, rig.camera, viewport, avoidBoxes());
 		renderer.render(universe.scene, rig.camera);
 		labels.render(universe.scene, rig.camera);
-		return more;
+		lastDrawn = time;
+		return busy || alive || closingMore;
 	}
 
 	const loop = createLoop(frame);
@@ -439,17 +475,43 @@ export function mountUniverse(
 		if (!scrubbing) syncZoom();
 	}
 	function onControlsStart() {
-		// A gesture takes the camera back from a flight in progress.
+		// A gesture takes the camera back — from a flight, and from a body it
+		// was keeping in view.
 		rig.cancelFlight();
+		focus = null;
 	}
 	rig.controls.addEventListener('change', onControlsChange);
 	rig.controls.addEventListener('start', onControlsStart);
+
+	/**
+	 * The body the camera was last sent to, and where it was. A tap is someone
+	 * asking to look at that body, and a closed one keeps lapping — framed
+	 * close, it would be out of the frame a second later — so the camera
+	 * keeps it where it is until the next gesture, scrub or tap sends it
+	 * elsewhere. An open body is parked, and this never moves anything.
+	 */
+	let focus: { goalId: string; at: Vector3 } | null = null;
+	const followAt = new Vector3();
+
+	function follow() {
+		if (!focus) return;
+		const entry = universe.byGoal.get(focus.goalId);
+		if (!entry) {
+			focus = null;
+			return;
+		}
+		entry.holder.getWorldPosition(followAt);
+		const delta = followAt.clone().sub(focus.at);
+		if (delta.lengthSq() > 0) rig.shift(delta);
+		focus.at.copy(followAt);
+	}
 
 	function flyTo(goalId: string) {
 		const entry = universe.byGoal.get(goalId);
 		if (!entry) return;
 		universe.scene.updateMatrixWorld(true);
 		rig.go(rig.viewFor(entry), !animate, performance.now());
+		focus = { goalId, at: entry.holder.getWorldPosition(new Vector3()) };
 		loop.request();
 	}
 
@@ -457,6 +519,7 @@ export function mountUniverse(
 		if (stops.length === 0) return;
 		scrubbing = true;
 		rig.cancelFlight();
+		focus = null;
 		universe.scene.updateMatrixWorld(true);
 		rig.jump(rig.viewAt(stops, Math.min(1, Math.max(0, value))));
 		scrubbing = false;
@@ -499,7 +562,6 @@ export function mountUniverse(
 		// The same tree, drawn again from scratch: every buffer and texture the
 		// old context held is gone with it.
 		glow.needsUpdate = true;
-		art.reset();
 		build(false);
 		universe.resize(viewport);
 		loop.pause('lost', false);
@@ -539,7 +601,8 @@ export function mountUniverse(
 			},
 			rocks: () => universe.rocks.map((rock) => rock.id),
 			frames: () => loop.frames,
-			settled: () => !rig.flying && !closing
+			settled: () => !rig.flying && !closing,
+			flyTo: (goalId) => flyTo(goalId)
 		};
 	}
 
@@ -578,7 +641,7 @@ export function mountUniverse(
 			rig.dispose();
 			universe.dispose();
 			glow.dispose();
-			art.dispose();
+			kit.dispose();
 			renderer.dispose();
 			canvas.remove();
 			labels.domElement.remove();

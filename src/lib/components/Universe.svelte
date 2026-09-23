@@ -2,12 +2,9 @@
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import { resolve } from '$app/paths';
 	import AsteroidSheet from '$components/AsteroidSheet.svelte';
-	import TierBody from '$components/TierBody.svelte';
 	import { celebration } from '$lib/celebration.svelte';
 	import type { Asteroid } from '$domain/asteroids';
-	import { bodyVariant } from '$domain/bodies';
 	import type { GoalSnapshot } from '$domain/progress';
-	import type { Tier } from '$domain/tiers';
 	import { universeTree } from '$domain/universe';
 	// Types only: erased at build, so nothing here pulls three into this chunk.
 	import type { Closing, SceneGoal, UniverseInput, UniverseView, ZoomStop } from '$lib/universe';
@@ -28,10 +25,6 @@
 	 * bursts in that sheet's own dial, and the universe only lights the ring
 	 * (decision 12). A tap on a rock opens the belt's own `AsteroidSheet`, whose
 	 * endings post to Today's actions exactly as they do from Today.
-	 *
-	 * Each goal's body is the drawing its dial flies: the page renders every
-	 * distinct `TierBody` once, hidden, and the renderer copies it onto a
-	 * billboard (see `$lib/universe/art.ts`).
 	 */
 
 	interface Props {
@@ -67,34 +60,7 @@
 		return chain;
 	});
 
-	/** One of the dial's bodies: which drawing, in which colour, lit or not. */
-	interface BodyArt {
-		key: string;
-		tier: Tier;
-		variant: number;
-		color: string;
-		dormant: boolean;
-	}
-
-	function artFor(snapshot: GoalSnapshot): BodyArt {
-		const { goal } = snapshot;
-		const variant = bodyVariant(goal.tier, goal.id);
-		const dormant = snapshot.current.dormant;
-		return {
-			key: `${goal.tier}-${variant}-${goal.color}-${dormant ? 'dormant' : 'lit'}`,
-			tier: goal.tier,
-			variant,
-			color: goal.color,
-			dormant
-		};
-	}
-
-	/** Every distinct body once: six goals flying the same drawing share one texture. */
-	const bodies = $derived([
-		...new Map(snapshots.map((snapshot) => artFor(snapshot)).map((art) => [art.key, art])).values()
-	]);
-
-	/** What the tree does not carry: each goal's words, colour and body. */
+	/** What the tree does not carry: each goal's words and colour. */
 	const goals = $derived(
 		Object.fromEntries(
 			snapshots.map((snapshot): [string, SceneGoal] => [
@@ -102,8 +68,7 @@
 				{
 					title: snapshot.goal.title,
 					color: snapshot.goal.color,
-					percent: Math.round(snapshot.current.ratio * 100),
-					art: artFor(snapshot).key
+					percent: Math.round(snapshot.current.ratio * 100)
 				}
 			])
 		)
@@ -124,7 +89,6 @@
 	let viewState = $state<ViewState>('loading');
 	let stage = $state<HTMLDivElement>();
 	let zoomElement = $state<HTMLDivElement>();
-	let atlas = $state<HTMLDivElement>();
 	let view = $state.raw<UniverseView | null>(null);
 	/** The rock whose sheet is open, from a tap on the belt. */
 	let openRockId = $state<string | null>(null);
@@ -149,8 +113,6 @@
 						if (next?.kind === 'goal') onopen(next.goalId);
 						else if (next?.kind === 'rock') openRockId = next.id;
 					},
-					art: (key) =>
-						atlas?.querySelector<SVGSVGElement>(`svg[data-art="${CSS.escape(key)}"]`) ?? null,
 					onzoom(value) {
 						zoom = Math.round(value * ZOOM_STEPS);
 					},
@@ -275,23 +237,6 @@
 				/>
 			</div>
 		{/if}
-	</div>
-
-	<!-- The dial's bodies, drawn once each for the renderer to copy. Never seen:
-	     the canvas shows them. -->
-	<div class="universe__art" bind:this={atlas} aria-hidden="true">
-		{#each bodies as body (body.key)}
-			<svg data-art={body.key} viewBox="-2 -2 4 4" style="--color: {body.color}">
-				<TierBody
-					tier={body.tier}
-					variant={body.variant}
-					cx={0}
-					cy={0}
-					r={1}
-					dormant={body.dormant}
-				/>
-			</svg>
-		{/each}
 	</div>
 
 	<AsteroidSheet
@@ -426,25 +371,6 @@
 
 	.zoom__ticks span.is-near {
 		color: var(--text-bright);
-	}
-
-	/* Out of sight and out of the flow, but laid out and styled, so the
-	   renderer can read each drawing's paint. Still, so it reads a rest pose
-	   rather than wherever an animation happened to be. */
-	.universe__art {
-		height: 0;
-		overflow: hidden;
-		position: absolute;
-		width: 0;
-	}
-
-	.universe__art svg {
-		height: 64px;
-		width: 64px;
-	}
-
-	.universe__art :global(*) {
-		animation: none !important;
 	}
 
 	.universe__note {

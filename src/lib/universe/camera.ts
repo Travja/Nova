@@ -78,8 +78,13 @@ export class CameraRig {
 		const target = entry.holder.getWorldPosition(new Vector3());
 		// A goal with nothing orbiting it is framed with its own orbit's
 		// neighbourhood in view, so its trail comes with it.
+		// A system is framed whole. A galaxy or universe is a region, so it is
+		// framed by its extent even when nothing orbits in it. A lone world is
+		// framed close: near enough to see it turn, with its own orbit — and so
+		// its trail — running through the frame beside it.
+		const region = node.kind === 'galaxy' || node.kind === 'universe';
 		const reach =
-			node.children.length > 0 || node.belt ? node.extent : (node.orbitRadius || node.extent) * 0.7;
+			node.children.length > 0 || node.belt || region ? node.extent : node.bodyRadius * 3;
 		const distance = Math.max((reach * 1.08) / Math.sin(this.fit() / 2), node.bodyRadius * 9);
 
 		entry.plane.getWorldQuaternion(worldQuaternion);
@@ -109,6 +114,19 @@ export class CameraRig {
 		this.controls.target.copy(view.target);
 		this.camera.position.copy(view.eye);
 		this.controls.update();
+	}
+
+	/**
+	 * Carry the camera — eye, target and any flight in progress — along by
+	 * `delta`, so a body it is looking at stays where it is in the frame.
+	 */
+	shift(delta: Vector3): void {
+		this.controls.target.add(delta);
+		this.camera.position.add(delta);
+		if (this.flight) {
+			this.flight.to.target.add(delta);
+			this.flight.to.eye.add(delta);
+		}
 	}
 
 	cancelFlight(): void {
