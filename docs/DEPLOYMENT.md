@@ -97,7 +97,8 @@ server {
 	ssl_certificate_key /etc/letsencrypt/live/nova.example.com/privkey.pem;
 
 	# Matches BODY_SIZE_LIMIT in compose.yaml; nginx would reject first otherwise.
-	client_max_body_size 1m;
+	# 17M is what an import needs — see the 16 MB cap in `$domain/transfer`.
+	client_max_body_size 17m;
 
 	location / {
 		proxy_pass http://127.0.0.1:3000;

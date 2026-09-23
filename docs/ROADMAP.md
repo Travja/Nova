@@ -59,7 +59,7 @@ The reason to open the app rather than a spreadsheet.
 
 ## M3 — Insight
 
-_4 of 5 done._
+_5 of 5 done._
 
 Turning a log into something you learn from.
 
@@ -67,7 +67,7 @@ Turning a log into something you learn from.
 | ------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------- |
 | [#15](https://github.com/Travja/Nova/issues/15) ✓ | [History and heatmap](issues/15-history-heatmap.md)         | Twelve rings shows a streak, not a pattern              |
 | [#16](https://github.com/Travja/Nova/issues/16) ✓ | [Stats](issues/16-stats.md)                                 | Cheap to derive from buckets already built              |
-| [#17](https://github.com/Travja/Nova/issues/17)   | [Export, import, delete](issues/17-export-import-delete.md) | It is your record; it should be portable                |
+| [#17](https://github.com/Travja/Nova/issues/17) ✓ | [Export, import, delete](issues/17-export-import-delete.md) | It is your record; it should be portable                |
 | [#18](https://github.com/Travja/Nova/issues/18) ✓ | [Orbit notes](issues/18-orbit-notes.md)                     | The reflection is about the period, not the entry       |
 | [#48](https://github.com/Travja/Nova/issues/48) ✓ | [Closing window](issues/48-closing-window.md)               | "Running out of time" is on all day, so it says nothing |
 

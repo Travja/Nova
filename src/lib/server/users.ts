@@ -116,3 +116,34 @@ export async function changePassword(
 	const revoked = await revokeOtherSessions(userId, keepToken);
 	return { ok: true, revoked };
 }
+
+/**
+ * Delete the account, and with it everything the cascade reaches.
+ *
+ * Irreversible, so the confirmation is the account's own email address rather
+ * than a click: a red button is pressed by accident, an address is typed on
+ * purpose. It is checked here rather than in the route for the same reason
+ * `changePassword()` verifies the current password here — no caller should be
+ * able to skip it.
+ *
+ * One `delete` on `users` is the whole operation. `PRAGMA foreign_keys` is on
+ * for the connection, and every table that belongs to an account references it
+ * with `on delete cascade` — directly for goals, asteroids, sessions, reset
+ * tokens, push subscriptions and reminder settings, and through `goals` for
+ * archive windows, entries and orbit notes. Signing every device out is part
+ * of the same statement, since the sessions go with the user row.
+ */
+export async function deleteAccount(userId: string, confirmation: string): Promise<boolean> {
+	const [row] = await db
+		.select({ email: users.email })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	if (!row) return false;
+
+	// Addresses are stored lowercased by `emailSchema`; what was typed is not.
+	if (confirmation.trim().toLowerCase() !== row.email.toLowerCase()) return false;
+
+	const result = await db.delete(users).where(eq(users.id, userId));
+	return result.changes > 0;
+}

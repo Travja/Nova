@@ -8,7 +8,10 @@ services:
       # Required by SvelteKit's CSRF check — set this to the URL you browse to.
       ORIGIN: ${ORIGIN:-http://localhost:3000}
       DATABASE_URL: file:/data/nova.db
-      BODY_SIZE_LIMIT: 512K
+      # An import is the only large body Nova takes, and it is capped at 16 MB
+      # in `$domain/transfer`. This sits just above that so a file over the cap
+      # gets Nova's own message rather than a bare 413 from the adapter.
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-17M}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Snapshots land on the same volume as the database. Copy them off the
       # host too — a volume that dies takes both with it.
