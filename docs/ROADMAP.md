@@ -73,7 +73,7 @@ Turning a log into something you learn from.
 
 ## M4 — Reach and operations
 
-_5 of 7 done._
+_6 of 7 done._
 
 Making it dependable, and making it speak up.
 
@@ -85,7 +85,7 @@ Making it dependable, and making it speak up.
 | [#22](https://github.com/Travja/Nova/issues/22) ✓ | [Logging and errors](issues/22-logging-and-errors.md) | Debugging a self-hosted instance is guesswork     |
 | [#23](https://github.com/Travja/Nova/issues/23) ✓ | [Automated backups](issues/23-backups.md)             | Years of history in one file                      |
 | [#24](https://github.com/Travja/Nova/issues/24) ✓ | [Deployment guide](issues/24-deployment-guide.md)     | PWAs need HTTPS and an exact `ORIGIN`             |
-| [#29](https://github.com/Travja/Nova/issues/29)   | [Backup catch-up](issues/29-backup-catch-up.md)       | A rebooting host can miss every snapshot          |
+| [#29](https://github.com/Travja/Nova/issues/29) ✓ | [Backup catch-up](issues/29-backup-catch-up.md)       | A rebooting host can miss every snapshot          |
 
 ## Deliberately not planned
 
