@@ -8,6 +8,7 @@
 	import GoalRowSheet from '$components/GoalRowSheet.svelte';
 	import GoalOrderList from '$components/GoalOrderList.svelte';
 	import Rocket from '$components/Rocket.svelte';
+	import Universe from '$components/Universe.svelte';
 	import { noteOrbits } from '$lib/celebration.svelte';
 	import { overlayAll } from '$domain/queue';
 	import { queuedEntries } from '$lib/offline/queue.svelte';
@@ -47,7 +48,7 @@
 	);
 
 	/**
-	 * The universe view's list (#11 part A): the same tree the universe draws,
+	 * The universe view's list (#11): the same tree the universe draws,
 	 * in words. A goal is a root when it has no parent, or when its parent is
 	 * not among these snapshots — an archived parent, most often — so it orbits
 	 * an anchor rather than nothing, exactly as `$domain/universe` decides.
@@ -233,26 +234,27 @@
 		{/if}
 
 		{#if !data.reordering && data.user.preferences.dashboard === 'universe'}
-			<section class="universe">
-				<div class="universe__canvas" aria-hidden="true">
-					<p class="muted">The universe isn't drawn yet — every goal is listed below.</p>
-				</div>
-				<div class="universe__list">
-					{#each universeSections as section (section.tier.id)}
-						<section class="tier">
-							<header class="tier__head">
-								<h2 style="color: {section.tier.accent}">{section.tier.label}</h2>
-								<span class="muted">{section.tier.blurb}</span>
-							</header>
-							<ul class="universe__tree">
-								{#each section.roots as root (root.goal.id)}
-									{@render goalBranch(root)}
-								{/each}
-							</ul>
-						</section>
-					{/each}
-				</div>
-			</section>
+			<Universe
+				{snapshots}
+				asteroids={data.asteroids}
+				now={data.now}
+				covered={openGoalId !== null}
+				onopen={(goalId) => (openGoalId = goalId)}
+			>
+				{#each universeSections as section (section.tier.id)}
+					<section class="tier">
+						<header class="tier__head">
+							<h2 style="color: {section.tier.accent}">{section.tier.label}</h2>
+							<span class="muted">{section.tier.blurb}</span>
+						</header>
+						<ul class="universe__tree">
+							{#each section.roots as root (root.goal.id)}
+								{@render goalBranch(root)}
+							{/each}
+						</ul>
+					</section>
+				{/each}
+			</Universe>
 		{:else}
 			{#each sections as section (section.tier.id)}
 				<section class="tier">
@@ -282,12 +284,13 @@
 		{/if}
 
 		<!-- The universe list, recursive: a goal's children nest under it in a
-		     `<ul>` at every depth, the same tree `$domain/universe` will draw once
-		     part B adds the canvas. Each row is the ordinary `GoalRow`, opening
-		     the one sheet the page already holds. -->
+		     `<ul>` at every depth, the same tree `$domain/universe` draws. Each row
+		     is the ordinary `GoalRow`, opening the one sheet the page already
+		     holds; `data-goal-id` is how keyboard focus on a row flies the camera
+		     there. -->
 		{#snippet goalBranch(snapshot: GoalSnapshot)}
 			{@const children = childrenOf(snapshot.goal.id)}
-			<li>
+			<li data-goal-id={snapshot.goal.id}>
 				<GoalRow {snapshot} onopen={(goalId) => (openGoalId = goalId)} />
 				{#if children.length > 0}
 					<ul>
@@ -472,31 +475,6 @@
 	.view-toggle button[aria-pressed='true'] {
 		background: var(--space-surface);
 		color: var(--text-bright);
-	}
-
-	/* Part A: no canvas yet, only the sentence that says so and the list below
-	   — see docs/issues/11-system-view.md. Part B replaces `.universe__canvas`
-	   with the three.js view. */
-	.universe {
-		display: grid;
-		gap: var(--gap-block);
-	}
-
-	.universe__canvas {
-		align-items: center;
-		background: radial-gradient(120% 90% at 50% 30%, rgba(167, 139, 250, 0.12), transparent 70%);
-		border: 1px solid var(--space-border);
-		border-radius: var(--radius-lg);
-		display: grid;
-		justify-items: center;
-		min-height: 8rem;
-		padding: 1.5rem;
-		text-align: center;
-	}
-
-	.universe__list {
-		display: grid;
-		gap: var(--gap-list);
 	}
 
 	.universe__tree,

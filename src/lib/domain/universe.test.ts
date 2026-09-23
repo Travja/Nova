@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildOrbit, type GoalSnapshot } from './progress';
 import type { Goal } from './types';
 import type { Tier } from './tiers';
-import { MIN_EXTENT, universeTree, type UniverseNode } from './universe';
+import { MIN_EXTENT, UNIVERSE_LAP_SECONDS, universeTree, type UniverseNode } from './universe';
 
 const NOW = new Date('2026-06-15T12:00:00Z');
 const PERIOD = {
@@ -306,6 +306,40 @@ describe('universeTree', () => {
 		// where a month-old one does, at the belt's outer edge.
 		expect(old.radius).toBeCloseTo(belt.inner + belt.width);
 		expect(ancient.radius).toBeCloseTo(old.radius);
+	});
+
+	it("carries each goal's lap from its tier, and gives anchors none", () => {
+		const { root } = universeTree(
+			[
+				goal('sat', 'satellite', { closed: true }),
+				goal('week', 'planet'),
+				goal('year', 'universe', { closed: true })
+			],
+			[],
+			NOW
+		);
+
+		for (const node of walk(root)) {
+			if (node.goalId === null) expect(node.lapSeconds).toBe(0);
+		}
+		const byId = new Map(walk(root).map((node) => [node.id, node]));
+		expect(byId.get('sat')!.lapSeconds).toBe(UNIVERSE_LAP_SECONDS.satellite);
+		expect(byId.get('week')!.lapSeconds).toBe(UNIVERSE_LAP_SECONDS.planet);
+		expect(byId.get('year')!.lapSeconds).toBe(UNIVERSE_LAP_SECONDS.universe);
+	});
+
+	it('names the zoom stops on the home chain, and only the ones that exist', () => {
+		const full = universeTree([goal('sat', 'satellite')], [], NOW);
+		expect(full.home?.id).toBe('star-0');
+		expect(full.galaxy?.id).toBe('core-0');
+		expect(full.universe?.id).toBe('home-0');
+		expect(full.root.children.map((node) => node.id)).toContain('home-0');
+
+		// Universe goals alone orbit the barycentre directly: no home chain at all.
+		const bare = universeTree([goal('year', 'universe')], [], NOW);
+		expect(bare.home).toBeNull();
+		expect(bare.galaxy).toBeNull();
+		expect(bare.universe).toBeNull();
 	});
 
 	it('builds the identical tree from the same input twice', () => {

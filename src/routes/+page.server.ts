@@ -14,7 +14,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	if (!locals.user) return { snapshots: null, reordering: false, asteroids: [] };
+	if (!locals.user) return { snapshots: null, reordering: false, asteroids: [], now: locals.now };
 
 	// The universe view draws the belt round the home star; the tiered grid
 	// never touches an asteroid, so there is nothing to load for it here.
@@ -24,7 +24,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		snapshots: await listGoalSnapshots(locals.user, locals.now),
 		/** Reorder mode lives in the URL, so it survives a submit without JavaScript. */
 		reordering: url.searchParams.get('reorder') === '1',
-		asteroids: universe ? await listAsteroids(locals.user.id) : []
+		asteroids: universe ? await listAsteroids(locals.user.id) : [],
+		/** How far each rock has drifted is measured against the request's one clock. */
+		now: locals.now
 	};
 };
 

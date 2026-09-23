@@ -593,6 +593,7 @@ export interface UniverseNode {
 	fraction: number; // the trail's length, 0–1
 	closed: boolean;
 	dormant: boolean;
+	lapSeconds: number; // UNIVERSE_LAP_SECONDS[tier] for a goal, 0 for an anchor
 	tilt: number; // this node's own orbital plane, seeded
 	spin: number;
 	children: UniverseNode[];
@@ -603,7 +604,12 @@ export function universeTree(
 	snapshots: readonly GoalSnapshot[],
 	asteroids: readonly (DriftInput & { id: string })[],
 	now: Date
-): { root: UniverseNode; home: UniverseNode | null; galaxy: UniverseNode | null };
+): {
+	root: UniverseNode;
+	home: UniverseNode | null; // the "Home" zoom stop
+	galaxy: UniverseNode | null; // "Galaxy"
+	universe: UniverseNode | null; // "Universe"
+};
 ```
 
 `Belt` holds its inner radius, width, and one `{ id, angle, radius, band }` per

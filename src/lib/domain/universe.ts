@@ -19,7 +19,7 @@ import { TIERS, type Tier } from './tiers';
  * and `hash()` is seeded from ids rather than the clock.
  */
 
-/** How long one full lap takes for a closed orbit, in seconds. Part B's frame loop reads this. */
+/** How long one full lap takes for a closed orbit, in seconds. Carried on each node as `lapSeconds`. */
 export const UNIVERSE_LAP_SECONDS: Record<Tier, number> = {
 	satellite: 16,
 	planet: 40,
@@ -129,6 +129,12 @@ export interface UniverseNode {
 	fraction: number;
 	closed: boolean;
 	dormant: boolean;
+	/**
+	 * Seconds for one lap round the full ring once this orbit is closed, from
+	 * `UNIVERSE_LAP_SECONDS`; 0 for an anchor, which never moves. The renderer
+	 * turns a closed body by this and nothing else.
+	 */
+	lapSeconds: number;
 	/** This node's own orbital plane, seeded. */
 	tilt: number;
 	spin: number;
@@ -173,6 +179,7 @@ function makeAnchor(kind: AnchorKind, index: number): Draft {
 		fraction: 0,
 		closed: false,
 		dormant: false,
+		lapSeconds: 0,
 		tilt: 0,
 		spin: 0,
 		children: [],
@@ -197,6 +204,7 @@ function makeGoalNode(snapshot: GoalSnapshot): Draft {
 		fraction: current.fraction,
 		closed: current.complete,
 		dormant: current.dormant,
+		lapSeconds: UNIVERSE_LAP_SECONDS[goal.tier],
 		tilt: 0,
 		spin: 0,
 		children: [],
@@ -257,6 +265,7 @@ function toPublic(node: Draft): UniverseNode {
 		fraction: node.fraction,
 		closed: node.closed,
 		dormant: node.dormant,
+		lapSeconds: node.lapSeconds,
 		tilt: node.tilt,
 		spin: node.spin,
 		children: node.children.map(toPublic),
@@ -270,6 +279,8 @@ export interface UniverseTree {
 	home: UniverseNode | null;
 	/** The galactic core — the "Galaxy" zoom stop — or null when there is none. */
 	galaxy: UniverseNode | null;
+	/** The home universe — the "Universe" zoom stop — or null when no loose goal needs one. */
+	universe: UniverseNode | null;
 }
 
 /**
@@ -361,6 +372,7 @@ export function universeTree(
 	return {
 		root: toPublic(root),
 		home: anchors.star[0] ? toPublic(anchors.star[0]) : null,
-		galaxy: anchors.core[0] ? toPublic(anchors.core[0]) : null
+		galaxy: anchors.core[0] ? toPublic(anchors.core[0]) : null,
+		universe: anchors.home[0] ? toPublic(anchors.home[0]) : null
 	};
 }
