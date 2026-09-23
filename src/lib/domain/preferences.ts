@@ -25,6 +25,14 @@ interface PreferenceSpec {
 	readonly options: Readonly<Record<string, string>>;
 	/** A sentence under the control, when one earns its place. */
 	readonly hint?: string;
+	/**
+	 * How this preference reaches behaviour. `'css'` (the default) means every
+	 * non-default value has a block in `app.css` selecting the attribute —
+	 * `preferences.test.ts` checks that. `'server'` means the server reads the
+	 * value itself to decide what to render, so there is no CSS block to check
+	 * for: the attribute is still stamped on `<html>`, but nothing selects it.
+	 */
+	readonly readBy?: 'css' | 'server';
 }
 
 export const PREFERENCE_SPECS = {
@@ -69,6 +77,22 @@ export const PREFERENCE_SPECS = {
 			high: 'High — for bright sunlight'
 		},
 		hint: 'Solid panels and brighter text, for reading a dial outdoors.'
+	},
+	/**
+	 * Which shape `/` renders in: the tiered grid of dials, or the universe
+	 * (#11) — every goal as a body in one sky. `readBy: 'server'` because the
+	 * choice decides which markup the server sends, not a CSS rule on top of
+	 * the same markup, so there is nothing in `app.css` selecting on it.
+	 */
+	dashboard: {
+		attribute: 'data-dashboard',
+		label: 'Dashboard',
+		values: ['tiers', 'universe'],
+		options: {
+			tiers: 'Tiers — a dial for every goal',
+			universe: 'Universe — every goal in one sky you can fly'
+		},
+		readBy: 'server'
 	}
 } as const satisfies Record<string, PreferenceSpec>;
 

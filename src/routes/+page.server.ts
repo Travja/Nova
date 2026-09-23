@@ -1,5 +1,7 @@
 import { isTier } from '$domain/tiers';
 import { entrySchema, fieldErrors, formError } from '$domain/validation';
+import { mergePreferences } from '$domain/preferences';
+import { listAsteroids } from '$lib/server/asteroids';
 import {
 	listGoalSnapshots,
 	logEntry,
@@ -7,15 +9,22 @@ import {
 	reorderGoals,
 	LOG_REFUSAL_MESSAGE
 } from '$lib/server/goals';
+import { updateProfile } from '$lib/server/users';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	if (!locals.user) return { snapshots: null, reordering: false };
+	if (!locals.user) return { snapshots: null, reordering: false, asteroids: [] };
+
+	// The universe view draws the belt round the home star; the tiered grid
+	// never touches an asteroid, so there is nothing to load for it here.
+	const universe = locals.user.preferences.dashboard === 'universe';
+
 	return {
 		snapshots: await listGoalSnapshots(locals.user, locals.now),
 		/** Reorder mode lives in the URL, so it survives a submit without JavaScript. */
-		reordering: url.searchParams.get('reorder') === '1'
+		reordering: url.searchParams.get('reorder') === '1',
+		asteroids: universe ? await listAsteroids(locals.user.id) : []
 	};
 };
 
@@ -76,5 +85,25 @@ export const actions: Actions = {
 			return fail(409, { errors: formError('That order no longer matches your goals.') });
 		}
 		return { reordered: true };
+	},
+
+	/**
+	 * The Tiers | Universe toggle (#11, decision 14): two submit buttons named
+	 * `view`, merged into the `dashboard` preference exactly as the settings
+	 * form saves any other one. `use:enhance`'s default behaviour re-runs the
+	 * load function, so the server renders whichever view is now stored; without
+	 * JavaScript, SvelteKit renders this same request's response straight from
+	 * this action rather than issuing a fresh GET — `locals.user` is updated in
+	 * place so that render, and this request's own `load`, see the new value
+	 * rather than the one `hooks.server.ts` read before the action ran.
+	 */
+	view: async ({ request, locals }) => {
+		if (!locals.user) redirect(303, '/login');
+
+		const form = await request.formData();
+		const preferences = mergePreferences(locals.user.preferences, { dashboard: form.get('view') });
+		await updateProfile(locals.user.id, { preferences });
+		locals.user = { ...locals.user, preferences };
+		return { ok: true };
 	}
 };

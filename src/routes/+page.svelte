@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Astronaut from '$components/Astronaut.svelte';
@@ -43,6 +44,31 @@
 			tier,
 			goals: snapshots.filter((snapshot: GoalSnapshot) => snapshot.goal.tier === tier.id)
 		})).filter((section) => section.goals.length > 0)
+	);
+
+	/**
+	 * The universe view's list (#11 part A): the same tree the universe draws,
+	 * in words. A goal is a root when it has no parent, or when its parent is
+	 * not among these snapshots — an archived parent, most often — so it orbits
+	 * an anchor rather than nothing, exactly as `$domain/universe` decides.
+	 */
+	function isRoot(snapshot: GoalSnapshot): boolean {
+		const parentId = snapshot.goal.parentId;
+		return !parentId || !snapshots.some((candidate) => candidate.goal.id === parentId);
+	}
+
+	function childrenOf(goalId: string): GoalSnapshot[] {
+		return snapshots.filter((snapshot: GoalSnapshot) => snapshot.goal.parentId === goalId);
+	}
+
+	/** Roots grouped by tier, same as `sections` above — only roots count for the grouping. */
+	const universeSections = $derived(
+		TIER_LIST.map((tier) => ({
+			tier,
+			roots: snapshots.filter(
+				(snapshot: GoalSnapshot) => snapshot.goal.tier === tier.id && isRoot(snapshot)
+			)
+		})).filter((section) => section.roots.length > 0)
 	);
 
 	/** Logging happens on the cards here, so this is where a closing is spotted. */
@@ -162,6 +188,32 @@
 				{#if data.reordering}
 					<a class="button button--ghost" href={resolve('/')}>Done reordering</a>
 				{:else}
+					<form
+						method="POST"
+						action="?/view"
+						use:enhance
+						class="view-toggle"
+						aria-label="Dashboard view"
+					>
+						<button
+							type="submit"
+							name="view"
+							value="tiers"
+							class="button button--ghost"
+							aria-pressed={data.user.preferences.dashboard !== 'universe'}
+						>
+							Tiers
+						</button>
+						<button
+							type="submit"
+							name="view"
+							value="universe"
+							class="button button--ghost"
+							aria-pressed={data.user.preferences.dashboard === 'universe'}
+						>
+							Universe
+						</button>
+					</form>
 					<a class="button button--ghost" href="{resolve('/')}?reorder=1">Reorder</a>
 					<a class="button" href={resolve('/goals/new')}>New goal</a>
 				{/if}
@@ -180,31 +232,72 @@
 			<p class="live" role="status">{announcement}</p>
 		{/if}
 
-		{#each sections as section (section.tier.id)}
-			<section class="tier">
-				<header class="tier__head">
-					<h2 style="color: {section.tier.accent}">{section.tier.label}</h2>
-					<span class="muted">{section.tier.blurb}</span>
-				</header>
-				{#if data.reordering}
-					<GoalOrderList
-						tier={section.tier}
-						goals={section.goals}
-						onannounce={(message) => (moveAnnouncement = message)}
-					/>
-				{:else}
-					<div class="grid" class:grid--rows={compact}>
-						{#each section.goals as snapshot (snapshot.goal.id)}
-							{#if compact}
-								<GoalRow {snapshot} onopen={(goalId) => (openGoalId = goalId)} />
-							{:else}
-								<GoalCard {snapshot} />
-							{/if}
-						{/each}
-					</div>
-				{/if}
+		{#if !data.reordering && data.user.preferences.dashboard === 'universe'}
+			<section class="universe">
+				<div class="universe__canvas" aria-hidden="true">
+					<p class="muted">The universe isn't drawn yet — every goal is listed below.</p>
+				</div>
+				<div class="universe__list">
+					{#each universeSections as section (section.tier.id)}
+						<section class="tier">
+							<header class="tier__head">
+								<h2 style="color: {section.tier.accent}">{section.tier.label}</h2>
+								<span class="muted">{section.tier.blurb}</span>
+							</header>
+							<ul class="universe__tree">
+								{#each section.roots as root (root.goal.id)}
+									{@render goalBranch(root)}
+								{/each}
+							</ul>
+						</section>
+					{/each}
+				</div>
 			</section>
-		{/each}
+		{:else}
+			{#each sections as section (section.tier.id)}
+				<section class="tier">
+					<header class="tier__head">
+						<h2 style="color: {section.tier.accent}">{section.tier.label}</h2>
+						<span class="muted">{section.tier.blurb}</span>
+					</header>
+					{#if data.reordering}
+						<GoalOrderList
+							tier={section.tier}
+							goals={section.goals}
+							onannounce={(message) => (moveAnnouncement = message)}
+						/>
+					{:else}
+						<div class="grid" class:grid--rows={compact}>
+							{#each section.goals as snapshot (snapshot.goal.id)}
+								{#if compact}
+									<GoalRow {snapshot} onopen={(goalId) => (openGoalId = goalId)} />
+								{:else}
+									<GoalCard {snapshot} />
+								{/if}
+							{/each}
+						</div>
+					{/if}
+				</section>
+			{/each}
+		{/if}
+
+		<!-- The universe list, recursive: a goal's children nest under it in a
+		     `<ul>` at every depth, the same tree `$domain/universe` will draw once
+		     part B adds the canvas. Each row is the ordinary `GoalRow`, opening
+		     the one sheet the page already holds. -->
+		{#snippet goalBranch(snapshot: GoalSnapshot)}
+			{@const children = childrenOf(snapshot.goal.id)}
+			<li>
+				<GoalRow {snapshot} onopen={(goalId) => (openGoalId = goalId)} />
+				{#if children.length > 0}
+					<ul>
+						{#each children as child (child.goal.id)}
+							{@render goalBranch(child)}
+						{/each}
+					</ul>
+				{/if}
+			</li>
+		{/snippet}
 
 		<p class="archive-link muted">
 			<a href={resolve('/stats')}>Stats</a> pull streaks, completion and pace out of everything
@@ -362,5 +455,61 @@
 		.tier-list li {
 			justify-content: center;
 		}
+	}
+
+	.view-toggle {
+		border: 1px solid var(--space-border);
+		border-radius: 999px;
+		display: inline-flex;
+		gap: 0.15rem;
+		padding: 0.2rem;
+	}
+
+	.view-toggle button {
+		border-radius: 999px;
+	}
+
+	.view-toggle button[aria-pressed='true'] {
+		background: var(--space-surface);
+		color: var(--text-bright);
+	}
+
+	/* Part A: no canvas yet, only the sentence that says so and the list below
+	   — see docs/issues/11-system-view.md. Part B replaces `.universe__canvas`
+	   with the three.js view. */
+	.universe {
+		display: grid;
+		gap: var(--gap-block);
+	}
+
+	.universe__canvas {
+		align-items: center;
+		background: radial-gradient(120% 90% at 50% 30%, rgba(167, 139, 250, 0.12), transparent 70%);
+		border: 1px solid var(--space-border);
+		border-radius: var(--radius-lg);
+		display: grid;
+		justify-items: center;
+		min-height: 8rem;
+		padding: 1.5rem;
+		text-align: center;
+	}
+
+	.universe__list {
+		display: grid;
+		gap: var(--gap-list);
+	}
+
+	.universe__tree,
+	.universe__tree ul {
+		display: grid;
+		gap: 0.35rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.universe__tree ul {
+		margin-top: 0.35rem;
+		padding-left: 1.1rem;
 	}
 </style>

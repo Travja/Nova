@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { allBodies, BODY_VARIANTS, bodyVariant } from './bodies';
 import { TIERS } from './tiers';
 
+describe('bodyVariant golden values', () => {
+	/**
+	 * Pinned before the FNV-1a hash moved out to `$domain/hash` (#11 part A), so
+	 * the move is provably a no-op: `bodyVariant` reads through `hash` now, and
+	 * these numbers are what it returned before that change existed.
+	 */
+	it.each([
+		['satellite', '0f6f2c3a-19a6-4a7f-9f4f-8a2c0a5d7b11', 1],
+		['planet', 'goal-1', 2],
+		['starSystem', 'a', 1],
+		['galaxy', '1f2e3d4c-0000-4000-8000-000000000007', 0],
+		['universe', 'asteroid-12', 1]
+	] as const)('bodyVariant(%j, %j) is %i', (tier, id, expected) => {
+		expect(bodyVariant(tier, id)).toBe(expected);
+	});
+});
+
 describe('bodyVariant', () => {
 	it('gives the same goal the same body every time', () => {
 		const id = '0f6f2c3a-19a6-4a7f-9f4f-8a2c0a5d7b11';
