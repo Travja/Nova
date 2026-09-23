@@ -305,7 +305,10 @@ async function context(options = {}) {
 		}
 	}
 	await tap(page, rock);
-	await shoot(page, 'app-12-belt');
+	// A tap opens the belt's own sheet, over the view.
+	await page.screenshot({ path: `${OUT}/app-12-belt.png` });
+	console.log('app-12-belt.png');
+	await page.keyboard.press('Escape');
 	await openUniverse(page);
 	await zoomTo(page, 'Universe');
 	await shoot(page, 'app-12-universe');
@@ -313,6 +316,11 @@ async function context(options = {}) {
 	await shoot(page, 'app-12-multiverse');
 	await zoomTo(page, 'Galaxy');
 	await tap(page, ids.get('m1'));
+	// The tap opens the goal's sheet and flies the camera behind it.
+	await page.screenshot({ path: `${OUT}/app-12-sheet.png` });
+	console.log('app-12-sheet.png');
+	await page.keyboard.press('Escape');
+	await settle(page);
 	await shoot(page, 'app-12-focus');
 
 	// A closing: log the rest of "Call family" from its sheet, the one place
@@ -320,7 +328,6 @@ async function context(options = {}) {
 	// universe draws its own version only when the sheet is not over it.
 	await openUniverse(page);
 	await tap(page, ids.get('p3'));
-	await page.getByRole('button', { name: 'Open' }).click();
 	const sheet = page.getByRole('dialog');
 	await sheet.getByLabel(/^Amount/).fill(String(TARGET));
 	await sheet.getByRole('button', { name: 'Log it' }).click();

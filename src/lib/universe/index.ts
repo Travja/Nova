@@ -16,6 +16,7 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { SWEEP_MS } from '$domain/celebration';
 import type { UniverseTree } from '$domain/universe';
 import { motionAllowed, onMotionChange } from '$lib/motion';
+import { BodyArt } from './art';
 import { CameraRig } from './camera';
 import { createLoop } from './loop';
 import { TAP_SLOP_PX, nearestOnScreen, projectToScreen, type Viewport } from './pick';
@@ -77,6 +78,8 @@ export interface MountOptions {
 	/** Where the zoom now sits, 0–1, after a gesture or a flight moved the camera. */
 	onzoom(value: number): void;
 	onstate(state: RendererState): void;
+	/** The hidden SVG of the dial body a `SceneGoal.art` key names, drawn by the page. */
+	art?: (key: string) => SVGSVGElement | null;
 	/** Elements over the view that labels must not be drawn across, such as the zoom. */
 	avoid?: () => readonly Element[];
 }
@@ -142,6 +145,9 @@ export function mountUniverse(
 	let animate = motionAllowed();
 	const rig = new CameraRig(canvas, animate);
 	const glow: Texture = glowTexture();
+	// The dial's bodies, drawn from the page's hidden SVGs; each asks for a frame
+	// once its pixels are in, since nothing else would.
+	const art = new BodyArt(options.art ?? (() => null), () => loop.request());
 
 	let input = initial;
 	let viewport: Viewport = { width: 1, height: 1, tanHalfFov: Math.tan(Math.PI / 7.2) };
@@ -170,6 +176,7 @@ export function mountUniverse(
 		}
 		universe = buildScene(input.tree, input.goals, {
 			glow,
+			art,
 			pixelRatio,
 			viewport,
 			labelLayer: labels.domElement,
@@ -492,6 +499,7 @@ export function mountUniverse(
 		// The same tree, drawn again from scratch: every buffer and texture the
 		// old context held is gone with it.
 		glow.needsUpdate = true;
+		art.reset();
 		build(false);
 		universe.resize(viewport);
 		loop.pause('lost', false);
@@ -570,6 +578,7 @@ export function mountUniverse(
 			rig.dispose();
 			universe.dispose();
 			glow.dispose();
+			art.dispose();
 			renderer.dispose();
 			canvas.remove();
 			labels.domElement.remove();

@@ -2,7 +2,6 @@ import {
 	AdditiveBlending,
 	AmbientLight,
 	BackSide,
-	BoxGeometry,
 	BufferGeometry,
 	CanvasTexture,
 	Color,
@@ -32,11 +31,11 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { bodyVariant } from '$domain/bodies';
 import { hash } from '$domain/hash';
 import { TIER_DEFINITIONS, isTier } from '$domain/tiers';
 import type { DriftBand } from '$domain/asteroids';
 import type { UniverseNode, UniverseTree } from '$domain/universe';
+import type { BodyArt } from './art';
 import { projectToScreen, type Viewport } from './pick';
 
 /**
@@ -62,6 +61,8 @@ import { projectToScreen, type Viewport } from './pick';
 export interface SceneGoal {
 	title: string;
 	color: string;
+	/** Which of the dial's bodies this goal flies, as a key into `BodyArt`. */
+	art: string;
 	/** Rounded, as the dial's own text says it. */
 	percent: number;
 }
@@ -90,6 +91,8 @@ export interface SceneNode {
 	lapStart: number | null;
 	/** A closing being drawn on this body, if any. */
 	burst: Group | null;
+	/** The dial's drawing on a billboard, for a goal; null for an anchor. */
+	sprite: Sprite | null;
 }
 
 export interface SceneRock {
@@ -169,8 +172,25 @@ class Builder {
 
 	constructor(
 		readonly glow: Texture,
-		readonly pixelRatio: number
+		readonly pixelRatio: number,
+		readonly art: BodyArt
 	) {}
+
+	/**
+	 * The goal's own body from its dial, on a billboard that always faces the
+	 * camera. The drawings fill a circle of radius 1 inside a 4-wide square —
+	 * room for rings and panels — so the sprite is four body radii across.
+	 */
+	body(node: UniverseNode, goal: SceneGoal | null): Sprite | null {
+		const map = goal ? this.art.texture(goal.art) : null;
+		if (!map) return null;
+		const sprite = new Sprite(
+			new SpriteMaterial({ map, transparent: true, depthWrite: false, alphaTest: 0.02 })
+		);
+		sprite.scale.setScalar(node.bodyRadius * 4);
+		sprite.userData.body = true;
+		return sprite;
+	}
 
 	/** A glow held at a pixel radius however far away the camera is. */
 	halo(color: Color | string | number, pixels: number, opacity = 1): Sprite {
@@ -224,49 +244,29 @@ class Builder {
 	}
 }
 
-/** The body at a node's centre. Ported from the prototype's stand-ins, kind by kind. */
+/**
+ * The body at a node's centre. A goal's is its dial's own drawing (see
+ * `art.ts`), with the scale's scenery around it — a galaxy's particle disc, a
+ * universe's shell — and a glow held at a pixel size so it is never lost to
+ * distance. Anchors are grey scenery and have no dial to borrow from.
+ */
 function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Group {
 	const group = new Group();
 	const radius = node.bodyRadius;
 	const color = new Color(goal?.color ?? '#9aa0b4');
 	const white = new Color('#ffffff');
 
+	const body = build.body(node, goal);
+
 	switch (node.kind) {
-		case 'satellite': {
-			const hull = new MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.4 });
-			group.add(new Mesh(new BoxGeometry(radius, radius, radius), hull));
-			const panel = new MeshStandardMaterial({
-				color: 0x1e3a8a,
-				emissive: color,
-				emissiveIntensity: 0.25
-			});
-			for (const side of [-1, 1]) {
-				const wing = new Mesh(new BoxGeometry(radius * 1.4, radius * 0.08, radius * 0.6), panel);
-				wing.position.x = side * radius * 1.25;
-				group.add(wing);
-			}
-			group.add(build.halo(color, 12, 0.9));
+		case 'satellite':
+			if (body) group.add(body);
+			group.add(build.halo(color, 12, 0.45));
 			break;
-		}
-		case 'planet': {
-			group.add(
-				new Mesh(
-					new SphereGeometry(radius, 32, 16),
-					new MeshStandardMaterial({ color, roughness: 0.7 })
-				)
-			);
-			// Ringed for one variant in three, pinned by the same hash the dials use.
-			if (node.goalId && bodyVariant('planet', node.goalId) % 3 === 1) {
-				const ring = new Mesh(
-					new RingGeometry(radius * 1.35, radius * 1.9, 48),
-					new MeshBasicMaterial({ color, side: DoubleSide, transparent: true, opacity: 0.55 })
-				);
-				ring.rotation.x = Math.PI / 2.4;
-				group.add(ring);
-			}
-			group.add(build.halo(color, 16, 0.7));
+		case 'planet':
+			if (body) group.add(body);
+			group.add(build.halo(color, 16, 0.4));
 			break;
-		}
 		case 'dwarf': {
 			group.add(
 				new Mesh(
@@ -277,19 +277,20 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Gr
 			group.add(build.halo(0x9aa0b4, 7, 0.35));
 			break;
 		}
-		case 'star':
-		case 'starSystem': {
-			const anchor = node.kind === 'star';
-			const tint = anchor ? new Color(ANCHOR_STAR) : color;
+		case 'star': {
+			// An anchor star is a dim, colourless one: lit enough to orbit, not
+			// enough to be mistaken for a goal.
+			const tint = new Color(ANCHOR_STAR);
 			group.add(
-				new Mesh(
-					new SphereGeometry(anchor ? radius * 0.6 : radius, 32, 16),
-					new MeshBasicMaterial({ color: anchor ? tint : tint.clone().lerp(white, 0.45) })
-				)
+				new Mesh(new SphereGeometry(radius * 0.6, 32, 16), new MeshBasicMaterial({ color: tint }))
 			);
-			group.add(build.halo(tint, anchor ? 22 : 34, anchor ? 0.45 : 0.95));
+			group.add(build.halo(tint, 22, 0.45));
 			break;
 		}
+		case 'starSystem':
+			if (body) group.add(body);
+			group.add(build.halo(color, 34, 0.5));
+			break;
 		case 'galaxy':
 		case 'core': {
 			const anchor = node.kind === 'core';
@@ -309,7 +310,8 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Gr
 				);
 			}
 			group.add(build.pointCloud(positions, tint, 1.6, anchor ? 0.28 : 0.5));
-			group.add(build.halo(tint.clone().lerp(white, 0.4), anchor ? 22 : 30, 0.8));
+			if (body) group.add(body);
+			group.add(build.halo(tint.clone().lerp(white, 0.4), anchor ? 22 : 30, anchor ? 0.8 : 0.6));
 			break;
 		}
 		case 'universe':
@@ -339,6 +341,7 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Gr
 			);
 			skin.userData.shell = true;
 			group.add(wire, skin, build.halo(tint, anchor ? 24 : 34, anchor ? 0.35 : 0.7));
+			if (body) group.add(body);
 			break;
 		}
 		case 'cluster':
@@ -369,6 +372,7 @@ function labelFor(goal: SceneGoal): CSS2DObject {
 
 export interface BuildOptions {
 	glow: Texture;
+	art: BodyArt;
 	pixelRatio: number;
 	viewport: Viewport;
 	/** Where to measure labels before they are first shown. */
@@ -391,7 +395,7 @@ export function buildScene(
 	sunlight.position.set(1, 1.4, 0.8);
 	scene.add(sunlight);
 
-	const build = new Builder(options.glow, options.pixelRatio);
+	const build = new Builder(options.glow, options.pixelRatio, options.art);
 	const byId = new Map<string, SceneNode>();
 	const byGoal = new Map<string, SceneNode>();
 	const everything: SceneNode[] = [];
@@ -434,7 +438,9 @@ export function buildScene(
 			shown: from,
 			sweep: from !== target ? { from, to: target, start: options.now } : null,
 			lapStart: node.closed && from === target ? (before?.lapStart ?? options.now) : null,
-			burst: null
+			burst: null,
+			sprite:
+				(body.children.find((child) => child.userData.body === true) as Sprite | undefined) ?? null
 		};
 		byId.set(node.id, entry);
 		if (node.goalId) byGoal.set(node.goalId, entry);
@@ -640,6 +646,20 @@ const hostAt = new Vector3();
 const nodeAt = new Vector3();
 const eyeTo = new Vector3();
 
+/**
+ * The smallest a goal's drawing is ever shown, in pixels across its billboard
+ * (twice the body itself, which fills the middle half). The drawing is the
+ * dial's, and a dial's body is never a speck: under this, a planet a few
+ * scene units wide would be two pixels of colour lost in its own glow.
+ */
+export const MIN_BODY_PX: Record<string, number> = {
+	satellite: 22,
+	planet: 30,
+	starSystem: 38,
+	galaxy: 46,
+	universe: 54
+};
+
 /** Under this many pixels from its host, a system folds into its host's glow (decision 6). */
 export const FOLD_PX = 12;
 /** A label needs this much room from its host before it is worth reading (decision 9). */
@@ -673,8 +693,14 @@ export function levelOfDetail(
 ): void {
 	const eye = camera.position;
 
+	const worldPerPixelAtUnit = (2 * viewport.tanHalfFov) / viewport.height;
 	for (const entry of universe.everything) {
 		entry.holder.getWorldPosition(nodeAt);
+		if (entry.sprite) {
+			const least =
+				(MIN_BODY_PX[entry.node.kind] ?? 0) * worldPerPixelAtUnit * eye.distanceTo(nodeAt);
+			entry.sprite.scale.setScalar(Math.max(entry.node.bodyRadius * 4, least));
+		}
 		if (entry.host) {
 			entry.host.holder.getWorldPosition(hostAt);
 			const a = projectToScreen(hostAt, camera, viewport);

@@ -1,20 +1,16 @@
 <script lang="ts">
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import { resolve } from '$app/paths';
+	import AsteroidSheet from '$components/AsteroidSheet.svelte';
+	import TierBody from '$components/TierBody.svelte';
 	import { celebration } from '$lib/celebration.svelte';
-	import { driftAge, driftBand, type Asteroid } from '$domain/asteroids';
-	import { orbitStanding, type GoalSnapshot } from '$domain/progress';
-	import { TIER_DEFINITIONS } from '$domain/tiers';
+	import type { Asteroid } from '$domain/asteroids';
+	import { bodyVariant } from '$domain/bodies';
+	import type { GoalSnapshot } from '$domain/progress';
+	import type { Tier } from '$domain/tiers';
 	import { universeTree } from '$domain/universe';
 	// Types only: erased at build, so nothing here pulls three into this chunk.
-	import type {
-		Closing,
-		Picked,
-		SceneGoal,
-		UniverseInput,
-		UniverseView,
-		ZoomStop
-	} from '$lib/universe';
+	import type { Closing, SceneGoal, UniverseInput, UniverseView, ZoomStop } from '$lib/universe';
 
 	/**
 	 * The universe view (#11): every goal in one sky you can fly.
@@ -26,10 +22,16 @@
 	 * the note and the list below, which is the universe in words and the
 	 * keyboard's way in (decision 15).
 	 *
-	 * Logging never happens here. A tap shows a card whose Open asks the page
-	 * for the one `GoalRowSheet` it already holds — the same sheet the list rows
-	 * open — so a closing logged from the universe bursts in that sheet's own
-	 * dial, and the universe only lights the ring (decision 12).
+	 * Logging never happens on the canvas itself. A tap on a goal's body flies
+	 * there and asks the page for the one `GoalRowSheet` it already holds — the
+	 * same sheet the list rows open — so a closing logged from the universe
+	 * bursts in that sheet's own dial, and the universe only lights the ring
+	 * (decision 12). A tap on a rock opens the belt's own `AsteroidSheet`, whose
+	 * endings post to Today's actions exactly as they do from Today.
+	 *
+	 * Each goal's body is the drawing its dial flies: the page renders every
+	 * distinct `TierBody` once, hidden, and the renderer copies it onto a
+	 * billboard (see `$lib/universe/art.ts`).
 	 */
 
 	interface Props {
@@ -47,7 +49,6 @@
 
 	let { snapshots, asteroids, now, onopen, covered, children }: Props = $props();
 
-	const DAY_MS = 24 * 60 * 60 * 1000;
 	/** The slider's range. Stops sit evenly across it; the renderer thinks in 0–1. */
 	const ZOOM_STEPS = 100;
 	/** Tabbing down the list should not send the camera on a tour (decision 15). */
@@ -66,7 +67,34 @@
 		return chain;
 	});
 
-	/** What the tree does not carry: each goal's words and colour. */
+	/** One of the dial's bodies: which drawing, in which colour, lit or not. */
+	interface BodyArt {
+		key: string;
+		tier: Tier;
+		variant: number;
+		color: string;
+		dormant: boolean;
+	}
+
+	function artFor(snapshot: GoalSnapshot): BodyArt {
+		const { goal } = snapshot;
+		const variant = bodyVariant(goal.tier, goal.id);
+		const dormant = snapshot.current.dormant;
+		return {
+			key: `${goal.tier}-${variant}-${goal.color}-${dormant ? 'dormant' : 'lit'}`,
+			tier: goal.tier,
+			variant,
+			color: goal.color,
+			dormant
+		};
+	}
+
+	/** Every distinct body once: six goals flying the same drawing share one texture. */
+	const bodies = $derived([
+		...new Map(snapshots.map((snapshot) => artFor(snapshot)).map((art) => [art.key, art])).values()
+	]);
+
+	/** What the tree does not carry: each goal's words, colour and body. */
 	const goals = $derived(
 		Object.fromEntries(
 			snapshots.map((snapshot): [string, SceneGoal] => [
@@ -74,7 +102,8 @@
 				{
 					title: snapshot.goal.title,
 					color: snapshot.goal.color,
-					percent: Math.round(snapshot.current.ratio * 100)
+					percent: Math.round(snapshot.current.ratio * 100),
+					art: artFor(snapshot).key
 				}
 			])
 		)
@@ -95,8 +124,16 @@
 	let viewState = $state<ViewState>('loading');
 	let stage = $state<HTMLDivElement>();
 	let zoomElement = $state<HTMLDivElement>();
+	let atlas = $state<HTMLDivElement>();
 	let view = $state.raw<UniverseView | null>(null);
-	let picked = $state<Picked | null>(null);
+	/** The rock whose sheet is open, from a tap on the belt. */
+	let openRockId = $state<string | null>(null);
+	const openRock = $derived(asteroids.find((rock) => rock.id === openRockId) ?? null);
+	const beltActions = {
+		clear: `${resolve('/today')}?/clearAsteroid`,
+		edit: `${resolve('/today')}?/editAsteroid`,
+		release: `${resolve('/today')}?/releaseAsteroid`
+	};
 
 	onMount(() => {
 		let cancelled = false;
@@ -107,9 +144,13 @@
 				if (cancelled || !stage) return;
 				view = mountUniverse(stage, input, {
 					zoom: zoom / ZOOM_STEPS,
+					// A tap opens the sheet: a goal's is the page's, a rock's is ours.
 					onpick(next) {
-						picked = next;
+						if (next?.kind === 'goal') onopen(next.goalId);
+						else if (next?.kind === 'rock') openRockId = next.id;
 					},
+					art: (key) =>
+						atlas?.querySelector<SVGSVGElement>(`svg[data-art="${CSS.escape(key)}"]`) ?? null,
 					onzoom(value) {
 						zoom = Math.round(value * ZOOM_STEPS);
 					},
@@ -165,7 +206,7 @@
 	});
 
 	$effect(() => {
-		const isCovered = covered;
+		const isCovered = covered || openRock !== null;
 		if (viewState !== 'ready' || !view) return;
 		view.setCovered(isCovered);
 	});
@@ -178,36 +219,7 @@
 
 	function onZoomInput(event: Event) {
 		zoom = Number((event.currentTarget as HTMLInputElement).value);
-		picked = null;
 		view?.zoomTo(zoom / ZOOM_STEPS);
-	}
-
-	/* The card: a goal's standing, or what a rock is and how long it has drifted. */
-	const pickedGoal = $derived.by(() => {
-		const current = picked;
-		if (current?.kind !== 'goal') return null;
-		return snapshots.find((snapshot) => snapshot.goal.id === current.goalId) ?? null;
-	});
-	const pickedRock = $derived.by(() => {
-		const current = picked;
-		if (current?.kind !== 'rock') return null;
-		return asteroids.find((rock) => rock.id === current.id) ?? null;
-	});
-	const orbiting = $derived(
-		pickedGoal
-			? snapshots.filter((snapshot) => snapshot.goal.parentId === pickedGoal.goal.id).length
-			: 0
-	);
-
-	function sentence(text: string): string {
-		return text.charAt(0).toUpperCase() + text.slice(1);
-	}
-
-	const BAND_WORDS = { fresh: 'fresh', drifting: 'drifting', faint: 'at the edge of the belt' };
-
-	function rockStanding(rock: Asteroid): string {
-		const days = Math.floor(driftAge(rock, now) / DAY_MS);
-		return `Untouched ${days} ${days === 1 ? 'day' : 'days'} · ${BAND_WORDS[driftBand(rock, now)]}`;
 	}
 
 	/**
@@ -263,37 +275,33 @@
 				/>
 			</div>
 		{/if}
-
-		{#if pickedGoal}
-			{@const tier = TIER_DEFINITIONS[pickedGoal.goal.tier]}
-			<div class="card" style="--tier: {tier.accent}">
-				<div class="card__row">
-					<div>
-						<div class="card__tier">{tier.label}</div>
-						<div class="card__title">{pickedGoal.goal.title}</div>
-					</div>
-					<button type="button" class="button" onclick={() => onopen(pickedGoal.goal.id)}>
-						Open
-					</button>
-				</div>
-				<p class="card__standing">
-					{sentence(orbitStanding(pickedGoal.current))}{#if orbiting > 0}
-						· {orbiting} {orbiting === 1 ? 'goal orbits' : 'goals orbit'} it{/if}
-				</p>
-			</div>
-		{:else if pickedRock}
-			<div class="card" style="--tier: #d6c6a4">
-				<div class="card__row">
-					<div>
-						<div class="card__tier">Asteroid</div>
-						<div class="card__title">{pickedRock.title}</div>
-					</div>
-					<a class="button" href="{resolve('/today')}#belt">Open in Today</a>
-				</div>
-				<p class="card__standing">{rockStanding(pickedRock)}</p>
-			</div>
-		{/if}
 	</div>
+
+	<!-- The dial's bodies, drawn once each for the renderer to copy. Never seen:
+	     the canvas shows them. -->
+	<div class="universe__art" bind:this={atlas} aria-hidden="true">
+		{#each bodies as body (body.key)}
+			<svg data-art={body.key} viewBox="-2 -2 4 4" style="--color: {body.color}">
+				<TierBody
+					tier={body.tier}
+					variant={body.variant}
+					cx={0}
+					cy={0}
+					r={1}
+					dormant={body.dormant}
+				/>
+			</svg>
+		{/each}
+	</div>
+
+	<AsteroidSheet
+		asteroid={openRock}
+		{now}
+		clearAction={beltActions.clear}
+		editAction={beltActions.edit}
+		releaseAction={beltActions.release}
+		onclose={() => (openRockId = null)}
+	/>
 
 	<p class="visually-hidden" role="status" aria-live="polite">{announcement}</p>
 
@@ -420,50 +428,23 @@
 		color: var(--text-bright);
 	}
 
-	/* Over the top of the view, clear of the zoom below it — the bottom
-	   corner is where the floating quick-add sits on a phone. */
-	.card {
-		backdrop-filter: blur(6px);
-		background: var(--space-surface);
-		border: 1px solid var(--space-border);
-		border-radius: var(--radius-lg);
-		display: grid;
-		gap: 0.2rem;
-		left: 12px;
-		padding: 0.7rem 0.9rem;
+	/* Out of sight and out of the flow, but laid out and styled, so the
+	   renderer can read each drawing's paint. Still, so it reads a rest pose
+	   rather than wherever an animation happened to be. */
+	.universe__art {
+		height: 0;
+		overflow: hidden;
 		position: absolute;
-		right: 12px;
-		top: 12px;
+		width: 0;
 	}
 
-	.card__row {
-		align-items: center;
-		display: flex;
-		gap: 0.6rem;
-		justify-content: space-between;
+	.universe__art svg {
+		height: 64px;
+		width: 64px;
 	}
 
-	.card__row .button {
-		flex: none;
-		white-space: nowrap;
-	}
-
-	.card__title {
-		color: var(--text-bright);
-		font-weight: 650;
-	}
-
-	.card__tier {
-		color: var(--tier);
-		font-size: 0.7rem;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-	}
-
-	.card__standing {
-		color: var(--text-dim);
-		font-size: var(--text-secondary);
-		margin: 0;
+	.universe__art :global(*) {
+		animation: none !important;
 	}
 
 	.universe__note {

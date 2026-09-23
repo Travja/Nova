@@ -119,22 +119,18 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	await page.waitForTimeout(1000);
 	expect(await frames(page), 'a still universe drew frames').toBe(before);
 
-	// An axe pass over the view, with the card and zoom showing.
-	await tap(page, reading);
-	const card = view.locator('.card');
-	await expect(card).toContainText('Read pages');
-	await expect(card).toContainText('0% of target logged');
-	await settled(page);
+	// An axe pass over the view, the zoom and the list.
 	const results = await new AxeBuilder({ page })
 		.include('.universe')
 		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
 		.analyze();
 	expect(results.violations.map((violation) => violation.id)).toEqual([]);
 
-	// Open is the list row's own sheet; log the whole target from it.
-	await card.getByRole('button', { name: 'Open' }).click();
-	const sheet = page.getByRole('dialog');
+	// A tap on a body opens the list row's own sheet; log the whole target from it.
+	await tap(page, reading);
+	const sheet = page.getByRole('dialog', { name: /Read pages/ });
 	await expect(sheet).toBeVisible();
+	await expect(sheet).toContainText('Read pages');
 	await sheet.getByLabel(/^Amount/).fill('20');
 	await sheet.getByRole('button', { name: 'Log it' }).click();
 
@@ -156,20 +152,18 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	await zoom.focus();
 	await page.keyboard.press('End');
 	await expect(zoom).toHaveAttribute('aria-valuetext', 'Multiverse');
-	await expect(card).toHaveCount(0);
 	await page.keyboard.press('Home');
 	await expect(zoom).toHaveAttribute('aria-valuetext', 'Home');
 
-	// A rock: its card says what it is and sends you to Today.
+	// A rock opens the belt's own sheet, whose endings are Today's.
 	await settled(page);
 	const [rock] = await page.evaluate(() => window.__novaUniverse?.rocks() ?? []);
 	await tap(page, rock);
-	await expect(card).toContainText('Asteroid');
-	await expect(card).toContainText('Renew passport');
-	await expect(card.getByRole('link', { name: 'Open in Today' })).toHaveAttribute(
-		'href',
-		'/today#belt'
-	);
+	const rockSheet = page.getByRole('dialog', { name: /Renew passport/ });
+	await expect(rockSheet).toBeVisible();
+	await expect(rockSheet.getByRole('button', { name: /Done — finish this one/ })).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(rockSheet).toBeHidden();
 
 	// Keyboard focus on a row flies the camera there. From Multiverse the goal
 	// is folded into its host's glow and not drawn at all; after the flight it
@@ -225,9 +219,9 @@ test('under reduced motion a closed orbit waits at its start mark and draws no f
 	await page.waitForTimeout(1000);
 	expect(await frames(page), 'a closed body lapped under reduced motion').toBe(before);
 
-	// The still universe still says everything: the orbit reads closed.
+	// The still universe still says everything: its sheet reads closed.
 	await tap(page, flossing);
-	await expect(page.locator('.universe__view .card')).toContainText('Orbit closed');
+	await expect(page.getByRole('dialog', { name: /Floss/ })).toContainText(/closed/i);
 	await context.close();
 });
 

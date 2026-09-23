@@ -124,13 +124,21 @@ Rejected:
 
 ### 2. Hosts: what each goal orbits
 
-| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                                       |
-| ----------- | --------------------------------- | ----------------------------- | -------------------------------------------------------------- |
-| Satellite   | its parent                        | a **dwarf planet** anchor     | a small craft, its glow held at 12px                           |
-| Planet      | its parent                        | a **star** anchor             | a sphere, ringed for one variant in three                      |
-| Star System | its parent                        | a **galactic core** anchor    | a star in the goal's colour, its own system round it           |
-| Galaxy      | its parent                        | a **cluster** anchor          | a two-armed particle disc wrapping its children                |
-| Universe    | —                                 | the **multiverse barycentre** | a faint shell wrapping its children, the largest body there is |
+| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                                    |
+| ----------- | --------------------------------- | ----------------------------- | ----------------------------------------------------------- |
+| Satellite   | its parent                        | a **dwarf planet** anchor     | its dial's body, its glow held at 12px                      |
+| Planet      | its parent                        | a **star** anchor             | its dial's body                                             |
+| Star System | its parent                        | a **galactic core** anchor    | its dial's body, its own system round it                    |
+| Galaxy      | its parent                        | a **cluster** anchor          | its dial's body in a two-armed particle disc                |
+| Universe    | —                                 | the **multiverse barycentre** | its dial's body in a faint shell, the largest body there is |
+
+**A goal's body is its dial's body.** The page renders each distinct `TierBody`
+(#10) once, hidden, with the variant `bodyVariant` pins to the goal and the
+goal's colour; the renderer copies that drawing onto a billboard that always
+faces the camera, as the flat drawing always faces the reader. One drawing of each
+body, not a 3D set that would drift from it. The billboard never shrinks below a
+tier's minimum pixel size, so the drawing reads rather than dissolving into its
+glow.
 
 And the anchors themselves: a dwarf planet orbits a star anchor, a star a
 galactic-core anchor, a core a cluster, a cluster the **home universe**, and the
@@ -315,24 +323,28 @@ Rejected:
   and a second control scheme to learn.
 - **A remembered camera.**
 
-### 8. Tapping: fly to it and show a card
+### 8. Tapping: open its sheet
 
 **A tap — a pointer that went down and up within 6px — picks the nearest goal
-body or asteroid within 24px on screen, flies to it (decision 7), and shows a card
-over the bottom of the view.** Anchors are never candidates. Nearest on screen
-rather than a ray cast, because most bodies are a few pixels across and a ray has
-to hit them exactly.
+body or asteroid within 24px on screen and opens its sheet.** Anchors are never
+candidates. Nearest on screen rather than a ray cast, because most bodies are a
+few pixels across and a ray has to hit them exactly.
 
-- **A goal's card:** tier, title, `orbitStanding()`-style standing, and "N goals
-  orbit it" for a parent, with **Open**, which opens `GoalRowSheet` for that goal
-  — the same sheet the list rows open, where logging happens.
-- **An asteroid's card:** "Asteroid", its title, "Untouched N days · drifting",
-  and **Open in Today**, which goes to `/today#belt`. The camera does not fly to a
-  rock; it is shown where it is (decision 12).
-- **A tap on nothing** closes the card.
+- **A goal** opens `GoalRowSheet` for that goal — the same sheet the list rows
+  open, where logging happens — and the camera flies to it behind the sheet
+  (decision 7), so closing the sheet leaves the goal framed.
+- **An asteroid** opens `AsteroidSheet`, the belt's own sheet from `/today`, whose
+  endings post to Today's actions exactly as they do from Today. The camera does
+  not fly to a rock; it is shown where it is.
+- **A tap on nothing** does nothing.
 
-Nothing is logged from the universe itself. A second log surface on a 5px target
-is a mis-tap generator.
+The build first put a card between the tap and the sheet (tier, title, standing,
+an **Open** button). It was one more tap for nothing the sheet does not already
+say, and the rock's card could only send you away to Today, so the tap opens the
+sheet directly.
+
+Nothing is logged from the canvas itself: the sheet logs, on targets sized for a
+finger.
 
 ### 9. Labels: the title beside the body, when there is room
 
@@ -446,10 +458,10 @@ a rock tapped (the prototype's `&view=belt` exists for that screenshot).
 - **Only active asteroids.** Done ones live in the fold on `/today`, captured ones
   are already here as the goal they became, released ones are in no view (#30,
   decision 4).
-- **Tappable, not actionable.** A rock's card says what it is and how long it has
-  drifted, and sends you to `/today#belt`. Done, release and capture stay on
-  `/today`, where #30 put them at two taps each; the universe is not a second home
-  for the belt.
+- **Tappable, through the belt's own sheet.** A rock opens the same
+  `AsteroidSheet` that `/today` opens, posting to `/today`'s actions — so the belt
+  still has one set of endings, reached from a second place, and finishing a rock
+  lands on Today, where the capture offer is shown.
 
 ### 14. The toggle: an account preference, `dashboard`
 
@@ -646,9 +658,10 @@ it.
 
 ### Components and route
 
-- `$components/Universe.svelte` — the view container, zoom, card, live region and
-  note; dynamically imports `src/lib/universe` in `onMount`; holds `openGoalId` for
-  the one `GoalRowSheet`.
+- `$components/Universe.svelte` — the view container, zoom, live region, note,
+  the hidden `TierBody` drawings the renderer copies, and the belt's
+  `AsteroidSheet`; dynamically imports `src/lib/universe` in `onMount`; asks the
+  page, which holds `openGoalId`, for the one `GoalRowSheet`.
 - `/+page.server.ts` loads `listAsteroids(locals.user.id)` when the preference is
   `universe`, and adds the `view` action.
 - `/+page.svelte` renders `Universe` and the nested `GoalRow` list in place of the
@@ -693,10 +706,10 @@ it.
 - Two goals at the same progress round the same host never overlap.
 - Forty goals: every one is reachable and readable from Home, Galaxy or by
   tapping, on a 390px screen.
-- Tapping a body flies to it and shows its card; Open opens the same sheet as its
-  list row; a closing logged there bursts in the sheet, which stays open.
+- Tapping a body opens the same sheet as its list row and flies to it behind the
+  sheet; a closing logged there bursts in the sheet, which stays open.
 - Active asteroids are a belt round the home star, drifted ones further out and
-  dimmer, and tapping one says what it is and links to Today.
+  dimmer, and tapping one opens the belt's own sheet, with Today's endings.
 - Under reduced motion nothing moves by itself and the universe says everything it
   says when moving.
 - Without WebGL the page is the list, with a sentence saying why.
