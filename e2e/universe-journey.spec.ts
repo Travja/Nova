@@ -78,6 +78,9 @@ async function tap(page: Page, id: string) {
 test('switches to the universe, taps a body, logs from its sheet, zooms out and back, and switches back', async ({
 	page
 }) => {
+	// One long journey through every part of the view, drawn by a software GPU
+	// — on a CI runner, a slow one — so it gets more than the default 30s.
+	test.setTimeout(90_000);
 	const renderer: string[] = [];
 	page.on('request', (request) => {
 		if (RENDERER.test(new URL(request.url()).pathname)) renderer.push(request.url());
@@ -165,13 +168,18 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 		.poll(() => page.evaluate(() => window.__novaUniverse?.celebrated()), { timeout: 10_000 })
 		.toBe(reading);
 
-	// A closed orbit keeps circling, so now the loop runs on its own.
+	// A closed orbit keeps circling, so now the loop runs on its own. How many
+	// frames that comes to depends on the GPU — a CI runner's software one
+	// manages a handful a second — so this asks that frames keep coming, not
+	// how fast.
 	await settled(page);
 	const lapping = await frames(page);
-	await page.waitForTimeout(500);
-	expect(await frames(page), 'a closed body on screen stopped lapping').toBeGreaterThan(
-		lapping + 5
-	);
+	await expect
+		.poll(() => frames(page), {
+			message: 'a closed body on screen stopped lapping',
+			timeout: 10_000
+		})
+		.toBeGreaterThan(lapping + 3);
 
 	// The zoom, from a keyboard: Home to Multiverse and back.
 	await zoom.focus();
