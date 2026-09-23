@@ -84,11 +84,14 @@ test('switches to Universe with JavaScript disabled, sees the nested tree, and s
 		'aria-pressed',
 		'true'
 	);
-	// No canvas without a script to draw it: a sentence says so, and the zoom
-	// is there because the server renders it.
-	await expect(
-		noScriptPage.getByText('The universe needs JavaScript — every goal is listed below.')
-	).toBeVisible();
+	// No canvas without a script to draw it, and a sentence saying so. It is a
+	// `<noscript>`, which Playwright's no-JavaScript mode does not display —
+	// it stops scripts without telling the parser — so the markup is what can
+	// be checked here.
+	await expect(noScriptPage.locator('.universe__view noscript')).toHaveCount(1);
+	expect(await noScriptPage.locator('.universe__view noscript').textContent()).toContain(
+		'The universe needs JavaScript — every goal is listed below.'
+	);
 	await expect(noScriptPage.locator('.universe__view canvas')).toHaveCount(0);
 
 	// The list is the universe in words: the daily goal nests under the weekly
