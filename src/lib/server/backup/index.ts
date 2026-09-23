@@ -103,16 +103,33 @@ function backupNow(config: BackupConfig): void {
 	}
 }
 
+function formatDuration(ms: number): string {
+	const minutes = Math.round(ms / 60_000);
+	if (minutes < 60) return `${minutes}m`;
+	return `${Math.round(minutes / 60)}h`;
+}
+
 /**
- * Starts the interval. Idempotent, and the timer is unref'd so it never holds
- * the process open on shutdown.
+ * Starts the schedule. Idempotent, and every timer is unref'd so it never
+ * holds the process open on shutdown.
  *
- * The interval starts from launch, so a container that restarts more often than
- * the interval may never take one. Catching up on boot — snapshot immediately
- * when the newest one is older than the interval — is issue #29.
+ * The first run is anchored to the newest snapshot on disk, not to launch:
+ * `newest + interval - now`, floored at `FIRST_RUN_DELAY_MS`. That one
+ * expression covers every case — an empty directory or a stale snapshot both
+ * produce a delay at or below the floor, a fresh one waits out the rest of its
+ * interval, and a host that reboots more often than the interval still ends up
+ * snapshotting on a boot rather than never, because the schedule is caught up
+ * against the snapshot instead of restarting from launch every time. Issue #29.
  */
-export function startBackupSchedule(config: BackupConfig = readBackupConfig()): boolean {
+export function startBackupSchedule(
+	config: BackupConfig = readBackupConfig(),
+	now: Date = new Date()
+): boolean {
 	if (!config.enabled || timer) return false;
+
+	const newest = listSnapshots(config.directory)[0]?.takenAt;
+	const remainder = newest === undefined ? -Infinity : newest + config.intervalMs - now.getTime();
+	const delay = Math.max(FIRST_RUN_DELAY_MS, remainder);
 
 	logger.info('backup schedule started', {
 		directory: config.directory,
@@ -120,11 +137,18 @@ export function startBackupSchedule(config: BackupConfig = readBackupConfig()): 
 		keepDaily: config.keepDaily,
 		keepWeekly: config.keepWeekly
 	});
+	logger.info(
+		`next backup in ${formatDuration(delay)} (last snapshot ${newest === undefined ? 'never' : `${formatDuration(now.getTime() - newest)} ago`})`,
+		{ delayMs: delay, lastSnapshotMs: newest === undefined ? null : now.getTime() - newest }
+	);
 
-	const first = setTimeout(() => backupNow(config), FIRST_RUN_DELAY_MS);
+	const first = setTimeout(() => {
+		backupNow(config);
+		timer = setInterval(() => backupNow(config), config.intervalMs);
+		timer.unref?.();
+	}, delay);
 	first.unref?.();
-	timer = setInterval(() => backupNow(config), config.intervalMs);
-	timer.unref?.();
+	timer = first;
 	return true;
 }
 
