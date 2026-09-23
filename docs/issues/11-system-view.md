@@ -25,11 +25,13 @@ The prototype this spec was written against is
 — one file, three.js from the CDN, open it in a browser and drag it around. The
 screenshots are it, rendered at 390px by the script beside it.
 
-| 5 goals, home system                                          | 12 goals, everything                                                              | 40 goals, galaxy                                                                |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| ![5 goals](../screenshots/11-system-view/universe-5.png)      | ![12 goals, zoomed out](../screenshots/11-system-view/universe-12-everything.png) | ![40 goals, galaxy scale](../screenshots/11-system-view/universe-40-galaxy.png) |
-| **Tap a star system**                                         | **The belt, a rock tapped**                                                       | **A closing**                                                                   |
-| ![Focus](../screenshots/11-system-view/universe-12-focus.png) | ![Belt](../screenshots/11-system-view/universe-12-belt.png)                       | ![Closing](../screenshots/11-system-view/universe-12-closing.png)               |
+| 5 goals, home                                                 | 12 goals, universe scale                                            | 12 goals, multiverse                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| ![5 goals](../screenshots/11-system-view/universe-5.png)      | ![Universe](../screenshots/11-system-view/universe-12-universe.png) | ![Multiverse](../screenshots/11-system-view/universe-12-multiverse.png)    |
+| **Tap a star system**                                         | **The belt, a rock tapped**                                         | **A closing**                                                              |
+| ![Focus](../screenshots/11-system-view/universe-12-focus.png) | ![Belt](../screenshots/11-system-view/universe-12-belt.png)         | ![Closing](../screenshots/11-system-view/universe-12-closing.png)          |
+| **40 goals, home**                                            | **40 goals, galaxy**                                                | **40 goals, multiverse**                                                   |
+| ![40 home](../screenshots/11-system-view/universe-40.png)     | ![40 galaxy](../screenshots/11-system-view/universe-40-galaxy.png)  | ![40 multiverse](../screenshots/11-system-view/universe-40-multiverse.png) |
 
 ## What the universe is
 
@@ -42,15 +44,20 @@ definition already says it orbits (`TIER_DEFINITIONS[tier].orbits`: "a planet",
 "a star", "the galactic core", "a cluster"). Anchors are grey, dim and cannot be
 tapped. They exist so nothing floats.
 
+At the top there is no single centre. Universes — your Universe goals, and the
+home universe all your other goals live in — are bubbles in a **multiverse**,
+orbiting its barycentre: the point their shared gravity balances on, marked by a
+faint light and nothing else.
+
 Every host has its own **orbital plane**, tilted by a seeded angle, so the scene
 is a universe rather than one flat disc. Each child sits on its own **orbit** in
 that plane, at the angle its progress puts it, with a **trail** in the goal's
 colour from a start mark round to the body. Position and fill say the same thing
 twice, exactly as they do on the dial.
 
-The orbits nest across five orders of magnitude — a satellite a fraction of a unit
-from its dwarf planet, a universe hundreds of units from the centre — and the
-camera moves between them. At every scale the thing in front of you is a readable
+The orbits nest across six orders of magnitude — a satellite 0.28 units across,
+a galaxy 240 in radius, a universe 2,600, universes orbiting tens of thousands of
+units from the barycentre — and the camera moves between them. At every scale the thing in front of you is a readable
 system of rings; everything further in is a point of light you can fly into.
 
 ## Decisions
@@ -110,26 +117,53 @@ Rejected:
 
 ### 2. Hosts: what each goal orbits
 
-| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                             |
-| ----------- | --------------------------------- | ----------------------------- | ---------------------------------------------------- |
-| Satellite   | its parent                        | a **dwarf planet** anchor     | a small craft, its glow held at 12px                 |
-| Planet      | its parent                        | a **star** anchor             | a sphere, ringed for one variant in three            |
-| Star System | its parent                        | a **galactic core** anchor    | a star in the goal's colour, its own system round it |
-| Galaxy      | its parent                        | the **cluster** at the centre | a two-armed particle disc wrapping its children      |
-| Universe    | —                                 | the **cluster** at the centre | a wireframe shell, the largest body there is         |
+| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                                       |
+| ----------- | --------------------------------- | ----------------------------- | -------------------------------------------------------------- |
+| Satellite   | its parent                        | a **dwarf planet** anchor     | a small craft, its glow held at 12px                           |
+| Planet      | its parent                        | a **star** anchor             | a sphere, ringed for one variant in three                      |
+| Star System | its parent                        | a **galactic core** anchor    | a star in the goal's colour, its own system round it           |
+| Galaxy      | its parent                        | a **cluster** anchor          | a two-armed particle disc wrapping its children                |
+| Universe    | —                                 | the **multiverse barycentre** | a faint shell wrapping its children, the largest body there is |
 
-And the anchors themselves: a dwarf planet orbits a star anchor, a star anchor a
-galactic-core anchor, and a core the cluster. So a single loose satellite brings
-its dwarf, the dwarf's star, the star's galaxy and the cluster with it — the
-"home" chain — and the first of each anchor kind is what the scale strip
-(decision 7) calls **Home system** and **Galaxy**.
+And the anchors themselves: a dwarf planet orbits a star anchor, a star a
+galactic-core anchor, a core a cluster, a cluster the **home universe**, and the
+home universe the barycentre, beside any Universe goals. So a single loose
+satellite brings its dwarf, star, galaxy, cluster and universe with it — the
+"home" chain — and the first of each is what the zoom (decision 7) calls **Home**,
+**Galaxy** and **Universe**.
+
+**Size follows the rung, not the contents.** Every kind of body has a minimum
+extent (`MIN_EXTENT`), and children can make a host larger but never smaller:
+
+| Kind                            | Minimum radius, scene units |
+| ------------------------------- | --------------------------- |
+| Satellite / dwarf planet        | 0.28 / 0.6                  |
+| Planet / star anchor            | 0.9 / 2.2                   |
+| Star System                     | 14 (room for its planets)   |
+| Galaxy goal and galaxy anchor   | 240                         |
+| Universe goal and home universe | 2,600                       |
+
+So a Galaxy goal with nothing in it is exactly as large as the home galaxy beside
+it, and a universe is more than ten galaxies across even when it is empty
+(`universe-12-universe.png`: the home galaxy and "Ship the side project" are the
+same size, both small inside the home universe's shell). A bigger goal always
+looks physically bigger in the grand scheme, which is the ladder's whole promise.
+The first draft sized hosts by what they held, and an empty Galaxy goal came out
+smaller than the home galaxy full of loose star systems — the opposite of the
+metaphor.
+
+**Why a multiverse.** A Universe goal is the longest cadence there is, and
+drawing it as a body orbiting a point inside another universe undersells it.
+Promoting universes to bubbles that orbit a barycentre keeps each one as big as a
+universe should be and still gives them something to go round.
 
 - **Anchors are scenery.** Grey or desaturated, dimmer than any goal, no trail,
   a whisper of an orbit line, and never candidates for a tap. A goal must never be
   mistakable for one: an anchor star is `#8f8a80` and 0.6 of a goal star's
   radius.
 - **Anchors appear only when needed** and never for their own sake. An account
-  with only Star System goals has a galactic core and a cluster and nothing else.
+  with only Star System goals has a galactic core, a cluster, the home universe and
+  the barycentre, and nothing else.
 - **An anchor takes six loose goals** (`ANCHOR_CAPACITY = 6`). The seventh loose
   satellite gets a second dwarf planet, on the same star. The forty-goal account
   has two dwarfs, two stars and two cores (`universe-40.png`). Six is where a
@@ -194,20 +228,22 @@ is big, and the camera goes to where the goals are.
 
 What is readable where, at 390px (all from the prototype's forty-goal account):
 
-- **Home system** (`universe-40.png`): the home star, its six loose planets, a
+- **Home** (`universe-40.png`): the home star, its six loose planets, a
   dwarf with its satellites, and the belt. Every trail readable, labels on the
   planets.
 - **Galaxy** (`universe-40-galaxy.png`): the home core's star systems, each a lit
   star with its own small system, trails readable, labels on each.
-- **Everything** (`universe-40-everything.png`): galaxies and universes round the
-  cluster. This view is busy at forty and that is acceptable: it is for
-  orientation — where is everything, and which way do I fly — not for reading.
-  Every trail is still there, and labels declutter (decision 9).
+- **Universe** and **Multiverse** (`universe-40-multiverse.png`): the home
+  universe's galaxies, then every universe round the barycentre. These views are
+  busy at forty and that is acceptable: they are for orientation — where is
+  everything, and which way do I fly — not for reading. Every trail is still
+  there, systems too small to see fold into their hosts (decision 6), and labels
+  declutter (decision 9).
 
 The budget that bounds this is draw cost, not space. Forty goals is about sixty
 meshes, a hundred lines and a few thousand points — nothing for a phone GPU.
 Designed and checked to forty; it should hold to a couple of hundred, after which
-"Everything" becomes a smear, which is honest.
+"Multiverse" becomes a smear, which is honest.
 
 Rejected: capping at a dozen (the flat sky's answer, which this design exists to
 get past), and aggregating a tier into one body (an average is a number none of
@@ -221,28 +257,37 @@ the goals has).
 - **Start mark:** a short white tick across the orbit at angle zero, so "how far
   round" has somewhere to count from when you are looking at a tilted ring.
 - **Glow:** every goal body carries an additive glow held at a fixed pixel size —
-  12px for a satellite up to 46px for a universe — so a body a galaxy away is still
+  12px for a satellite up to 34px for a universe — so a body a galaxy away is still
   a point of the right colour and the scene never loses a goal to distance.
+- **Folding in:** a body whose orbit round its host is under 12px on screen is
+  hidden, children and all, and its host's glow stands for it. Glows held at a
+  pixel size would otherwise stack, a dozen deep, into one white blot brighter than
+  anything nearby. Zoom in and the system unfolds.
+- **Shells from inside:** a universe's shell fades out as the camera enters it, so
+  the universe you are in is the space around you and not a wireframe across the
+  view.
 
 All of these are pixel sizes (`LineMaterial` widths are pixels; sprites use
 `sizeAttenuation: false`, scaled from the view's height on resize). This is the
 `CLAUDE.md` rule — size in pixels, not user units, for anything that must keep its
-shape — carried into 3D: a 2.6-unit trail would be invisible at "Everything" and a
-girder at "Home system".
+shape — carried into 3D: a 2.6-unit trail would be invisible at "Multiverse" and a
+girder at "Home".
 
-### 7. Navigation: orbit controls, named places, fly-to
+### 7. Navigation: orbit controls, a zoom slider, fly-to
 
 - **Gestures** are three's `OrbitControls`: one finger turns, pinch zooms toward
   the fingers, two fingers pan; on desktop, wheel zooms toward the cursor and
-  right-drag pans. Damped. Distance clamped to 0.8–60 000 units. The canvas has
-  `touch-action: none`; the page scrolls by the strip above and the list below it.
-- **The scale strip** over the top of the view: **Home system · Belt · Galaxy ·
-  Everything**, real buttons, the current one `aria-current="true"`. Each flies the
-  camera to frame that place. They are the way back from anywhere, and the
-  single-pointer alternative WCAG 2.5.7 asks for, since every gesture above is a
-  drag. A place with nothing in it is not in the strip.
-- **Where it opens:** Home system when there is one — that is where the daily and
-  weekly goals are, which are the ones most often acted on — otherwise Everything.
+  right-drag pans. Damped. Distance clamped to 0.8–2,000,000 units. The canvas has
+  `touch-action: none`; the page scrolls by the header above and the list below.
+- **The zoom** is a vertical slider down the right edge of the view — Home at the
+  bottom, then Galaxy, Universe, and Multiverse at the top — labelled at each stop.
+  Dragging it moves the camera continuously: the target slides along the home
+  chain between stops and the distance moves on a log scale, so each notch is the
+  same factor of zoom among satellites as among universes. Powers of ten, not a
+  menu. A pinch or a wheel moves the slider too, so it always says where you are.
+  A stop with nothing in it is not on the slider.
+- **Where it opens:** Home when there is one — that is where the daily and weekly
+  goals are, which are the ones most often acted on — otherwise Multiverse.
   Always there, not wherever the camera was last: a remembered camera is stale the
   moment goals are added.
 - **Fly-to:** 900ms, ease-in-out, target and eye together. It frames the host's
@@ -253,8 +298,15 @@ girder at "Home system".
 - **The camera never moves on its own.** No idle auto-rotate, no intro fly-through,
   no following a lapping body.
 
-Rejected: free first-person flight (WASD, a virtual joystick) — disorienting on a
-phone and a second control scheme to learn — and a remembered camera.
+Rejected:
+
+- **Buttons for named places** (Home · Belt · Galaxy · Everything), the first
+  draft. Four jumps say less about scale than one continuous control, the strip
+  took a row across the top of a phone, and a jump from Home to Everything
+  skipped the very thing the view is for, which is feeling how far out it goes.
+- **Free first-person flight** (WASD, a virtual joystick): disorienting on a phone
+  and a second control scheme to learn.
+- **A remembered camera.**
 
 ### 8. Tapping: fly to it and show a card
 
@@ -362,8 +414,9 @@ the camera to the closing.
 ### 13. Asteroids: a belt round the home star, one rock per asteroid
 
 **When the account has active asteroids, the home star carries a belt outside its
-outermost orbit, with one rock per active asteroid, and the scale strip gets a
-Belt stop.** `universe-12-belt.png` is that view with a rock tapped.
+outermost orbit, with one rock per active asteroid.** It is in frame at Home, so it
+needs no stop of its own on the zoom. `universe-12-belt.png` is a closer look with
+a rock tapped (the prototype's `&view=belt` exists for that screenshot).
 
 - **Round the home star**, because the home system is where the short, frequent
   things are, and the belt is what you do with ten spare minutes. **Outside every
@@ -443,20 +496,23 @@ to the whole universe.
 - **Keyboard focus on a row flies the camera to that goal** (a cut under reduced
   motion), debounced 300ms so tabbing down the list does not send the camera on a
   tour, and only on `:focus-visible`, not on a tap. Enter opens the sheet.
-- **The scale strip is real buttons** and is outside the `aria-hidden` region.
-- **The canvas is not a tab stop.** No keyboard camera controls: the strip and the
-  list reach everything, and arrow keys that orbit a camera are a control scheme
-  nobody would guess.
+- **The zoom is an `<input type="range">`**, outside the `aria-hidden` parts,
+  labelled "Zoom", with `aria-valuetext` naming the nearest stop ("Galaxy"). Arrow
+  keys move it like any slider.
+- **The canvas is not a tab stop.** No keyboard camera controls beyond the zoom:
+  the zoom and the list reach everything, and arrow keys that orbit a camera are a
+  control scheme nobody would guess.
 - **Targets.** Bodies are smaller than WCAG 2.2's 24px and pass 2.5.8 under its
   "equivalent" exception — every body's action is on a list row that meets it.
-  Drags pass 2.5.7 because the strip and the rows do everything a drag does with a
+  Drags pass 2.5.7 because the zoom (a tap on its track jumps there) and the rows
+  do everything a drag does with a
   single tap.
 - **The note under the view is text:** "Every goal is in the universe. Tap a body
   to fly to it, or pick one below. 5 asteroids circle the home star."
 
 ### 16. Without WebGL, or without JavaScript
 
-The server renders the header, toggle, strip, note and list; the canvas is created
+The server renders the header, toggle, zoom, note and list; the canvas is created
 on mount, so there is nothing to hydrate differently. If a WebGL context cannot be
 created, the view area says "This device can't draw the universe — every goal is
 listed below" and the list does the work. On `webglcontextlost` the loop stops;
@@ -483,7 +539,22 @@ export const UNIVERSE_LAP_SECONDS: Record<Tier, number> = {
 	universe: 900
 };
 
-export type AnchorKind = 'dwarf' | 'star' | 'core' | 'cluster';
+export type AnchorKind = 'dwarf' | 'star' | 'core' | 'cluster' | 'home' | 'multiverse';
+
+/** How big each kind is, whatever it holds. Children can only make it larger. */
+export const MIN_EXTENT: Record<Tier | AnchorKind, number> = {
+	satellite: 0.28,
+	dwarf: 0.6,
+	planet: 0.9,
+	star: 2.2,
+	starSystem: 14,
+	galaxy: 240,
+	core: 240,
+	cluster: 0,
+	universe: 2600,
+	home: 2600,
+	multiverse: 0
+};
 
 export interface UniverseNode {
 	id: string; // goal id, or `${kind}-${index}` for an anchor
@@ -510,8 +581,10 @@ export function universeTree(
 ```
 
 `Belt` holds its inner radius, width, and one `{ id, angle, radius, band }` per
-rock. Body radii in scene units: satellite 0.28, dwarf 0.6, planet 0.9, star
-anchor 2.2, star system 2.4, core 5, galaxy 7, cluster 8, universe 20.
+rock. Radii of the body at each host's centre, in scene units: satellite 0.28,
+dwarf 0.6, planet 0.9, star anchor 2.2, star system 2.4, core and galaxy 7,
+cluster 10, universe and home universe 30, barycentre 12. A host's extent is the
+larger of its outermost orbit and its `MIN_EXTENT`.
 
 `universeTree` sorts by `goal.sortOrder` itself, decides hosts from `parentId`
 against the ids it was given, and reads angles from each goal's own snapshot.
@@ -519,8 +592,11 @@ Move the FNV-1a hash out of `$domain/bodies` into `$domain/hash.ts` so this can
 seed from it; `bodyVariant` must keep returning exactly what it does now.
 
 Tests, in `universe.test.ts`: a loose satellite brings the whole home chain and
-nothing else; a Star-System-only account has no dwarf and no star; the seventh
-loose goal of a tier opens a second anchor and a real parent never splits; a child
+nothing else; an empty Galaxy goal has the same extent as the home galaxy; a
+universe's extent is at least ten galaxies'; loose Universe goals and the home
+universe orbit the barycentre; a Star-System-only account has no dwarf and no
+star; the seventh loose goal of a tier opens a second anchor and a real parent
+never splits; a child
 orbits its parent at any depth; a rung-skipping child orbits its parent directly;
 two goals at the same progress share an angle and not a radius; no two siblings'
 extents overlap at any angle; angle is progress and a closed goal's trail is 1;
@@ -538,7 +614,7 @@ it.
 
 ### Components and route
 
-- `$components/Universe.svelte` — the view container, strip, card, live region and
+- `$components/Universe.svelte` — the view container, zoom, card, live region and
   note; dynamically imports `src/lib/universe` in `onMount`; holds `openGoalId` for
   the one `GoalRowSheet`.
 - `/+page.server.ts` loads `listAsteroids(locals.user.id)` when the preference is
@@ -583,7 +659,7 @@ it.
   orbits; anchors cannot be tapped.
 - Each goal's trail runs from its start mark to its body and matches its progress.
 - Two goals at the same progress round the same host never overlap.
-- Forty goals: every one is reachable and readable from Home system, Galaxy or by
+- Forty goals: every one is reachable and readable from Home, Galaxy or by
   tapping, on a 390px screen.
 - Tapping a body flies to it and shows its card; Open opens the same sheet as its
   list row; a closing logged there bursts in the sheet, which stays open.
@@ -594,5 +670,6 @@ it.
 - Without WebGL the page is the list, with a sentence saying why.
 - The universe chunk is under 180 kB gzipped and the tiers view loads none of it.
 - A Playwright journey switches to the universe, taps a body, opens and logs from
-  its sheet, flies with the scale strip, and switches back; an axe pass covers the
+  its sheet, moves the zoom from Home to Multiverse and back, and switches back; an
+  axe pass covers the
   view.

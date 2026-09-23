@@ -39,14 +39,17 @@ function executablePath() {
 const universe = [
 	{ name: 'universe-5', query: '?n=5' },
 	{ name: 'universe-12', query: '?n=12' },
-	{ name: 'universe-12-everything', query: '?n=12&view=all' },
+	{ name: 'universe-12-galaxy', query: '?n=12&view=galaxy' },
+	{ name: 'universe-12-universe', query: '?n=12&view=universe' },
+	{ name: 'universe-12-multiverse', query: '?n=12&view=all' },
 	{ name: 'universe-12-focus', query: '?n=12&focus=m1' },
 	{ name: 'universe-12-belt', query: '?n=12&view=belt&rock=asteroid-2' },
 	{ name: 'universe-12-closing', query: '?n=12&closing=p3' },
 	{ name: 'universe-12-still', query: '?n=12&motion=none' },
 	{ name: 'universe-40', query: '?n=40' },
 	{ name: 'universe-40-galaxy', query: '?n=40&view=galaxy' },
-	{ name: 'universe-40-everything', query: '?n=40&view=all' }
+	{ name: 'universe-40-universe', query: '?n=40&view=universe' },
+	{ name: 'universe-40-multiverse', query: '?n=40&view=all' }
 ];
 
 const flat = [

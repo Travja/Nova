@@ -11,7 +11,7 @@
   Query parameters:
 
     ?n=5|12|40                   which fake account to draw (default 12)
-    &view=home|belt|galaxy|all   where the camera starts (default: the spec's rule)
+    &view=home|belt|galaxy|universe|all   where the zoom starts (all: the multiverse)
     &rock=asteroid-<i>           show a rock's card, as tapping it does
     &focus=<id>             fly to a goal and show its card, as a tap does
     &closing=<id>           freeze a closing burst on that goal
@@ -159,28 +159,44 @@
 				margin-left: 0.3em;
 			}
 
-			/* Where you are, and a way back from anywhere. */
-			.scales {
+			/* The zoom: one continuous scale from the home system out to the
+			   multiverse, as a real range input so a keyboard and a single tap
+			   both work. Top is out, bottom is in. */
+			.zoom {
+				align-items: stretch;
 				display: flex;
-				gap: 6px;
-				left: 12px;
+				gap: 4px;
+				height: 58%;
 				position: absolute;
-				top: 12px;
+				right: 6px;
+				top: 12%;
 			}
 
-			.scales button {
-				background: rgba(10, 14, 36, 0.78);
-				border: 1px solid var(--space-border);
-				border-radius: 999px;
-				color: var(--text);
-				font: inherit;
-				font-size: 0.78rem;
-				min-height: 32px;
-				padding: 0 0.7rem;
+			.zoom input {
+				accent-color: var(--accent);
+				direction: rtl;
+				margin: 0;
+				width: 28px;
+				writing-mode: vertical-lr;
 			}
 
-			.scales button[aria-current='true'] {
-				border-color: var(--accent);
+			.zoom__ticks {
+				position: relative;
+				width: 70px;
+			}
+
+			.zoom__ticks span {
+				color: var(--text-dim);
+				font-size: 10px;
+				letter-spacing: 0.06em;
+				position: absolute;
+				right: 0;
+				text-shadow: 0 0 4px #04050d;
+				text-transform: uppercase;
+				transform: translateY(50%);
+			}
+
+			.zoom__ticks span.is-near {
 				color: var(--text-bright);
 			}
 
@@ -326,11 +342,15 @@
 			</div>
 		</div>
 
-		<!-- Decorative, like every orbit visual in Nova: the list below says it
-		     all in words, and is how a keyboard gets in. -->
-		<div class="universe" id="universe" aria-hidden="true">
-			<div class="scales" id="scales"></div>
-			<div class="card" id="card" hidden>
+		<!-- The canvas, its labels and the card are decorative, like every orbit
+		     visual in Nova: the list below says it all in words, and is how a
+		     keyboard gets in. The zoom is a real control and is not hidden. -->
+		<div class="universe" id="universe">
+			<div class="zoom">
+				<div class="zoom__ticks" id="zoom-ticks" aria-hidden="true"></div>
+				<input id="zoom" type="range" min="0" max="1000" step="1" aria-label="Zoom" />
+			</div>
+			<div class="card" id="card" hidden aria-hidden="true">
 				<div class="card__row">
 					<div>
 						<div class="card__tier" id="card-tier"></div>
@@ -466,9 +486,11 @@
 
 			   Every goal orbits something. Its parent goal, when it has one in the
 			   sky; otherwise an anchor of the kind its tier orbits — a grey dwarf
-			   planet for a satellite, a star for a planet, a galactic core for a
-			   star system, the cluster at the centre for galaxies and universes.
-			   Anchors are scenery: never goals, never tappable, never trailed.
+			   planet for a satellite, a star for a planet, a galaxy for a star
+			   system, a cluster for a galaxy. Clusters sit inside a home universe,
+			   and universes — goals and the home one alike — orbit the barycentre
+			   of a multiverse. Anchors are scenery: never goals, never tappable,
+			   never trailed.
 			   ==================================================================== */
 
 			/** What a loose goal of each tier orbits. */
@@ -477,24 +499,53 @@
 				planet: 'star',
 				starSystem: 'core',
 				galaxy: 'cluster',
-				universe: 'cluster'
+				universe: 'multiverse'
 			};
 			/** What each anchor itself orbits. */
-			const ANCHOR_PARENT = { dwarf: 'star', star: 'core', core: 'cluster', cluster: null };
+			const ANCHOR_PARENT = {
+				dwarf: 'star',
+				star: 'core',
+				core: 'cluster',
+				cluster: 'home',
+				home: 'multiverse'
+			};
 			/** Loose goals one anchor takes before a second anchor of its kind appears. */
 			const ANCHOR_CAPACITY = 6;
 
-			/** Body radius in scene units. The ladder is roughly ×3 a rung. */
+			/** Radius of the body at a host's centre, in scene units. */
 			const BODY_R = {
 				satellite: 0.28,
 				planet: 0.9,
 				starSystem: 2.4,
 				galaxy: 7,
-				universe: 20,
+				universe: 30,
 				dwarf: 0.6,
 				star: 2.2,
-				core: 5,
-				cluster: 8
+				core: 7,
+				cluster: 10,
+				home: 30,
+				multiverse: 12
+			};
+
+			/**
+			 * How big each kind of thing is, whatever is in it. A galaxy is a galaxy
+			 * across whether it holds one star system or none, and a universe is
+			 * vast even when it is empty — so a bigger rung always looks bigger, and
+			 * a goal galaxy is exactly as big as the home galaxy beside it. Children
+			 * fit inside; they can make a host larger, never smaller.
+			 */
+			const MIN_EXTENT = {
+				satellite: 0.28,
+				dwarf: 0.6,
+				planet: 0.9,
+				star: 2.2,
+				starSystem: 14,
+				galaxy: 240,
+				core: 240,
+				cluster: 0,
+				universe: 2600,
+				home: 2600,
+				multiverse: 0
 			};
 
 			const LAP_SECONDS = { satellite: 16, planet: 40, starSystem: 90, galaxy: 240, universe: 900 };
@@ -506,8 +557,8 @@
 					nodes.set(g.id, { id: g.id, kind: g.tier, goal: g, children: [] });
 				}
 
-				const root = { id: 'cluster-0', kind: 'cluster', anchor: true, children: [] };
-				const anchors = { cluster: [root], core: [], star: [], dwarf: [] };
+				const root = { id: 'multiverse-0', kind: 'multiverse', anchor: true, children: [] };
+				const anchors = { home: [], cluster: [], core: [], star: [], dwarf: [] };
 
 				/** An anchor of `kind` with room left, making one (and its own host) if need be. */
 				function anchorFor(kind) {
@@ -522,9 +573,9 @@
 					};
 					anchors[kind].push(anchor);
 					const parentKind = ANCHOR_PARENT[kind];
-					const host = parentKind === 'cluster' ? root : anchorFor(parentKind);
+					const host = parentKind === 'multiverse' ? root : anchorFor(parentKind);
 					host.children.push(anchor);
-					if (parentKind !== 'cluster') host.loose += 1;
+					if (parentKind !== 'multiverse') host.loose += 1;
 					return anchor;
 				}
 
@@ -533,7 +584,7 @@
 					const node = nodes.get(g.id);
 					if (g.parentId && byId.has(g.parentId)) {
 						nodes.get(g.parentId).children.push(node);
-					} else if (ANCHOR_FOR[g.tier] === 'cluster') {
+					} else if (ANCHOR_FOR[g.tier] === 'multiverse') {
 						root.children.push(node);
 					} else {
 						const anchor = anchorFor(ANCHOR_FOR[g.tier]);
@@ -578,7 +629,10 @@
 					node.belt.width = bodyR * 2.2;
 					edge = node.belt.inner + node.belt.width;
 				}
-				node.extent = node.children.length || node.belt ? edge : bodyR;
+				node.extent = Math.max(
+					node.children.length || node.belt ? edge : bodyR,
+					MIN_EXTENT[node.kind] ?? bodyR
+				);
 				// A seeded tilt per host, so the universe is not one flat disc.
 				const random = seeded(hash(node.id));
 				node.tilt = (random() - 0.5) * 0.7;
@@ -629,16 +683,18 @@
 				preserveDrawingBuffer: true
 			});
 			renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+			renderer.domElement.setAttribute('aria-hidden', 'true');
 			host.prepend(renderer.domElement);
 
 			const labels = new CSS2DRenderer();
 			labels.domElement.style.position = 'absolute';
 			labels.domElement.style.inset = '0';
 			labels.domElement.style.pointerEvents = 'none';
+			labels.domElement.setAttribute('aria-hidden', 'true');
 			host.append(labels.domElement);
 
 			const scene = new THREE.Scene();
-			const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e6);
+			const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e8);
 			scene.add(new THREE.AmbientLight(0xb8c4ff, 0.9));
 			const sunlight = new THREE.DirectionalLight(0xffffff, 1.6);
 			sunlight.position.set(1, 1.4, 0.8);
@@ -791,15 +847,15 @@
 						const anchor = node.kind === 'core';
 						const c = anchor ? new THREE.Color('#8e93a8') : color;
 						const random = seeded(hash(node.id + 'arms'));
-						const extent = Math.max(node.extent, r * 3);
-						const count = anchor ? 900 : 1600;
+						const extent = node.extent;
+						const count = anchor ? 2200 : 3000;
 						const positions = [];
 						for (let i = 0; i < count; i += 1) {
 							const t = Math.pow(random(), 0.6);
 							const arm = i % 2;
 							const a = t * 7 + arm * Math.PI + (random() - 0.5) * 0.6;
 							const d = t * extent * 1.02;
-							positions.push(Math.cos(a) * d, (random() - 0.5) * r * 0.25, Math.sin(a) * d);
+							positions.push(Math.cos(a) * d, (random() - 0.5) * extent * 0.03, Math.sin(a) * d);
 						}
 						const geometry = new THREE.BufferGeometry();
 						geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -817,26 +873,52 @@
 						);
 						disc.userData.disc = true;
 						g.add(disc);
-						g.add(glow(c.clone().lerp(new THREE.Color('#fff'), 0.4), anchor ? 26 : 40, 0.9));
+						g.add(glow(c.clone().lerp(new THREE.Color('#fff'), 0.4), anchor ? 22 : 30, 0.8));
 						break;
 					}
-					case 'universe': {
+					case 'universe':
+					case 'home': {
+						// A bubble as wide as everything inside it: the one body you are
+						// usually looking at from the inside.
+						const anchor = node.kind === 'home';
+						const c = anchor ? new THREE.Color('#7c8198') : color;
 						g.add(
 							new THREE.Mesh(
-								new THREE.IcosahedronGeometry(r, 2),
+								new THREE.IcosahedronGeometry(node.extent, 3),
 								new THREE.MeshBasicMaterial({
-									color,
+									color: c,
 									wireframe: true,
 									transparent: true,
-									opacity: 0.25
+									opacity: anchor ? 0.05 : 0.12,
+									depthWrite: false
 								})
 							)
 						);
-						g.add(glow(color, 46, 0.7));
+						g.children.at(-1).userData.shell = true;
+						g.add(
+							new THREE.Mesh(
+								new THREE.SphereGeometry(node.extent, 48, 24),
+								new THREE.MeshBasicMaterial({
+									color: c,
+									transparent: true,
+									opacity: anchor ? 0.02 : 0.05,
+									side: THREE.BackSide,
+									depthWrite: false
+								})
+							)
+						);
+						g.children.at(-1).userData.shell = true;
+						g.add(glow(c, anchor ? 24 : 34, anchor ? 0.35 : 0.7));
 						break;
 					}
 					case 'cluster': {
-						g.add(glow(0xfff4d6, 30, 0.8));
+						g.add(glow(0xfff4d6, 18, 0.5));
+						break;
+					}
+					case 'multiverse': {
+						// The barycentre: a point nothing sits at, marked so the
+						// universes have something visible to go round.
+						g.add(glow(0xdfe4ff, 10, 0.5));
 						break;
 					}
 				}
@@ -845,6 +927,8 @@
 
 			/** Everything the frame loop touches, per goal. */
 			const flying = [];
+			/** Every node, goal or anchor, for level of detail. */
+			const everything = [];
 
 			/**
 			 * One host: its body, a tilted plane for its orbits, and each child
@@ -854,7 +938,11 @@
 				const holder = new THREE.Group(); // where this node sits
 				parentPlane.add(holder);
 				node.holder = holder;
-				holder.add(bodyMesh(node));
+				const body = bodyMesh(node);
+				holder.add(body);
+				node.shells = body.children.filter((c) => c.userData.shell);
+				for (const shell of node.shells) shell.userData.opacity = shell.material.opacity;
+				everything.push(node);
 
 				const plane = new THREE.Group();
 				plane.rotation.set(node.tilt, node.spin, 0);
@@ -973,7 +1061,7 @@
 					const u = random() * 2 - 1;
 					const t = random() * Math.PI * 2;
 					const s = Math.sqrt(1 - u * u);
-					const d = 4e5;
+					const d = 2e7;
 					positions.push(Math.cos(t) * s * d, u * d, Math.sin(t) * s * d);
 				}
 				const geometry = new THREE.BufferGeometry();
@@ -1028,12 +1116,13 @@
 			controls.dampingFactor = 0.08;
 			controls.screenSpacePanning = true;
 			controls.minDistance = 0.8;
-			controls.maxDistance = 60000;
+			controls.maxDistance = 2e6;
 			controls.zoomToCursor = true;
 
 			const world = (node) => node.holder.getWorldPosition(new THREE.Vector3());
 
-			function frame(node, instant = still, belt = false) {
+			/** Where the camera goes to frame a host: its target, eye and distance. */
+			function viewFor(node, belt = false) {
 				scene.updateMatrixWorld(true);
 				let target = world(node);
 				// Fit the host's whole extent across the narrower side of the view:
@@ -1061,9 +1150,13 @@
 				const side = new THREE.Vector3(0.35, 0, 0.9).applyQuaternion(
 					node.plane.getWorldQuaternion(new THREE.Quaternion())
 				);
-				const eye = target
-					.clone()
-					.add(normal.multiplyScalar(distance * 0.82).add(side.multiplyScalar(distance * 0.55)));
+				const direction = normal.multiplyScalar(0.82).add(side.multiplyScalar(0.55)).normalize();
+				const eye = target.clone().add(direction.clone().multiplyScalar(distance));
+				return { target, eye, distance, direction };
+			}
+
+			function frame(node, instant = still, belt = false) {
+				const { target, eye } = viewFor(node, belt);
 				if (instant) {
 					controls.target.copy(target);
 					camera.position.copy(eye);
@@ -1079,38 +1172,90 @@
 			}
 			let flight = null;
 
-			/* The scale strip: named places to fly to, which also say where you are. */
-			const scales = [];
+			/*
+			 * The zoom. Each stop is a place on the home chain — the home star, its
+			 * galaxy, its universe, the multiverse — and the slider moves the camera
+			 * continuously between them: the target slides along the chain and the
+			 * distance moves on a log scale, so every notch is the same factor of
+			 * zoom whether you are among satellites or universes. Powers of ten,
+			 * rather than a menu of places.
+			 */
 			const home = tree.anchors.star[0];
-			const homeGalaxy = tree.anchors.core[0];
-			if (home) scales.push({ label: 'Home system', node: home });
-			if (home && tree.belt) scales.push({ label: 'Belt', node: home, belt: true });
-			if (homeGalaxy) scales.push({ label: 'Galaxy', node: homeGalaxy });
-			scales.push({ label: 'Everything', node: tree.root });
-			const strip = document.getElementById('scales');
-			for (const s of scales) {
-				const b = document.createElement('button');
-				b.type = 'button';
-				b.textContent = s.label;
-				b.addEventListener('click', () => {
-					showCard(null);
-					frame(s.node, still, s.belt);
-					for (const other of strip.children) other.removeAttribute('aria-current');
-					b.setAttribute('aria-current', 'true');
-				});
-				strip.append(b);
-				s.button = b;
+			const stops = [
+				home && { label: 'Home', node: home },
+				tree.anchors.core[0] && { label: 'Galaxy', node: tree.anchors.core[0] },
+				tree.anchors.home[0] && { label: 'Universe', node: tree.anchors.home[0] },
+				{ label: 'Multiverse', node: tree.root }
+			].filter(Boolean);
+			const zoom = document.getElementById('zoom');
+			const ticks = document.getElementById('zoom-ticks');
+			stops.forEach((stop, i) => {
+				const span = document.createElement('span');
+				span.textContent = stop.label;
+				span.style.bottom = `${(i / Math.max(1, stops.length - 1)) * 100}%`;
+				ticks.append(span);
+				stop.tick = span;
+			});
+
+			let scrubbing = false;
+			function viewAt(value) {
+				const views = stops.map((stop) => viewFor(stop.node));
+				const x = (value / 1000) * (views.length - 1);
+				const i = Math.min(views.length - 2, Math.floor(x));
+				if (views.length === 1) return views[0];
+				const t = x - i;
+				const a = views[i];
+				const b = views[i + 1];
+				const target = a.target.clone().lerp(b.target, t);
+				const distance = Math.exp(Math.log(a.distance) * (1 - t) + Math.log(b.distance) * t);
+				const direction = a.direction.clone().lerp(b.direction, t).normalize();
+				return { target, eye: target.clone().add(direction.multiplyScalar(distance)), distance };
 			}
 
+			/** Where the slider sits for a camera distance, so a pinch moves it too. */
+			function syncZoom() {
+				const distances = stops.map((stop) => viewFor(stop.node).distance);
+				const d = camera.position.distanceTo(controls.target);
+				let value = 0;
+				if (d >= distances.at(-1)) value = 1000;
+				else if (d > distances[0]) {
+					for (let i = 0; i < distances.length - 1; i += 1) {
+						if (d <= distances[i + 1]) {
+							const t = Math.log(d / distances[i]) / Math.log(distances[i + 1] / distances[i]);
+							value = ((i + t) / (distances.length - 1)) * 1000;
+							break;
+						}
+					}
+				}
+				zoom.value = String(Math.round(value));
+				markZoom();
+			}
+
+			function markZoom() {
+				const nearest = Math.round((Number(zoom.value) / 1000) * (stops.length - 1));
+				stops.forEach((stop, i) => stop.tick.classList.toggle('is-near', i === nearest));
+				zoom.setAttribute('aria-valuetext', stops[nearest].label);
+			}
+
+			zoom.addEventListener('input', () => {
+				scrubbing = true;
+				flight = null;
+				showCard(null);
+				const { target, eye } = viewAt(Number(zoom.value));
+				controls.target.copy(target);
+				camera.position.copy(eye);
+				controls.update();
+				markZoom();
+				scrubbing = false;
+			});
+			controls.addEventListener('change', () => {
+				if (!scrubbing) syncZoom();
+			});
+
 			const startAt = params.get('view');
-			const start =
-				startAt === 'all'
-					? scales.at(-1)
-					: startAt === 'galaxy'
-						? scales.find((s) => s.label === 'Galaxy')
-						: startAt === 'belt'
-							? scales.find((s) => s.label === 'Belt')
-							: (scales.find((s) => s.label === 'Home system') ?? scales.at(-1));
+			const startStop =
+				{ all: 'Multiverse', galaxy: 'Galaxy', universe: 'Universe' }[startAt] ?? 'Home';
+			const start = stops.find((s) => s.label === startStop) ?? stops.at(-1);
 
 			/* ====================================================================
 			   Tapping
@@ -1161,7 +1306,12 @@
 						at: r.mesh.getWorldPosition(new THREE.Vector3())
 					}))
 				];
+				const shown = (object) => {
+					for (let o = object; o; o = o.parent) if (!o.visible) return false;
+					return true;
+				};
 				for (const c of candidates) {
+					if (c.node.holder && !shown(c.node.holder)) continue;
 					const p = c.at.clone().project(camera);
 					if (p.z > 1) continue;
 					const sx = ((p.x + 1) / 2) * rect.width;
@@ -1222,6 +1372,26 @@
 					const p = v.clone().project(camera);
 					return { x: ((p.x + 1) / 2) * rect.width, y: ((1 - p.y) / 2) * rect.height, z: p.z };
 				};
+				// Level of detail: a system whose orbit round its host is under 12px
+				// on screen folds into the host's own glow, children and all. Held
+				// at a pixel size, a dozen glows a universe away would otherwise
+				// stack into one white blot brighter than anything near.
+				const eye = camera.position;
+				for (const node of everything) {
+					const at = node.holder.getWorldPosition(new THREE.Vector3());
+					if (node.host) {
+						const a = toScreen(node.host.holder.getWorldPosition(new THREE.Vector3()));
+						const b = toScreen(at);
+						node.holder.visible = Math.hypot(a.x - b.x, a.y - b.y) >= 12;
+					}
+					// A universe seen from inside it is the space you are in, not a
+					// wireframe across the view: its shell fades as the camera enters.
+					if (node.shells.length) {
+						const d = eye.distanceTo(at);
+						const k = THREE.MathUtils.clamp((d - node.extent * 0.9) / (node.extent * 0.8), 0, 1);
+						for (const shell of node.shells) shell.material.opacity = shell.userData.opacity * k;
+					}
+				}
 				for (const f of flying) {
 					const parentHolder = f.pivot.parent.parent; // host's plane → holder
 					const a = toScreen(parentHolder.getWorldPosition(new THREE.Vector3()));
@@ -1264,9 +1434,9 @@
 				frame(closingId ? node.host : node, true);
 				if (!closingId) showCard(node);
 			} else {
-				frame(start.node, true, start.belt);
-				start.button.setAttribute('aria-current', 'true');
+				frame(start.node, true, startAt === 'belt');
 			}
+			syncZoom();
 			const rockId = params.get('rock');
 			if (rockId) showCard({ rock: asteroids.find((a) => a.id === rockId) });
 			tick();
