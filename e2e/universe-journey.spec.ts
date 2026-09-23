@@ -155,8 +155,15 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	// The closing is the sheet's: it stays open, and the universe says it in words.
 	await expect(page.locator('.universe [role="status"]')).toHaveText('Read pages closed its orbit');
 	await expect(sheet).toBeVisible();
+	// Nothing drew under the sheet; the universe held the moment for when it
+	// can be seen. Closing the sheet plays it: the ring lights at the body.
+	await page.waitForTimeout(1500);
+	expect(await page.evaluate(() => window.__novaUniverse?.celebrated())).toBeNull();
 	await sheet.getByRole('button', { name: 'Close' }).click();
 	await expect(sheet).toBeHidden();
+	await expect
+		.poll(() => page.evaluate(() => window.__novaUniverse?.celebrated()), { timeout: 10_000 })
+		.toBe(reading);
 
 	// A closed orbit keeps circling, so now the loop runs on its own.
 	await settled(page);

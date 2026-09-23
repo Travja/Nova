@@ -349,19 +349,17 @@ async function context(options = {}) {
 	await shoot(page, 'app-12-focus');
 
 	// A closing: log the rest of "Call family" from its sheet, the one place
-	// logging happens, then close the sheet before the burst is raised — the
-	// universe draws its own version only when the sheet is not over it.
+	// logging happens. The sheet bursts; the universe holds its own moment
+	// until the sheet closes, then lights the ring and bursts at the body.
 	await openUniverse(page);
 	await tap(page, ids.get('p3'));
-	const sheet = page.getByRole('dialog');
+	const sheet = page.getByRole('dialog', { name: /Call family/ });
 	await sheet.getByLabel(/^Amount/).fill(String(TARGET));
 	await sheet.getByRole('button', { name: 'Log it' }).click();
-	await page.waitForTimeout(150);
+	await page.waitForTimeout(1500);
 	await page.keyboard.press('Escape');
-	await page.waitForFunction(() =>
-		document.querySelector('.universe [role="status"]')?.textContent?.includes('closed its orbit')
-	);
-	await page.waitForTimeout(180);
+	await page.waitForFunction(() => window.__novaUniverse.celebrating() !== null);
+	await page.waitForTimeout(250);
 	await shoot(page, 'app-12-closing');
 
 	await openUniverse(page);

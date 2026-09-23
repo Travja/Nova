@@ -87,8 +87,6 @@ export interface SceneNode {
 	sweep: { from: number; to: number; start: number } | null;
 	/** When this closed body left the start mark, for its lap. Null while open. */
 	lapStart: number | null;
-	/** A closing being drawn on this body, if any. */
-	burst: Group | null;
 	/** A goal's model at unit size, scaled here so it is never lost as a speck. Null otherwise. */
 	model: Object3D | null;
 	/** What brings the body to life, frame by frame; null for anything that never moves. */
@@ -482,7 +480,6 @@ export function buildScene(
 			shown: from,
 			sweep: from !== target ? { from, to: target, start: options.now } : null,
 			lapStart: node.closed && from === target ? (before?.lapStart ?? options.now) : null,
-			burst: null,
 			model: built.model,
 			live: built.live
 		};

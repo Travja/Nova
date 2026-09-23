@@ -430,25 +430,39 @@ whole universe. `universe-12-still.png` is that frame; compare it with
 celebrated inside the sheet by its own `OrbitDial`, exactly as #51 settled.** The
 sheet stays open. That burst is the biggest moment in the app and stays so.
 
-The universe reads `celebrationFor(goalId)` like any dial and, while it is set and
-the universe is not covered by the sheet, draws its own version at the body
-(`universe-12-closing.png`):
+The universe hears every closing `celebration()` raises, and plays its own
+version at the body where it can be seen (`app-12-closing.png`):
 
 - the trail completes and brightens into the whole ring, twice its width, for the
   length of `celebrationShape(tier).ms`;
 - `celebrationShape(tier).rays` rays and a white flash at the body, billboarded to
-  face the camera, reaching six body radii;
+  face the camera, reaching six body radii as the body is drawn and never less
+  than 70px on screen, so a closing is visible from any zoom;
 - the camera does not move to it. Yanking the view to a closing the user did not
   ask to look at is the universe taking control; the ring lighting is visible from
   wherever they are.
+
+**While a sheet covers the view, the universe waits.** Nothing is drawn under a
+sheet: it is the sheet's moment, and a GPU busy behind it only takes frames from
+the sheet's own burst. The new data and the closing are held, and when the sheet
+closes the universe plays them in order — the trail sweeps round to meet the
+body over `SWEEP_MS`, then the ring lights and the rays burst. Both are timed
+from the first frame that draws them, and a stall between frames (a rebuild,
+shaders compiling on a slow GPU) does not count against them, so the moment is
+never used up before anyone sees it.
+
+The first build drew the universe's version only while no sheet was open, on the
+store's clock. Logging happens in the sheet, so the sheet was always open when a
+goal closed and the universe's moment had always ended by the time it closed: the
+universe never showed a closing at all.
 
 A polite live region under the view reads `celebration()`: "{title} closed its
 orbit", the mascot's sentence on `/today`. That is what reduced motion and screen
 readers get in place of the rays.
 
-Rejected: closing the sheet so the universe gets the moment (#51 forbids it), a
-second burst when the sheet closes (`noteOrbits` calls that noise), and flying
-the camera to the closing.
+Rejected: closing the sheet so the universe gets the moment (#51 forbids it),
+drawing the universe's burst under the sheet (no one sees it, and it costs the
+sheet's burst frames), and flying the camera to the closing.
 
 ### 13. Asteroids: a belt round the home star, one rock per asteroid
 

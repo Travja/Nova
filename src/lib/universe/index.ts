@@ -102,6 +102,10 @@ export interface UniverseProbe {
 	frames(): number;
 	/** No flight and no closing in progress. */
 	settled(): boolean;
+	/** The goal whose closing the universe is lighting right now, if any. */
+	celebrating(): string | null;
+	/** The last goal whose closing the universe lit, however long ago. */
+	celebrated(): string | null;
 	/** Fly to a goal, as a tap on it would. */
 	flyTo(goalId: string): void;
 }
@@ -113,6 +117,11 @@ const AMBIENT_FRAME_MS = 1000 / 30 - 2;
 const BURST_REACH = 6;
 /** The white flash at a closing body, a glow held at this radius in pixels. */
 const FLASH_PX = 90;
+/** A gap between frames longer than this is a stall, not time a moment should spend. */
+const STALL_MS = 120;
+
+/** The least a burst's rays reach on screen, in pixels, however far out the camera is. */
+const MIN_BURST_PX = 70;
 
 function easeInOut(t: number): number {
 	return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -156,8 +165,32 @@ export function mountUniverse(
 	// Assigned by the first `build()`, below, before anything reads it.
 	let universe!: UniverseScene;
 	let stops: SceneNode[] = [];
-	let closing: (Closing & { start: number }) | null = null;
+	/** A closing being played in the universe: lit, and bursting unless motion is off. */
+	interface Playing extends Closing {
+		/**
+		 * When the moment starts, set by the first frame that can draw it — not
+		 * by the clock when it was asked for, since a rebuild or a slow first
+		 * frame could otherwise use the whole moment up before it is seen.
+		 */
+		start: number | null;
+		/** How long after that first frame: long enough for a sweep to land first. */
+		delay: number;
+		lit: boolean;
+		spokes: Group | null;
+		flash: Sprite | null;
+	}
+	let closing: Playing | null = null;
+	/** For the dev probe: the last closing actually drawn. */
+	let lastLit: string | null = null;
 	let covered = false;
+	/**
+	 * What arrived while a sheet was over the view: the new data and the
+	 * closing. Both wait for the sheet to close, so the moment plays where it
+	 * can be seen — the trail sweeping round, then the ring lighting — rather
+	 * than under the sheet, a second before anyone could look.
+	 */
+	let pendingInput: UniverseInput | null = null;
+	let pendingClosing: Closing | null = null;
 	let scrubbing = false;
 
 	function measure(): Viewport {
@@ -186,11 +219,21 @@ export function mountUniverse(
 			now: performance.now(),
 			animate: sweep && animate
 		});
+		// A sweep is timed from the first frame that draws it, for the same
+		// reason a closing is: the rebuild itself must not use it up.
+		for (const entry of universe.byGoal.values()) {
+			if (entry.sweep) entry.sweep.start = Number.NaN;
+		}
 		universe.scene.updateMatrixWorld(true);
 		stops = input.stops
 			.map((stop) => universe.byId.get(stop.id))
 			.filter((entry): entry is SceneNode => entry !== undefined);
-		if (closing) attachBurst(closing);
+		// The old scene took the burst with it; the next frame lights the new one.
+		if (closing) {
+			closing.lit = false;
+			closing.spokes = null;
+			closing.flash = null;
+		}
 	}
 
 	function resize() {
@@ -226,26 +269,36 @@ export function mountUniverse(
 	 * allowed — rays and a flash at the body, billboarded to the camera.
 	 * ------------------------------------------------------------------ */
 
-	function attachBurst(current: Closing) {
-		const entry = universe.byGoal.get(current.goalId);
-		if (!entry || !entry.trailMaterial || !entry.goal) return;
-		entry.trailMaterial.linewidth = LINE.closed * 2;
-		entry.trailMaterial.color.set(new Color(entry.goal.color).lerp(new Color('#ffffff'), 0.35));
-		if (!animate) return;
+	/** The ring lit for the moment — twice as wide and brighter — or put back. */
+	function light(entry: SceneNode, on: boolean) {
+		if (!entry.trailMaterial || !entry.goal) return;
+		entry.trailMaterial.linewidth = on
+			? LINE.closed * 2
+			: entry.node.closed
+				? LINE.closed
+				: LINE.trail;
+		entry.trailMaterial.color.set(
+			on ? new Color(entry.goal.color).lerp(new Color('#ffffff'), 0.35) : entry.goal.color
+		);
+	}
 
-		const burst = new Group();
-		const color = new Color(entry.goal.color);
-		const inner = entry.node.bodyRadius * 1.6;
-		const reach = entry.node.bodyRadius * BURST_REACH;
+	/**
+	 * Rays in unit body radii — scaled each frame to the body as it is drawn,
+	 * and never smaller than `MIN_BURST_PX` — and a white flash held at a
+	 * pixel size, both at the body.
+	 */
+	function attachBurst(current: Playing, entry: SceneNode) {
+		const rays = new Group();
+		const color = new Color(entry.goal?.color ?? '#ffffff');
 		for (let index = 0; index < current.rays; index += 1) {
 			const angle = (index / current.rays) * Math.PI * 2;
 			const geometry = new LineGeometry();
 			geometry.setPositions([
-				Math.cos(angle) * inner,
-				Math.sin(angle) * inner,
+				Math.cos(angle) * 1.6,
+				Math.sin(angle) * 1.6,
 				0,
-				Math.cos(angle) * reach,
-				Math.sin(angle) * reach,
+				Math.cos(angle) * BURST_REACH,
+				Math.sin(angle) * BURST_REACH,
 				0
 			]);
 			const material = new LineMaterial({
@@ -256,7 +309,7 @@ export function mountUniverse(
 				depthWrite: false
 			});
 			material.resolution.set(viewport.width, viewport.height);
-			burst.add(new Line2(geometry, material));
+			rays.add(new Line2(geometry, material));
 		}
 		const flash = new Sprite(
 			new SpriteMaterial({
@@ -265,60 +318,86 @@ export function mountUniverse(
 				transparent: true,
 				opacity: 0.9,
 				depthWrite: false,
+				// Over the body, not behind it: the flash is the body lighting up.
+				depthTest: false,
 				blending: AdditiveBlending,
 				sizeAttenuation: false
 			})
 		);
+		flash.renderOrder = 10;
 		const k = (4 * FLASH_PX * viewport.tanHalfFov) / viewport.height;
 		flash.scale.set(k, k, 1);
-		flash.userData.flash = true;
-		burst.add(flash);
-		entry.holder.add(burst);
-		entry.burst = burst;
+		entry.holder.add(rays, flash);
+		current.spokes = rays;
+		current.flash = flash;
 	}
 
-	function detachBurst(goalId: string) {
-		const entry = universe.byGoal.get(goalId);
-		if (!entry) return;
-		if (entry.trailMaterial && entry.goal) {
-			entry.trailMaterial.linewidth = entry.node.closed ? LINE.closed : LINE.trail;
-			entry.trailMaterial.color.set(entry.goal.color);
+	function detachBurst(current: Playing) {
+		const entry = universe.byGoal.get(current.goalId);
+		if (entry) light(entry, false);
+		for (const line of current.spokes?.children ?? []) {
+			(line as Line2).geometry.dispose();
+			(line as Line2).material.dispose();
 		}
-		if (entry.burst) {
-			for (const child of entry.burst.children) {
-				// A sprite's geometry is one three shares between every sprite.
-				if (child instanceof Line2) child.geometry.dispose();
-				(child as Line2 | Sprite).material.dispose();
-			}
-			entry.burst.removeFromParent();
-			entry.burst = null;
-		}
+		current.spokes?.removeFromParent();
+		// A sprite's geometry is one three shares between every sprite.
+		current.flash?.material.dispose();
+		current.flash?.removeFromParent();
+		current.spokes = null;
+		current.flash = null;
+	}
+
+	function play(next: Closing, delay: number) {
+		if (closing) detachBurst(closing);
+		closing = { ...next, start: null, delay, lit: false, spokes: null, flash: null };
+		loop.request();
 	}
 
 	const parentQuaternion = new Quaternion();
+	const burstAt = new Vector3();
 
-	/** Advance the closing. True while there is more of it. */
+	/** Advance the closing. True while there is more of it, including the wait for a sweep. */
 	function stepClosing(time: number): boolean {
 		if (!closing) return false;
-		const t = (time - closing.start) / closing.ms;
 		const entry = universe.byGoal.get(closing.goalId);
-		if (t >= 1 || !entry) {
-			detachBurst(closing.goalId);
+		if (!entry) {
 			closing = null;
 			return false;
 		}
-		// The sheet is over the view: the closing is the sheet's to show.
-		if (entry.burst) entry.burst.visible = !covered;
-		if (entry.burst?.parent) {
-			entry.burst.parent.getWorldQuaternion(parentQuaternion).invert();
-			entry.burst.quaternion.copy(parentQuaternion.multiply(rig.camera.quaternion));
+		closing.start ??= time + closing.delay;
+		const t = (time - closing.start) / closing.ms;
+		if (t < 0) return true;
+		if (t >= 1) {
+			detachBurst(closing);
+			closing = null;
+			return false;
+		}
+		if (!closing.lit) {
+			light(entry, true);
+			// Under reduced motion the lit ring is the whole closing.
+			if (animate) attachBurst(closing, entry);
+			closing.lit = true;
+			lastLit = closing.goalId;
+		}
+		const { spokes: rays, flash } = closing;
+		if (rays) {
+			rays.parent?.getWorldQuaternion(parentQuaternion).invert();
+			rays.quaternion.copy(parentQuaternion.multiply(rig.camera.quaternion));
+			// As big as the body is drawn, and never too small to see from here.
+			entry.holder.getWorldPosition(burstAt);
+			const worldPerPixel =
+				((2 * viewport.tanHalfFov) / viewport.height) * rig.camera.position.distanceTo(burstAt);
+			const radius = Math.max(
+				entry.model?.scale.x ?? entry.node.bodyRadius,
+				(MIN_BURST_PX / BURST_REACH) * worldPerPixel
+			);
 			const grow = 0.35 + 0.65 * easeInOut(Math.min(1, t * 2.2));
-			entry.burst.scale.setScalar(grow);
-			for (const child of entry.burst.children) {
-				const material = (child as Line2 | Sprite).material as LineMaterial | SpriteMaterial;
-				material.opacity = child.userData.flash ? 0.9 * (1 - t) * (1 - t) : 0.9 * (1 - t);
+			rays.scale.setScalar(radius * grow);
+			for (const line of rays.children) {
+				((line as Line2).material as LineMaterial).opacity = 0.9 * (1 - t);
 			}
 		}
+		if (flash) flash.material.opacity = 0.9 * (1 - t) * (1 - t);
 		return true;
 	}
 
@@ -346,6 +425,7 @@ export function mountUniverse(
 		let more = false;
 		for (const entry of universe.byGoal.values()) {
 			if (!entry.sweep) continue;
+			if (Number.isNaN(entry.sweep.start)) entry.sweep.start = time;
 			const t = animate ? Math.min(1, (time - entry.sweep.start) / SWEEP_MS) : 1;
 			const { from, to } = entry.sweep;
 			setShown(entry, from + (to - from) * easeInOut(t));
@@ -403,7 +483,33 @@ export function mountUniverse(
 	let lastDrawn = -Infinity;
 	let alive = false;
 
+	let lastFrame: number | null = null;
+
+	/**
+	 * A frame that arrives long after the last — a rebuild, shaders compiling
+	 * on a slow GPU, a phone busy elsewhere — must not use up a moment nobody
+	 * saw. Sweeps and the closing are carried forward past the gap, so they
+	 * play in full once frames are coming again.
+	 */
+	function bridge(time: number) {
+		const gap = lastFrame === null ? 0 : time - lastFrame;
+		lastFrame = time;
+		if (gap < STALL_MS) return;
+		const lost = gap - 1000 / 60;
+		if (closing?.start != null) closing.start += lost;
+		for (const entry of universe.byGoal.values()) {
+			if (entry.sweep && !Number.isNaN(entry.sweep.start)) entry.sweep.start += lost;
+		}
+	}
+
 	function frame(time: number): boolean {
+		// Under a sheet the universe goes quiet — once the flight a tap started
+		// has landed, so what shows above the sheet is not frozen mid-air.
+		if (covered && !rig.flying) {
+			loop.pause('covered', true);
+			return false;
+		}
+		bridge(time);
 		let busy = rig.step(time);
 		if (rig.controls.update()) busy = true;
 		if (sweep(time)) busy = true;
@@ -602,12 +708,18 @@ export function mountUniverse(
 			rocks: () => universe.rocks.map((rock) => rock.id),
 			frames: () => loop.frames,
 			settled: () => !rig.flying && !closing,
+			celebrating: () => (closing?.lit ? closing.goalId : null),
+			celebrated: () => lastLit,
 			flyTo: (goalId) => flyTo(goalId)
 		};
 	}
 
 	return {
 		update(next) {
+			if (covered) {
+				pendingInput = next;
+				return;
+			}
 			input = next;
 			build(true);
 			universe.resize(viewport);
@@ -616,14 +728,37 @@ export function mountUniverse(
 		flyTo,
 		zoomTo,
 		celebrate(next) {
-			if (closing && closing.stamp === next?.stamp) return;
-			if (closing) detachBurst(closing.goalId);
-			closing = next ? { ...next, start: performance.now() } : null;
-			if (closing) attachBurst(closing);
-			loop.request();
+			// The store clearing its closing is not the universe's cue to stop:
+			// a closing plays out on its own clock, which may not have started.
+			if (!next) return;
+			if (closing?.stamp === next.stamp || pendingClosing?.stamp === next.stamp) return;
+			if (covered) pendingClosing = next;
+			else play(next, 0);
 		},
 		setCovered(next) {
+			if (covered === next) return;
 			covered = next;
+			// Nothing draws under a sheet: it is the sheet's moment, and a GPU
+			// busy behind it only takes frames from the sheet's own burst. The
+			// next frame pauses the loop, after any flight in progress lands.
+			if (next) {
+				loop.request();
+				return;
+			}
+			loop.pause('covered', false);
+			let sweeping = false;
+			if (pendingInput) {
+				input = pendingInput;
+				pendingInput = null;
+				build(true);
+				universe.resize(viewport);
+				sweeping = animate;
+			}
+			if (pendingClosing) {
+				// After the trail has swept round to meet it, as a dial does.
+				play(pendingClosing, sweeping ? SWEEP_MS : 0);
+				pendingClosing = null;
+			}
 			loop.request();
 		},
 		destroy() {
