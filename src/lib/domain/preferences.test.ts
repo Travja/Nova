@@ -77,15 +77,26 @@ describe('reaching the page', () => {
 	});
 
 	it('has a block of CSS behind every non-default value', () => {
-		// A value with no rules behind it is a control that does nothing.
+		// A value with no rules behind it is a control that does nothing — except
+		// a `readBy: 'server'` entry, which the server reads itself to choose
+		// what to render, so there is nothing for CSS to select on.
 		for (const key of PREFERENCE_KEYS) {
 			const spec = PREFERENCE_SPECS[key];
+			if (specFor(key).readBy === 'server') continue;
 			for (const value of spec.values.slice(1)) {
 				expect(APP_CSS, `${key}: ${value} has no block in app.css`).toContain(
 					`[${spec.attribute}='${value}']`
 				);
 			}
 		}
+	});
+
+	it("skips a 'server'-read preference rather than passing on an empty block", () => {
+		// The dashboard toggle (#11) is read server-side: the block above must
+		// skip it because it has no CSS rule, not because a hollow one was added
+		// to satisfy the check.
+		expect(specFor('dashboard').readBy).toBe('server');
+		expect(APP_CSS).not.toContain(`[${specFor('dashboard').attribute}='universe']`);
 	});
 
 	it('labels every value it offers', () => {
