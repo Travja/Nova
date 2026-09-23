@@ -95,8 +95,15 @@ SvelteKit, the server, or three.
   `LineGeometry` / `LineMaterial`, `CSS2DRenderer` — so the chunk tree-shakes.
   Budget: the universe chunk is **at most 180 kB gzipped**, checked from the build
   output in the pull request. The tiers view downloads none of it.
-- **The chunk is precached by the service worker** like any other route chunk, so
-  the universe works offline once it has been seen online.
+- **The chunk is cached on first use, not precached.** The service worker's
+  `globPatterns` precaches every JS chunk by default, which would have every
+  install download three.js up front — including every pilot who never leaves
+  the tiers view, which is what "the tiers view downloads none of it" rules out.
+  Exclude the universe chunk from the precache manifest and give it a
+  `CacheFirst` runtime rule instead, so the universe works offline once it has
+  been seen online and costs nothing until then. Someone who installs and goes
+  offline before ever opening it gets the list and the sentence from decision
+  16, which is the right trade on a phone.
 
 Rejected:
 
@@ -518,6 +525,25 @@ created, the view area says "This device can't draw the universe — every goal 
 listed below" and the list does the work. On `webglcontextlost` the loop stops;
 on `webglcontextrestored` the scene is rebuilt from the same data. Without
 JavaScript the page is the list, and the toggle still posts.
+
+## Built in two parts
+
+This is the largest issue in the project, so it lands as two pull requests.
+
+- **Part A — the tree and the toggle, no three.js.** `$domain/hash.ts` and
+  `$domain/universe.ts` with every test the sketch names; the `dashboard`
+  preference and `?/view` action (decision 14); the server-rendered list that is
+  the universe in words (decision 15, without the camera fly-to); asteroids
+  loaded on `/`. Where the canvas will go, a plain sentence saying the view is
+  not drawn yet — Part B replaces it. No dependency added.
+- **Part B — the renderer.** `src/lib/universe/`, `Universe.svelte`, three.js
+  pinned, the zoom, keyboard fly-to, the closing in the ring, the belt, decision
+  16's fallback, the `CLAUDE.md` rule change, the bundle budget, the cache rule
+  above, and the SwiftShader journey.
+
+The split falls where it does because the tree is where silent errors live — a
+child one host out, two siblings sharing a radius — and those are best caught by
+unit tests against plain data before there is a camera to hide them.
 
 ## Sketch: where the code goes
 
