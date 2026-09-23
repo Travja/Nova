@@ -1,0 +1,1326 @@
+<!doctype html>
+<!--
+  Throwaway prototype for #11, the solar-system view: a universe you can fly.
+
+  Not app code. It exists to show the design in docs/issues/11-system-view.md
+  working at 5, 12 and 40 goals on a 390px phone. Nothing here is imported by
+  the app and nothing in src/ is imported here. three.js comes from the CDN
+  through an import map, pinned to the version the spec names; the screenshot
+  script serves it from a local copy when the CDN is not reachable.
+
+  Query parameters:
+
+    ?n=5|12|40                   which fake account to draw (default 12)
+    &view=home|belt|galaxy|all   where the camera starts (default: the spec's rule)
+    &rock=asteroid-<i>           show a rock's card, as tapping it does
+    &focus=<id>             fly to a goal and show its card, as a tap does
+    &closing=<id>           freeze a closing burst on that goal
+    &motion=none            the still universe, as reduced motion gets it
+    &belt=0                 no asteroids
+
+  Drag to turn, pinch or wheel to zoom, two fingers or right-drag to pan, tap a
+  body to fly to it. Anchors — the grey dwarf planets, stars and galaxy cores
+  that loose goals orbit — cannot be tapped.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Nova · Universe prototype</title>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+					"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+				}
+			}
+		</script>
+		<style>
+			:root {
+				--space-void: #04050d;
+				--space-deep: #0a0e24;
+				--space-surface: rgba(22, 29, 61, 0.86);
+				--space-border: rgba(148, 163, 214, 0.22);
+				--text-bright: #f4f6ff;
+				--text: #cbd3f0;
+				--text-dim: #8b95bf;
+				--accent: #a78bfa;
+				color-scheme: dark;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				background: var(--space-void);
+				color: var(--text);
+				font:
+					16px/1.45 system-ui,
+					-apple-system,
+					'Segoe UI',
+					sans-serif;
+				margin: 0;
+			}
+
+			.top {
+				display: grid;
+				gap: 0.5rem;
+				padding: 0.9rem 16px 0.6rem;
+			}
+
+			.nav {
+				align-items: center;
+				color: var(--text-bright);
+				display: flex;
+				font-weight: 700;
+				justify-content: space-between;
+			}
+
+			.nav span {
+				color: var(--text-dim);
+				font-size: 0.82rem;
+				font-weight: 500;
+			}
+
+			.head {
+				align-items: center;
+				display: flex;
+				gap: 0.6rem;
+				justify-content: space-between;
+			}
+
+			h1 {
+				color: var(--text-bright);
+				font-size: 1.1rem;
+				margin: 0;
+			}
+
+			.muted {
+				color: var(--text-dim);
+				font-size: 0.82rem;
+				margin: 0;
+			}
+
+			.view-toggle {
+				border: 1px solid var(--space-border);
+				border-radius: 999px;
+				display: inline-flex;
+				flex: none;
+				padding: 3px;
+			}
+
+			.view-toggle button {
+				background: none;
+				border: 0;
+				border-radius: 999px;
+				color: var(--text-dim);
+				font: inherit;
+				font-size: 0.82rem;
+				min-height: 34px;
+				padding: 0 0.8rem;
+			}
+
+			.view-toggle button[aria-pressed='true'] {
+				background: rgba(167, 139, 250, 0.22);
+				color: var(--text-bright);
+				font-weight: 600;
+			}
+
+			/* The universe: full-bleed, most of a phone screen, never all of it,
+			   so the page can always be scrolled past it to the list. */
+			.universe {
+				background: radial-gradient(120% 90% at 50% 40%, #0b1030, var(--space-void) 70%);
+				height: min(72svh, 640px);
+				overflow: hidden;
+				position: relative;
+				touch-action: none;
+			}
+
+			.universe canvas {
+				display: block;
+			}
+
+			.label {
+				color: var(--text-bright);
+				font-size: 11px;
+				font-weight: 600;
+				pointer-events: none;
+				text-shadow:
+					0 0 4px #04050d,
+					0 0 8px #04050d;
+				transform: translateY(-14px);
+				white-space: nowrap;
+			}
+
+			.label small {
+				color: var(--text-dim);
+				font-weight: 500;
+				margin-left: 0.3em;
+			}
+
+			/* Where you are, and a way back from anywhere. */
+			.scales {
+				display: flex;
+				gap: 6px;
+				left: 12px;
+				position: absolute;
+				top: 12px;
+			}
+
+			.scales button {
+				background: rgba(10, 14, 36, 0.78);
+				border: 1px solid var(--space-border);
+				border-radius: 999px;
+				color: var(--text);
+				font: inherit;
+				font-size: 0.78rem;
+				min-height: 32px;
+				padding: 0 0.7rem;
+			}
+
+			.scales button[aria-current='true'] {
+				border-color: var(--accent);
+				color: var(--text-bright);
+			}
+
+			.card {
+				background: var(--space-surface);
+				backdrop-filter: blur(6px);
+				border: 1px solid var(--space-border);
+				border-radius: 14px;
+				bottom: 12px;
+				display: grid;
+				gap: 0.2rem;
+				left: 12px;
+				padding: 0.7rem 0.9rem;
+				position: absolute;
+				right: 12px;
+			}
+
+			.card[hidden] {
+				display: none;
+			}
+
+			.card__row {
+				align-items: center;
+				display: flex;
+				gap: 0.6rem;
+				justify-content: space-between;
+			}
+
+			.card__title {
+				color: var(--text-bright);
+				font-weight: 650;
+			}
+
+			.card__tier {
+				color: var(--tier);
+				font-size: 0.7rem;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+			}
+
+			.card button {
+				background: var(--accent);
+				border: 0;
+				border-radius: 999px;
+				color: #120a2a;
+				font: inherit;
+				font-weight: 650;
+				min-height: 40px;
+				padding: 0 1rem;
+			}
+
+			.hint {
+				color: var(--text-dim);
+				font-size: 0.75rem;
+				position: absolute;
+				right: 12px;
+				text-align: right;
+				top: 18px;
+			}
+
+			.below {
+				display: grid;
+				gap: 0.8rem;
+				padding: 0.8rem 16px 2rem;
+			}
+
+			.legend h2 {
+				color: var(--tier);
+				font-size: 0.72rem;
+				letter-spacing: 0.12em;
+				margin: 0 0 0.3rem;
+				text-transform: uppercase;
+			}
+
+			.legend ul {
+				display: grid;
+				gap: 0.3rem;
+				list-style: none;
+				margin: 0;
+				padding: 0;
+			}
+
+			.row {
+				align-items: center;
+				background: rgba(22, 29, 61, 0.72);
+				border: 1px solid var(--space-border);
+				border-radius: 0.7rem;
+				color: var(--text);
+				display: flex;
+				font: inherit;
+				gap: 0.6rem;
+				min-height: 44px;
+				padding: 0.4rem 0.75rem;
+				text-align: left;
+				width: 100%;
+			}
+
+			.row--child {
+				margin-left: calc(var(--depth) * 1.1rem);
+				width: calc(100% - var(--depth) * 1.1rem);
+			}
+
+			.row__dot {
+				border-radius: 50%;
+				flex: none;
+				height: 0.6rem;
+				width: 0.6rem;
+			}
+
+			.row__title {
+				color: var(--text-bright);
+				flex: 1;
+				font-weight: 600;
+			}
+
+			.row__standing {
+				color: var(--text-dim);
+				font-size: 0.8rem;
+			}
+
+			.visually-hidden {
+				clip: rect(0 0 0 0);
+				height: 1px;
+				overflow: hidden;
+				position: absolute;
+				white-space: nowrap;
+				width: 1px;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="top">
+			<div class="nav">NOVA <span>Today · Goals · Stats</span></div>
+			<div class="head">
+				<div>
+					<h1>Good to see you, Sam.</h1>
+					<p class="muted" id="summary"></p>
+				</div>
+				<form class="view-toggle" aria-label="Dashboard view">
+					<button type="button" aria-pressed="false">Tiers</button>
+					<button type="button" aria-pressed="true">Universe</button>
+				</form>
+			</div>
+		</div>
+
+		<!-- Decorative, like every orbit visual in Nova: the list below says it
+		     all in words, and is how a keyboard gets in. -->
+		<div class="universe" id="universe" aria-hidden="true">
+			<div class="scales" id="scales"></div>
+			<div class="card" id="card" hidden>
+				<div class="card__row">
+					<div>
+						<div class="card__tier" id="card-tier"></div>
+						<div class="card__title" id="card-title"></div>
+					</div>
+					<button type="button">Open</button>
+				</div>
+				<div class="muted" id="card-standing"></div>
+			</div>
+		</div>
+
+		<div class="below">
+			<p class="muted" id="note"></p>
+			<div class="legend" id="legend"></div>
+		</div>
+
+		<script type="module">
+			import * as THREE from 'three';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+			import { Line2 } from 'three/addons/lines/Line2.js';
+			import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+			import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+			import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+
+			/* ====================================================================
+			   Seeded everything. Positions, tilts and anchor angles come from ids,
+			   so a goal is always in the same place and nothing is Math.random().
+			   ==================================================================== */
+
+			function seeded(seed) {
+				let state = seed % 2_147_483_648;
+				return () => {
+					state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+					return state / 2_147_483_648;
+				};
+			}
+
+			/** FNV-1a, the hash `bodyVariant` already pins bodies with. */
+			function hash(key) {
+				let value = 2_166_136_261;
+				for (let i = 0; i < key.length; i += 1) {
+					value ^= key.charCodeAt(i);
+					value =
+						(value +
+							((value << 1) + (value << 4) + (value << 7) + (value << 8) + (value << 24))) >>>
+						0;
+				}
+				return value >>> 0;
+			}
+
+			const TIERS = ['satellite', 'planet', 'starSystem', 'galaxy', 'universe'];
+			const TIER = {
+				satellite: { label: 'Satellite', accent: '#7dd3fc', rank: 0 },
+				planet: { label: 'Planet', accent: '#a78bfa', rank: 1 },
+				starSystem: { label: 'Star System', accent: '#fbbf24', rank: 2 },
+				galaxy: { label: 'Galaxy', accent: '#f472b6', rank: 3 },
+				universe: { label: 'Universe', accent: '#34d399', rank: 4 }
+			};
+			const PALETTE = ['#7dd3fc', '#a78bfa', '#fbbf24', '#f472b6', '#34d399', '#fb7185', '#e2e8f0'];
+
+			/* ====================================================================
+			   Fake accounts
+			   ==================================================================== */
+
+			function goal(id, title, tier, fraction, color, parentId = null) {
+				return { id, title, tier, fraction, color, parentId };
+			}
+
+			const SCENARIOS = {
+				5: {
+					goals: [
+						goal('g1', 'Floss', 'satellite', 1, '#7dd3fc'),
+						goal('g2', 'Walk 8k steps', 'satellite', 0.4, '#34d399'),
+						goal('g3', 'Run three times', 'planet', 0.66, '#fb7185'),
+						goal('g4', 'Read two books', 'starSystem', 0.5, '#fbbf24'),
+						goal('g5', 'Save for the trip', 'universe', 0.3, '#34d399')
+					],
+					asteroids: [0.05, 0.5, 1]
+				},
+				12: {
+					goals: [
+						goal('s1', 'Floss', 'satellite', 1, '#7dd3fc'),
+						goal('s2', 'Journal', 'satellite', 0.5, '#e2e8f0'),
+						goal('s3', 'Duolingo', 'satellite', 0.5, '#34d399'),
+						goal('s4', 'Stretch', 'satellite', 0.2, '#f472b6', 'p1'),
+						goal('s5', 'Meditate', 'satellite', 1, '#a78bfa', 'p1'),
+						goal('p1', 'Mobility five days', 'planet', 0.4, '#f472b6', 'm1'),
+						goal('p2', 'Run three times', 'planet', 0.66, '#fb7185', 'm1'),
+						goal('p3', 'Call family', 'planet', 0.1, '#fbbf24'),
+						goal('m1', 'A good fitness month', 'starSystem', 0.5, '#fb7185'),
+						goal('m2', 'Read two books', 'starSystem', 0.25, '#fbbf24'),
+						goal('q1', 'Ship the side project', 'galaxy', 0.7, '#a78bfa'),
+						goal('y1', 'Save for the trip', 'universe', 0.62, '#34d399')
+					],
+					asteroids: [0.02, 0.1, 0.35, 0.7, 1]
+				},
+				40: (() => {
+					const random = seeded(40);
+					const goals = [];
+					const counts = { satellite: 12, planet: 10, starSystem: 8, galaxy: 5, universe: 5 };
+					for (const tier of TIERS) {
+						for (let i = 0; i < counts[tier]; i += 1) {
+							const roll = random();
+							const fraction = roll < 0.2 ? 1 : roll < 0.3 ? 0 : Math.round(random() * 20) / 20;
+							goals.push(
+								goal(
+									`${tier}-${i}`,
+									`${TIER[tier].label} goal ${i + 1}`,
+									tier,
+									fraction,
+									PALETTE[Math.floor(random() * PALETTE.length)]
+								)
+							);
+						}
+					}
+					const link = (child, parent) => (goals.find((g) => g.id === child).parentId = parent);
+					link('satellite-0', 'planet-0');
+					link('satellite-1', 'planet-0');
+					link('satellite-2', 'planet-1');
+					link('planet-0', 'starSystem-0');
+					link('planet-2', 'starSystem-0');
+					link('planet-3', 'starSystem-1');
+					link('starSystem-0', 'galaxy-0');
+					link('starSystem-2', 'galaxy-0');
+					link('galaxy-1', 'universe-0');
+					return { goals, asteroids: [0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1, 1, 1] };
+				})()
+			};
+
+			/* ====================================================================
+			   The tree. This is the half the spec puts in `$domain/sky`: goals in,
+			   a tree of hosts and orbits out, no DOM and no three.js.
+
+			   Every goal orbits something. Its parent goal, when it has one in the
+			   sky; otherwise an anchor of the kind its tier orbits — a grey dwarf
+			   planet for a satellite, a star for a planet, a galactic core for a
+			   star system, the cluster at the centre for galaxies and universes.
+			   Anchors are scenery: never goals, never tappable, never trailed.
+			   ==================================================================== */
+
+			/** What a loose goal of each tier orbits. */
+			const ANCHOR_FOR = {
+				satellite: 'dwarf',
+				planet: 'star',
+				starSystem: 'core',
+				galaxy: 'cluster',
+				universe: 'cluster'
+			};
+			/** What each anchor itself orbits. */
+			const ANCHOR_PARENT = { dwarf: 'star', star: 'core', core: 'cluster', cluster: null };
+			/** Loose goals one anchor takes before a second anchor of its kind appears. */
+			const ANCHOR_CAPACITY = 6;
+
+			/** Body radius in scene units. The ladder is roughly ×3 a rung. */
+			const BODY_R = {
+				satellite: 0.28,
+				planet: 0.9,
+				starSystem: 2.4,
+				galaxy: 7,
+				universe: 20,
+				dwarf: 0.6,
+				star: 2.2,
+				core: 5,
+				cluster: 8
+			};
+
+			const LAP_SECONDS = { satellite: 16, planet: 40, starSystem: 90, galaxy: 240, universe: 900 };
+
+			function buildTree(goals, asteroidDrifts) {
+				const byId = new Map(goals.map((g) => [g.id, g]));
+				const nodes = new Map();
+				for (const g of goals) {
+					nodes.set(g.id, { id: g.id, kind: g.tier, goal: g, children: [] });
+				}
+
+				const root = { id: 'cluster-0', kind: 'cluster', anchor: true, children: [] };
+				const anchors = { cluster: [root], core: [], star: [], dwarf: [] };
+
+				/** An anchor of `kind` with room left, making one (and its own host) if need be. */
+				function anchorFor(kind) {
+					const open = anchors[kind].find((a) => a.loose < ANCHOR_CAPACITY);
+					if (open) return open;
+					const anchor = {
+						id: `${kind}-${anchors[kind].length}`,
+						kind,
+						anchor: true,
+						loose: 0,
+						children: []
+					};
+					anchors[kind].push(anchor);
+					const parentKind = ANCHOR_PARENT[kind];
+					const host = parentKind === 'cluster' ? root : anchorFor(parentKind);
+					host.children.push(anchor);
+					if (parentKind !== 'cluster') host.loose += 1;
+					return anchor;
+				}
+
+				// Sort once: tier, then the user's own order. Here, list order.
+				for (const g of goals) {
+					const node = nodes.get(g.id);
+					if (g.parentId && byId.has(g.parentId)) {
+						nodes.get(g.parentId).children.push(node);
+					} else if (ANCHOR_FOR[g.tier] === 'cluster') {
+						root.children.push(node);
+					} else {
+						const anchor = anchorFor(ANCHOR_FOR[g.tier]);
+						anchor.children.push(node);
+						anchor.loose += 1;
+					}
+				}
+
+				// The belt always circles the home star; asteroids alone summon it.
+				let belt = null;
+				if (asteroidDrifts.length) {
+					const home = anchors.star[0] ?? anchorFor('star');
+					belt = { host: home, drifts: asteroidDrifts };
+					home.belt = belt;
+				}
+
+				return { root, nodes, anchors, belt };
+			}
+
+			/**
+			 * Orbit radii, innermost first, each lane as wide as what is in it — the
+			 * rule the flat sky used, recursively. Two goals at the same progress
+			 * are on different orbits, so they can never overlap.
+			 */
+			function layoutTree(node) {
+				const bodyR = BODY_R[node.kind];
+				node.bodyR = bodyR;
+				// Anchors innermost, then short cadences before long ones.
+				node.children.sort((a, b) => {
+					if (!!a.anchor !== !!b.anchor) return a.anchor ? -1 : 1;
+					return (TIER[a.kind]?.rank ?? 0) - (TIER[b.kind]?.rank ?? 0);
+				});
+				let edge = bodyR * 1.9;
+				for (const child of node.children) {
+					layoutTree(child);
+					const gap = Math.max(child.extent * 0.45, bodyR * 0.35);
+					child.orbitR = edge + gap + child.extent;
+					edge = child.orbitR + child.extent;
+				}
+				if (node.belt) {
+					node.belt.inner = edge + bodyR * 1.2;
+					node.belt.width = bodyR * 2.2;
+					edge = node.belt.inner + node.belt.width;
+				}
+				node.extent = node.children.length || node.belt ? edge : bodyR;
+				// A seeded tilt per host, so the universe is not one flat disc.
+				const random = seeded(hash(node.id));
+				node.tilt = (random() - 0.5) * 0.7;
+				node.spin = random() * Math.PI * 2;
+				node.anchorAngle = random() * Math.PI * 2;
+			}
+
+			/* ====================================================================
+			   Drawing
+			   ==================================================================== */
+
+			const params = new URLSearchParams(location.search);
+			const scenario = SCENARIOS[params.get('n') ?? '12'] ?? SCENARIOS[12];
+			const ROCK_TITLES = [
+				'Renew passport',
+				'Fix the bike light',
+				'Clean the garage',
+				'Return the drill',
+				'Book a dentist visit',
+				'Back up the laptop',
+				'Sort the loft',
+				'Frame the print',
+				'Cancel old gym',
+				'Replace wiper blades',
+				'Email the landlord'
+			];
+			const asteroids =
+				params.get('belt') === '0'
+					? []
+					: scenario.asteroids.map((drift, i) => ({
+							id: `asteroid-${i}`,
+							title: ROCK_TITLES[i % ROCK_TITLES.length],
+							drift,
+							days: Math.round(drift * 21)
+						}));
+			const closingId = params.get('closing');
+			if (closingId) scenario.goals.find((g) => g.id === closingId).fraction = 1;
+			const still =
+				params.get('motion') === 'none' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+			const tree = buildTree(scenario.goals, asteroids);
+			layoutTree(tree.root);
+
+			const host = document.getElementById('universe');
+			const renderer = new THREE.WebGLRenderer({
+				antialias: true,
+				logarithmicDepthBuffer: true,
+				preserveDrawingBuffer: true
+			});
+			renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+			host.prepend(renderer.domElement);
+
+			const labels = new CSS2DRenderer();
+			labels.domElement.style.position = 'absolute';
+			labels.domElement.style.inset = '0';
+			labels.domElement.style.pointerEvents = 'none';
+			host.append(labels.domElement);
+
+			const scene = new THREE.Scene();
+			const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1e6);
+			scene.add(new THREE.AmbientLight(0xb8c4ff, 0.9));
+			const sunlight = new THREE.DirectionalLight(0xffffff, 1.6);
+			sunlight.position.set(1, 1.4, 0.8);
+			scene.add(sunlight);
+
+			/** A soft round glow, drawn on a canvas — procedural, not a raster asset. */
+			const glowTexture = (() => {
+				const c = document.createElement('canvas');
+				c.width = c.height = 64;
+				const g = c.getContext('2d');
+				const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+				grad.addColorStop(0, 'rgba(255,255,255,1)');
+				grad.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+				grad.addColorStop(1, 'rgba(255,255,255,0)');
+				g.fillStyle = grad;
+				g.fillRect(0, 0, 64, 64);
+				return new THREE.CanvasTexture(c);
+			})();
+
+			/**
+			 * A glow held at a size in pixels, however far away the camera is. This
+			 * is how a satellite a galaxy away is still a visible point: the body
+			 * shrinks with distance, its glow does not.
+			 */
+			function glow(color, pixels, opacity = 1) {
+				const sprite = new THREE.Sprite(
+					new THREE.SpriteMaterial({
+						map: glowTexture,
+						color,
+						transparent: true,
+						opacity,
+						depthWrite: false,
+						blending: THREE.AdditiveBlending,
+						sizeAttenuation: false
+					})
+				);
+				sprite.userData.pixels = pixels;
+				pixelSized.push(sprite);
+				return sprite;
+			}
+
+			const pixelSized = [];
+			/** Every rock, so a tap can find one. */
+			const rocks = [];
+			const lineMaterials = [];
+
+			function line(points, color, width, opacity = 1, dashed = false) {
+				const geometry = new LineGeometry();
+				geometry.setPositions(points.flatMap((p) => [p.x, p.y, p.z]));
+				const material = new LineMaterial({
+					color,
+					linewidth: width, // pixels, by default: size in pixels, not units
+					transparent: true,
+					opacity,
+					dashed,
+					dashSize: 0.5,
+					gapSize: 0.5,
+					depthWrite: false
+				});
+				lineMaterials.push(material);
+				const l = new Line2(geometry, material);
+				if (dashed) l.computeLineDistances();
+				return l;
+			}
+
+			function arcPoints(r, from, to, steps) {
+				const pts = [];
+				for (let i = 0; i <= steps; i += 1) {
+					const a = from + ((to - from) * i) / steps;
+					pts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
+				}
+				return pts;
+			}
+
+			function bodyMesh(node) {
+				const g = new THREE.Group();
+				const r = node.bodyR;
+				const color = new THREE.Color(node.goal?.color ?? '#9aa0b4');
+				const variant = hash(node.id) % 3;
+				switch (node.kind) {
+					case 'satellite': {
+						const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.4 });
+						g.add(new THREE.Mesh(new THREE.BoxGeometry(r, r, r), mat));
+						const panel = new THREE.MeshStandardMaterial({
+							color: 0x1e3a8a,
+							emissive: color,
+							emissiveIntensity: 0.25
+						});
+						for (const side of [-1, 1]) {
+							const p = new THREE.Mesh(new THREE.BoxGeometry(r * 1.4, r * 0.08, r * 0.6), panel);
+							p.position.x = side * r * 1.25;
+							g.add(p);
+						}
+						g.add(glow(color, 12, 0.9));
+						break;
+					}
+					case 'planet': {
+						g.add(
+							new THREE.Mesh(
+								new THREE.SphereGeometry(r, 32, 16),
+								new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
+							)
+						);
+						if (variant === 1) {
+							const ring = new THREE.Mesh(
+								new THREE.RingGeometry(r * 1.35, r * 1.9, 48),
+								new THREE.MeshBasicMaterial({
+									color,
+									side: THREE.DoubleSide,
+									transparent: true,
+									opacity: 0.55
+								})
+							);
+							ring.rotation.x = Math.PI / 2.4;
+							g.add(ring);
+						}
+						g.add(glow(color, 16, 0.7));
+						break;
+					}
+					case 'dwarf': {
+						// Grey, cratered-looking, unlit by any goal: scenery.
+						g.add(
+							new THREE.Mesh(
+								new THREE.IcosahedronGeometry(r, 1),
+								new THREE.MeshStandardMaterial({ color: 0x6b7080, roughness: 1, flatShading: true })
+							)
+						);
+						g.add(glow(0x9aa0b4, 7, 0.35));
+						break;
+					}
+					case 'starSystem':
+					case 'star': {
+						const anchor = node.kind === 'star';
+						// An anchor star is a dim, colourless one: lit enough to orbit, not
+						// enough to be mistaken for a goal.
+						const c = anchor ? new THREE.Color('#8f8a80') : color;
+						g.add(
+							new THREE.Mesh(
+								new THREE.SphereGeometry(anchor ? r * 0.6 : r, 32, 16),
+								new THREE.MeshBasicMaterial({
+									color: anchor ? c : c.clone().lerp(new THREE.Color('#fff'), 0.45)
+								})
+							)
+						);
+						g.add(glow(c, anchor ? 22 : 34, anchor ? 0.45 : 0.95));
+						break;
+					}
+					case 'galaxy':
+					case 'core': {
+						const anchor = node.kind === 'core';
+						const c = anchor ? new THREE.Color('#8e93a8') : color;
+						const random = seeded(hash(node.id + 'arms'));
+						const extent = Math.max(node.extent, r * 3);
+						const count = anchor ? 900 : 1600;
+						const positions = [];
+						for (let i = 0; i < count; i += 1) {
+							const t = Math.pow(random(), 0.6);
+							const arm = i % 2;
+							const a = t * 7 + arm * Math.PI + (random() - 0.5) * 0.6;
+							const d = t * extent * 1.02;
+							positions.push(Math.cos(a) * d, (random() - 0.5) * r * 0.25, Math.sin(a) * d);
+						}
+						const geometry = new THREE.BufferGeometry();
+						geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+						const disc = new THREE.Points(
+							geometry,
+							new THREE.PointsMaterial({
+								color: c,
+								size: 1.6,
+								sizeAttenuation: false,
+								transparent: true,
+								opacity: anchor ? 0.28 : 0.5,
+								depthWrite: false,
+								blending: THREE.AdditiveBlending
+							})
+						);
+						disc.userData.disc = true;
+						g.add(disc);
+						g.add(glow(c.clone().lerp(new THREE.Color('#fff'), 0.4), anchor ? 26 : 40, 0.9));
+						break;
+					}
+					case 'universe': {
+						g.add(
+							new THREE.Mesh(
+								new THREE.IcosahedronGeometry(r, 2),
+								new THREE.MeshBasicMaterial({
+									color,
+									wireframe: true,
+									transparent: true,
+									opacity: 0.25
+								})
+							)
+						);
+						g.add(glow(color, 46, 0.7));
+						break;
+					}
+					case 'cluster': {
+						g.add(glow(0xfff4d6, 30, 0.8));
+						break;
+					}
+				}
+				return g;
+			}
+
+			/** Everything the frame loop touches, per goal. */
+			const flying = [];
+
+			/**
+			 * One host: its body, a tilted plane for its orbits, and each child
+			 * placed on that plane at the angle its progress puts it.
+			 */
+			function build(node, parentPlane) {
+				const holder = new THREE.Group(); // where this node sits
+				parentPlane.add(holder);
+				node.holder = holder;
+				holder.add(bodyMesh(node));
+
+				const plane = new THREE.Group();
+				plane.rotation.set(node.tilt, node.spin, 0);
+				holder.add(plane);
+				node.plane = plane;
+
+				for (const child of node.children) {
+					child.host = node;
+					const r = child.orbitR;
+					const pivot = new THREE.Group(); // turns the child round its orbit
+					plane.add(pivot);
+					if (child.goal) {
+						const fraction = child.goal.fraction;
+						const closed = fraction >= 1;
+						const color = child.goal.color;
+						// The orbit, faint and dashed: the whole revolution.
+						plane.add(line(arcPoints(r, 0, Math.PI * 2, 128), TIER[child.kind].accent, 1, 0.35));
+						// The trail: how far round this revolution has come.
+						if (fraction > 0) {
+							const steps = Math.max(8, Math.round(128 * fraction));
+							const trail = line(
+								arcPoints(r, 0, Math.PI * 2 * fraction, steps),
+								color,
+								closed ? 3.2 : 2.6,
+								0.95
+							);
+							plane.add(trail);
+							child.trail = trail;
+						}
+						// A start mark, so "how far round" has somewhere to count from.
+						plane.add(
+							line(
+								[
+									new THREE.Vector3(r - child.extent * 0.6 - 0.1, 0, 0),
+									new THREE.Vector3(r + child.extent * 0.6 + 0.1, 0, 0)
+								],
+								'#ffffff',
+								1.4,
+								0.5
+							)
+						);
+						pivot.rotation.y = -Math.PI * 2 * Math.min(fraction, 1);
+						flying.push({ node: child, pivot, closed, lap: LAP_SECONDS[child.kind] });
+					} else {
+						// An anchor: parked at a seeded angle, no orbit drawn but a whisper.
+						plane.add(line(arcPoints(r, 0, Math.PI * 2, 96), '#5b6180', 1, 0.14));
+						pivot.rotation.y = child.anchorAngle;
+					}
+					const place = new THREE.Group();
+					place.position.x = r;
+					pivot.add(place);
+					build(child, place);
+				}
+
+				if (node.belt) drawBelt(node, plane);
+			}
+
+			function drawBelt(node, plane) {
+				const { inner, width, drifts } = node.belt;
+				const random = seeded(hash(node.id + 'belt'));
+				// A faint band says where the belt is, however few rocks are in it.
+				const band = new THREE.Mesh(
+					new THREE.RingGeometry(inner, inner + width, 96),
+					new THREE.MeshBasicMaterial({
+						color: 0xb8a98f,
+						side: THREE.DoubleSide,
+						transparent: true,
+						opacity: 0.05,
+						depthWrite: false
+					})
+				);
+				band.rotation.x = Math.PI / 2;
+				plane.add(band);
+				drifts.slice(0, 30).forEach((asteroid) => {
+					const { id, drift } = asteroid;
+					const a = ((hash(id) % 3600) / 3600) * Math.PI * 2;
+					const r = inner + drift * width; // drift is outward, and stops at the edge
+					const opacity = drift >= 1 ? 0.3 : drift >= 1 / 3 ? 0.6 : 1;
+					const rock = new THREE.Mesh(
+						new THREE.DodecahedronGeometry(node.bodyR * (0.16 + (hash(id + 's') % 10) / 90), 0),
+						new THREE.MeshStandardMaterial({
+							color: 0xd6c6a4,
+							roughness: 1,
+							flatShading: true,
+							transparent: true,
+							opacity
+						})
+					);
+					rock.position.set(Math.cos(a) * r, (random() - 0.5) * width * 0.1, Math.sin(a) * r);
+					rock.rotation.set(random() * 3, random() * 3, 0);
+					plane.add(rock);
+					const speck = glow(0xe8d5a8, 10, opacity * 0.8);
+					speck.position.copy(rock.position);
+					plane.add(speck);
+					rocks.push({ asteroid, mesh: rock });
+				});
+			}
+
+			build(tree.root, scene);
+
+			// Labels: a goal's title near its body, shown only when there is room.
+			for (const f of flying) {
+				const div = document.createElement('div');
+				div.className = 'label';
+				div.innerHTML = `${f.node.goal.title}<small>${Math.round(f.node.goal.fraction * 100)}%</small>`;
+				const label = new CSS2DObject(div);
+				f.node.holder.add(label);
+				f.label = label;
+			}
+
+			// A distant background of stars, seeded.
+			(() => {
+				const random = seeded(7);
+				const positions = [];
+				for (let i = 0; i < 1500; i += 1) {
+					const u = random() * 2 - 1;
+					const t = random() * Math.PI * 2;
+					const s = Math.sqrt(1 - u * u);
+					const d = 4e5;
+					positions.push(Math.cos(t) * s * d, u * d, Math.sin(t) * s * d);
+				}
+				const geometry = new THREE.BufferGeometry();
+				geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+				scene.add(
+					new THREE.Points(
+						geometry,
+						new THREE.PointsMaterial({ color: 0xaab4e0, size: 1.2, sizeAttenuation: false })
+					)
+				);
+			})();
+
+			/* ====================================================================
+			   The closing, frozen a third of the way through for the screenshot
+			   ==================================================================== */
+
+			let burst = null;
+			if (closingId) {
+				const f = flying.find((x) => x.node.id === closingId);
+				const color = new THREE.Color(f.node.goal.color);
+				burst = new THREE.Group();
+				const reach = f.node.bodyR * 6;
+				for (let i = 0; i < 16; i += 1) {
+					const a = (i / 16) * Math.PI * 2;
+					const ray = line(
+						[
+							new THREE.Vector3(
+								Math.cos(a) * f.node.bodyR * 1.6,
+								Math.sin(a) * f.node.bodyR * 1.6,
+								0
+							),
+							new THREE.Vector3(Math.cos(a) * reach, Math.sin(a) * reach, 0)
+						],
+						color,
+						2.2,
+						0.9
+					);
+					burst.add(ray);
+				}
+				burst.add(glow('#ffffff', 90, 0.9));
+				f.node.holder.add(burst);
+				f.node.trail.material.linewidth = 6;
+				f.node.trail.material.color.set(color.clone().lerp(new THREE.Color('#fff'), 0.35));
+			}
+
+			/* ====================================================================
+			   Camera
+			   ==================================================================== */
+
+			const controls = new OrbitControls(camera, renderer.domElement);
+			controls.enableDamping = !still;
+			controls.dampingFactor = 0.08;
+			controls.screenSpacePanning = true;
+			controls.minDistance = 0.8;
+			controls.maxDistance = 60000;
+			controls.zoomToCursor = true;
+
+			const world = (node) => node.holder.getWorldPosition(new THREE.Vector3());
+
+			function frame(node, instant = still, belt = false) {
+				scene.updateMatrixWorld(true);
+				let target = world(node);
+				// Fit the host's whole extent across the narrower side of the view:
+				// on a phone that is the width, and the width is what runs out.
+				const vfov = THREE.MathUtils.degToRad(camera.fov);
+				const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
+				const fit = Math.min(vfov, hfov);
+				// A goal with nothing orbiting it is framed with its own orbit's
+				// neighbourhood in view, so its trail is on screen with it.
+				const reach =
+					node.children.length || node.belt ? node.extent : (node.orbitR ?? node.extent) * 0.7;
+				let distance = Math.max((reach * 1.08) / Math.sin(fit / 2), node.bodyR * 9);
+				if (belt && node.belt) {
+					// Close in on the belt's nearest arc, rocks in the foreground.
+					const edge = new THREE.Vector3(node.belt.inner + node.belt.width / 2, 0, 0).applyMatrix4(
+						node.plane.matrixWorld
+					);
+					target = target.clone().lerp(edge, 0.8);
+					distance = node.belt.width * 7;
+				}
+				// Look down on the host's own plane at a slant, so orbits read as rings.
+				const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(
+					node.plane.getWorldQuaternion(new THREE.Quaternion())
+				);
+				const side = new THREE.Vector3(0.35, 0, 0.9).applyQuaternion(
+					node.plane.getWorldQuaternion(new THREE.Quaternion())
+				);
+				const eye = target
+					.clone()
+					.add(normal.multiplyScalar(distance * 0.82).add(side.multiplyScalar(distance * 0.55)));
+				if (instant) {
+					controls.target.copy(target);
+					camera.position.copy(eye);
+					controls.update();
+					return;
+				}
+				flight = {
+					from: { t: controls.target.clone(), e: camera.position.clone() },
+					to: { t: target, e: eye },
+					start: performance.now(),
+					ms: 900
+				};
+			}
+			let flight = null;
+
+			/* The scale strip: named places to fly to, which also say where you are. */
+			const scales = [];
+			const home = tree.anchors.star[0];
+			const homeGalaxy = tree.anchors.core[0];
+			if (home) scales.push({ label: 'Home system', node: home });
+			if (home && tree.belt) scales.push({ label: 'Belt', node: home, belt: true });
+			if (homeGalaxy) scales.push({ label: 'Galaxy', node: homeGalaxy });
+			scales.push({ label: 'Everything', node: tree.root });
+			const strip = document.getElementById('scales');
+			for (const s of scales) {
+				const b = document.createElement('button');
+				b.type = 'button';
+				b.textContent = s.label;
+				b.addEventListener('click', () => {
+					showCard(null);
+					frame(s.node, still, s.belt);
+					for (const other of strip.children) other.removeAttribute('aria-current');
+					b.setAttribute('aria-current', 'true');
+				});
+				strip.append(b);
+				s.button = b;
+			}
+
+			const startAt = params.get('view');
+			const start =
+				startAt === 'all'
+					? scales.at(-1)
+					: startAt === 'galaxy'
+						? scales.find((s) => s.label === 'Galaxy')
+						: startAt === 'belt'
+							? scales.find((s) => s.label === 'Belt')
+							: (scales.find((s) => s.label === 'Home system') ?? scales.at(-1));
+
+			/* ====================================================================
+			   Tapping
+			   ==================================================================== */
+
+			const card = document.getElementById('card');
+			function showCard(node) {
+				if (!node) {
+					card.hidden = true;
+					return;
+				}
+				card.hidden = false;
+				if (node.rock) {
+					const band =
+						node.rock.drift >= 1
+							? 'at the edge of the belt'
+							: node.rock.drift >= 1 / 3
+								? 'drifting'
+								: 'fresh';
+					card.style.setProperty('--tier', '#d6c6a4');
+					document.getElementById('card-tier').textContent = 'Asteroid';
+					document.getElementById('card-title').textContent = node.rock.title;
+					document.getElementById('card-standing').textContent =
+						`Untouched ${node.rock.days} ${node.rock.days === 1 ? 'day' : 'days'} · ${band}`;
+					card.querySelector('button').textContent = 'Open in Today';
+					return;
+				}
+				card.querySelector('button').textContent = 'Open';
+				const g = node.goal;
+				card.style.setProperty('--tier', TIER[g.tier].accent);
+				document.getElementById('card-tier').textContent = TIER[g.tier].label;
+				document.getElementById('card-title').textContent = g.title;
+				const kids = node.children.filter((c) => c.goal).length;
+				document.getElementById('card-standing').textContent =
+					`${g.fraction >= 1 ? 'Orbit closed · ' : ''}${Math.round(g.fraction * 100)}% of target logged` +
+					(kids ? ` · ${kids} ${kids === 1 ? 'goal orbits' : 'goals orbit'} it` : '');
+			}
+
+			/** Nearest goal body or rock on screen within 24px. Anchors are not candidates. */
+			function nearestOnScreen(x, y) {
+				const rect = renderer.domElement.getBoundingClientRect();
+				let best = null;
+				let bestD = 24;
+				const candidates = [
+					...flying.map((f) => ({ node: f.node, at: world(f.node) })),
+					...rocks.map((r) => ({
+						node: { rock: r.asteroid },
+						at: r.mesh.getWorldPosition(new THREE.Vector3())
+					}))
+				];
+				for (const c of candidates) {
+					const p = c.at.clone().project(camera);
+					if (p.z > 1) continue;
+					const sx = ((p.x + 1) / 2) * rect.width;
+					const sy = ((1 - p.y) / 2) * rect.height;
+					const d = Math.hypot(sx - x, sy - y);
+					if (d < bestD) {
+						bestD = d;
+						best = c.node;
+					}
+				}
+				return best;
+			}
+
+			let down = null;
+			renderer.domElement.addEventListener(
+				'pointerdown',
+				(e) => (down = { x: e.clientX, y: e.clientY })
+			);
+			renderer.domElement.addEventListener('pointerup', (e) => {
+				if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+				const rect = renderer.domElement.getBoundingClientRect();
+				const node = nearestOnScreen(e.clientX - rect.left, e.clientY - rect.top);
+				if (!node) return;
+				showCard(node);
+				// A rock is shown where it is; the belt's actions live on Today.
+				if (!node.rock) frame(node);
+			});
+
+			/* ====================================================================
+			   Frame loop
+			   ==================================================================== */
+
+			function resize() {
+				const w = host.clientWidth;
+				const h = host.clientHeight;
+				renderer.setSize(w, h);
+				labels.setSize(w, h);
+				camera.aspect = w / h;
+				camera.updateProjectionMatrix();
+				for (const m of lineMaterials) m.resolution.set(w, h);
+				// Without size attenuation a sprite's scale is in clip space, where
+				// 2 is the full height of the view. Convert from pixels.
+				for (const sprite of pixelSized) {
+					const k = (2 * sprite.userData.pixels) / h;
+					sprite.scale.set(k, k, 1);
+				}
+			}
+			addEventListener('resize', resize);
+			resize();
+
+			const clock = new THREE.Clock();
+			const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+			function updateLabels() {
+				// A label shows when its orbit is wide enough on screen to hold it.
+				const rect = renderer.domElement.getBoundingClientRect();
+				const toScreen = (v) => {
+					const p = v.clone().project(camera);
+					return { x: ((p.x + 1) / 2) * rect.width, y: ((1 - p.y) / 2) * rect.height, z: p.z };
+				};
+				for (const f of flying) {
+					const parentHolder = f.pivot.parent.parent; // host's plane → holder
+					const a = toScreen(parentHolder.getWorldPosition(new THREE.Vector3()));
+					const b = toScreen(world(f.node));
+					f.label.visible = b.z < 1 && Math.hypot(a.x - b.x, a.y - b.y) > 70;
+				}
+			}
+
+			function tick() {
+				const dt = clock.getDelta();
+				if (burst) {
+					// The burst faces the camera wherever the body is.
+					const parentQ = burst.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+					burst.quaternion.copy(parentQ.multiply(camera.quaternion));
+				}
+				if (!still && !closingId) {
+					for (const f of flying) {
+						if (f.closed) f.pivot.rotation.y -= (dt / f.lap) * Math.PI * 2;
+					}
+				}
+				if (flight) {
+					const t = Math.min(1, (performance.now() - flight.start) / flight.ms);
+					const k = ease(t);
+					controls.target.lerpVectors(flight.from.t, flight.to.t, k);
+					camera.position.lerpVectors(flight.from.e, flight.to.e, k);
+					if (t >= 1) flight = null;
+				}
+				controls.update();
+				updateLabels();
+				renderer.render(scene, camera);
+				labels.render(scene, camera);
+				requestAnimationFrame(tick);
+			}
+
+			scene.updateMatrixWorld(true);
+			const focusId = params.get('focus') ?? closingId;
+			if (focusId) {
+				const node = tree.nodes.get(focusId);
+				// A closing is framed on its host, so the whole lit ring is in view.
+				frame(closingId ? node.host : node, true);
+				if (!closingId) showCard(node);
+			} else {
+				frame(start.node, true, start.belt);
+				start.button.setAttribute('aria-current', 'true');
+			}
+			const rockId = params.get('rock');
+			if (rockId) showCard({ rock: asteroids.find((a) => a.id === rockId) });
+			tick();
+
+			/* ====================================================================
+			   The words: summary, note, and the list of every goal
+			   ==================================================================== */
+
+			const total = scenario.goals.length;
+			const closed = scenario.goals.filter((g) => g.fraction >= 1).length;
+			document.getElementById('summary').textContent =
+				`${closed} of ${total} orbits closed in their current period.`;
+			document.getElementById('note').innerHTML =
+				`Every goal is in the universe. Tap a body to fly to it, or pick one below.` +
+				(asteroids.length
+					? ` <a href="#belt" style="color:var(--accent)">${asteroids.length} asteroids</a> circle the home star.`
+					: '');
+
+			const legend = document.getElementById('legend');
+			const byParent = new Map();
+			for (const g of scenario.goals) {
+				const key = g.parentId ?? '';
+				if (!byParent.has(key)) byParent.set(key, []);
+				byParent.get(key).push(g);
+			}
+			const row = (g, depth) => {
+				const kids = (byParent.get(g.id) ?? []).map((c) => row(c, depth + 1)).join('');
+				return `<li><button class="row ${depth ? 'row--child' : ''}" style="--depth:${depth}" type="button">
+					<span class="row__dot" style="background:${g.color}"></span>
+					<span class="row__title">${g.title}</span>
+					<span class="row__standing">${Math.round(g.fraction * 100)}%</span>
+					<span class="visually-hidden">${TIER[g.tier].label}</span>
+				</button></li>${kids}`;
+			};
+			legend.innerHTML = TIERS.map((tier) => {
+				const roots = (byParent.get('') ?? []).filter((g) => g.tier === tier);
+				if (!roots.length) return '';
+				return `<section style="--tier:${TIER[tier].accent}"><h2>${TIER[tier].label}</h2><ul>${roots.map((g) => row(g, 0)).join('')}</ul></section>`;
+			}).join('');
+
+			// For the screenshot script.
+			requestAnimationFrame(() =>
+				requestAnimationFrame(() => {
+					window.__universe = {
+						goals: flying.length,
+						rocks: rocks.length,
+						anchors: Object.fromEntries(
+							Object.entries(tree.anchors).map(([k, v]) => [k, v.length])
+						),
+						extent: Number(tree.root.extent.toFixed(1)),
+						homeExtent: home ? Number(home.extent.toFixed(1)) : null
+					};
+				})
+			);
+		</script>
+	</body>
+</html>

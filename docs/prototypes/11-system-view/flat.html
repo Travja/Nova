@@ -1,0 +1,994 @@
+<!doctype html>
+<!--
+  Throwaway prototype for #11: the flat SVG sky, explored first and set aside
+  for the 3D universe in index.html. Kept because the spec's decision 1 cites
+  what it showed — a dozen goals fit, forty do not.
+
+  Not app code. It exists to settle one claim — that one sky of goals is
+  readable on a 390px-wide phone — and to show what the spec in
+  docs/issues/11-system-view.md does at 5, 12 and 40 goals. Nothing here is
+  imported by the app and nothing in src/ is imported here.
+
+  Open it directly in a browser. Query parameters:
+
+    ?n=5|12|40          which fake account to draw (default 12)
+    &closing=<id>       freeze a closing burst on that goal, part-way through
+    &motion=none        the still sky, exactly as prefers-reduced-motion gets it
+    &focus=<id>         a list row focused, and its body ringed in the sky
+    &belt=0             no asteroids
+
+  Obeys the rules the build will have to: CSS and inline SVG only, anything
+  random seeded, and the viewBox is never stretched — it scales uniformly, and
+  at phone width one user unit is within a few percent of one CSS pixel, which
+  is where every size below was chosen.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Nova · Sky prototype</title>
+		<style>
+			:root {
+				--space-void: #04050d;
+				--space-deep: #0a0e24;
+				--space-surface: rgba(22, 29, 61, 0.72);
+				--space-border: rgba(148, 163, 214, 0.18);
+				--text-bright: #f4f6ff;
+				--text: #cbd3f0;
+				--text-dim: #8b95bf;
+				--accent: #a78bfa;
+				color-scheme: dark;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				background: radial-gradient(120% 70% at 50% 0%, var(--space-deep), var(--space-void));
+				color: var(--text);
+				font:
+					16px/1.45 system-ui,
+					-apple-system,
+					'Segoe UI',
+					sans-serif;
+				margin: 0;
+				min-height: 100vh;
+			}
+
+			main {
+				display: grid;
+				gap: 0.9rem;
+				margin: 0 auto;
+				max-width: 40rem;
+				padding: 0.9rem 16px 2rem;
+			}
+
+			.nav {
+				align-items: center;
+				color: var(--text-bright);
+				display: flex;
+				font-weight: 700;
+				justify-content: space-between;
+				letter-spacing: 0.02em;
+			}
+
+			.nav span {
+				color: var(--text-dim);
+				font-size: 0.82rem;
+				font-weight: 500;
+			}
+
+			h1 {
+				color: var(--text-bright);
+				font-size: 1.25rem;
+				margin: 0;
+			}
+
+			.muted {
+				color: var(--text-dim);
+				font-size: 0.85rem;
+				margin: 0.1rem 0 0;
+			}
+
+			.head {
+				align-items: end;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.6rem;
+				justify-content: space-between;
+			}
+
+			/* The remembered toggle. Two submit buttons in one form, so it works
+			   without JavaScript: the one pressed is the value posted. */
+			.view-toggle {
+				border: 1px solid var(--space-border);
+				border-radius: 999px;
+				display: inline-flex;
+				padding: 3px;
+			}
+
+			.view-toggle button {
+				background: none;
+				border: 0;
+				border-radius: 999px;
+				color: var(--text-dim);
+				font: inherit;
+				font-size: 0.85rem;
+				min-height: 36px;
+				min-width: 64px;
+				padding: 0 0.9rem;
+			}
+
+			.view-toggle button[aria-pressed='true'] {
+				background: rgba(167, 139, 250, 0.2);
+				color: var(--text-bright);
+				font-weight: 600;
+			}
+
+			.sky {
+				aspect-ratio: 1;
+				display: block;
+				margin: 0 auto;
+				max-width: 560px;
+				overflow: visible;
+				touch-action: manipulation;
+				width: 100%;
+			}
+
+			.sky-note {
+				display: flex;
+				flex-wrap: wrap;
+				font-size: 0.85rem;
+				gap: 0.3rem 1rem;
+				justify-content: space-between;
+				margin-top: -0.4rem;
+			}
+
+			.sky-note a {
+				color: var(--accent);
+			}
+
+			/* ---- The sky itself -------------------------------------------- */
+
+			.lane {
+				fill: none;
+				stroke: var(--tier);
+				stroke-dasharray: 1.2 3.2;
+				stroke-opacity: 0.32;
+				stroke-width: 0.8;
+			}
+
+			.arc {
+				fill: none;
+				stroke: var(--color);
+				stroke-linecap: round;
+				stroke-width: 2;
+				filter: drop-shadow(0 0 1.5px var(--color));
+				transform: rotate(-90deg);
+				transform-origin: 180px 180px;
+				transition: stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1);
+			}
+
+			.lane-group--closed .arc {
+				stroke-width: 2.4;
+			}
+
+			/* A goal the sky had no lane for: a tick on its tier's edge, at its
+			   true angle. Not a body, not tappable — it says there is more here. */
+			.dust {
+				opacity: 0.8;
+				stroke: var(--tier);
+				stroke-linecap: round;
+				stroke-width: 0.9;
+			}
+
+			.belt {
+				fill: none;
+				stroke: #b8a98f;
+				stroke-opacity: 0.07;
+			}
+
+			.sun {
+				animation: pulse 5.5s ease-in-out infinite;
+				transform-box: fill-box;
+				transform-origin: center;
+			}
+
+			.travel {
+				transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+			}
+
+			/* A closed orbit keeps travelling, as on the dial. Inner lanes are
+			   quick, outer ones barely move: satellites whip round, a universe
+			   drifts. The counter-rotation keeps the body level. */
+			.lane-group--closed .travel--out {
+				animation: spin var(--orbit) linear infinite;
+			}
+
+			.lane-group--closed .travel--in {
+				animation: spin var(--orbit) linear infinite reverse;
+			}
+
+			.moon-track {
+				fill: none;
+				stroke: var(--moon-color);
+				stroke-dasharray: 0.8 1.6;
+				stroke-opacity: 0.55;
+				stroke-width: 0.5;
+			}
+
+			.halo {
+				opacity: 0.55;
+			}
+
+			.focus-ring {
+				fill: none;
+				stroke: #fff;
+				stroke-width: 1.4;
+			}
+
+			.rock {
+				fill: #d6c6a4;
+			}
+
+			.rock--drifting {
+				opacity: 0.6;
+			}
+
+			.rock--faint {
+				opacity: 0.28;
+			}
+
+			/* ---- The closing ------------------------------------------------ */
+
+			.sky--closing .lane-group:not(.is-closing),
+			.sky--closing .rock,
+			.sky--closing .dust {
+				opacity: 0.35;
+				transition: opacity 180ms ease-out;
+			}
+
+			.burst {
+				pointer-events: none;
+			}
+
+			.burst__flash {
+				animation: flash var(--burst-ms) ease-out forwards;
+				fill: #fff;
+			}
+
+			.burst__wave {
+				animation: wave var(--burst-ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+				fill: none;
+				stroke: var(--color);
+				stroke-width: 1.4;
+				transform-box: fill-box;
+				transform-origin: center;
+			}
+
+			.burst__rays {
+				animation: rays var(--burst-ms) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+			}
+
+			.burst__ray {
+				stroke: var(--color);
+				stroke-linecap: round;
+				stroke-width: 1.4;
+				filter: drop-shadow(0 0 2px var(--color));
+			}
+
+			/* The whole lane lights: an orbit closing is a ring completing, and at
+			   sky scale the ring is the thing big enough to see. */
+			.ring-flash {
+				animation: ring-flash var(--burst-ms) ease-out forwards;
+				fill: none;
+				stroke: var(--color);
+				stroke-width: 3;
+				filter: drop-shadow(0 0 5px var(--color));
+			}
+
+			.frozen * {
+				animation-delay: calc(var(--burst-ms, 800ms) * -0.32) !important;
+				animation-play-state: paused !important;
+			}
+
+			@keyframes spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+
+			@keyframes pulse {
+				50% {
+					opacity: 0.75;
+					transform: scale(1.08);
+				}
+			}
+
+			@keyframes flash {
+				0% {
+					opacity: 0.95;
+				}
+				100% {
+					opacity: 0;
+				}
+			}
+
+			@keyframes wave {
+				0% {
+					opacity: 0.9;
+					transform: scale(1);
+				}
+				100% {
+					opacity: 0;
+					transform: scale(var(--wave));
+				}
+			}
+
+			@keyframes rays {
+				0% {
+					opacity: 0;
+					transform: scale(0.4);
+				}
+				25% {
+					opacity: 1;
+				}
+				100% {
+					opacity: 0;
+					transform: scale(1.15);
+				}
+			}
+
+			@keyframes ring-flash {
+				0% {
+					opacity: 0;
+				}
+				20% {
+					opacity: 1;
+				}
+				100% {
+					opacity: 0;
+				}
+			}
+
+			/* The same global damping app.css applies. Nothing in the sky carries
+			   information in motion, so this frame is the whole sky. */
+			@media (prefers-reduced-motion: reduce) {
+				html:not([data-motion='full']) *,
+				html:not([data-motion='full']) *::before,
+				html:not([data-motion='full']) *::after {
+					animation-duration: 0.001ms !important;
+					animation-iteration-count: 1 !important;
+					transition-duration: 0.001ms !important;
+				}
+			}
+
+			html[data-motion='none'] *,
+			html[data-motion='none'] *::before,
+			html[data-motion='none'] *::after {
+				animation-duration: 0.001ms !important;
+				animation-iteration-count: 1 !important;
+				transition-duration: 0.001ms !important;
+			}
+
+			/* ---- The list: the sky in words, and the keyboard's way in -------- */
+
+			.legend {
+				display: grid;
+				gap: 0.8rem;
+			}
+
+			.legend h2 {
+				color: var(--tier);
+				font-size: 0.72rem;
+				letter-spacing: 0.12em;
+				margin: 0 0 0.3rem;
+				text-transform: uppercase;
+			}
+
+			.legend ul {
+				display: grid;
+				gap: 0.3rem;
+				list-style: none;
+				margin: 0;
+				padding: 0;
+			}
+
+			.row {
+				align-items: center;
+				background: var(--space-surface);
+				border: 1px solid var(--space-border);
+				border-radius: 0.7rem;
+				color: var(--text);
+				display: flex;
+				font: inherit;
+				gap: 0.6rem;
+				min-height: 44px;
+				padding: 0.4rem 0.75rem;
+				text-align: left;
+				width: 100%;
+			}
+
+			.row--moon {
+				margin-left: 1.4rem;
+				width: calc(100% - 1.4rem);
+			}
+
+			.row.is-focused {
+				outline: 2px solid #fff;
+				outline-offset: 2px;
+			}
+
+			.row__dot {
+				border-radius: 50%;
+				flex: none;
+				height: 0.6rem;
+				width: 0.6rem;
+			}
+
+			.row__title {
+				color: var(--text-bright);
+				flex: 1;
+				font-weight: 600;
+			}
+
+			.row__standing {
+				color: var(--text-dim);
+				font-size: 0.8rem;
+			}
+
+			.row__offsky {
+				color: var(--text-dim);
+				font-size: 0.72rem;
+			}
+
+			.visually-hidden {
+				clip: rect(0 0 0 0);
+				height: 1px;
+				overflow: hidden;
+				position: absolute;
+				white-space: nowrap;
+				width: 1px;
+			}
+		</style>
+	</head>
+	<body>
+		<main id="app"></main>
+
+		<script>
+			/* ======================================================================
+			   Fake data. Everything random comes from one seeded generator, so a
+			   screenshot is reproducible and a server render would match a client
+			   one — the Starfield's rule.
+			   ====================================================================== */
+
+			function seeded(seed) {
+				let state = seed;
+				return () => {
+					state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+					return state / 2_147_483_648;
+				};
+			}
+
+			/** FNV-1a, the hash `bodyVariant` already pins bodies with. */
+			function hash(key) {
+				let value = 2_166_136_261;
+				for (let i = 0; i < key.length; i += 1) {
+					value ^= key.charCodeAt(i);
+					value =
+						(value +
+							((value << 1) + (value << 4) + (value << 7) + (value << 8) + (value << 24))) >>>
+						0;
+				}
+				return value >>> 0;
+			}
+
+			const TIERS = ['satellite', 'planet', 'starSystem', 'galaxy', 'universe'];
+			const TIER = {
+				satellite: { label: 'Satellite', accent: '#7dd3fc', scale: 0.55 },
+				planet: { label: 'Planet', accent: '#a78bfa', scale: 0.7 },
+				starSystem: { label: 'Star System', accent: '#fbbf24', scale: 0.82 },
+				galaxy: { label: 'Galaxy', accent: '#f472b6', scale: 0.92 },
+				universe: { label: 'Universe', accent: '#34d399', scale: 1 }
+			};
+			const PALETTE = ['#7dd3fc', '#a78bfa', '#fbbf24', '#f472b6', '#34d399', '#fb7185', '#e2e8f0'];
+
+			function goal(id, title, tier, fraction, color, extra = {}) {
+				return { id, title, tier, fraction, color, parentId: null, ...extra };
+			}
+
+			const SCENARIOS = {
+				5: {
+					goals: [
+						goal('g1', 'Floss', 'satellite', 1, '#7dd3fc'),
+						goal('g2', 'Walk 8k steps', 'satellite', 0.4, '#34d399'),
+						goal('g3', 'Run three times', 'planet', 0.66, '#fb7185'),
+						goal('g4', 'Read two books', 'starSystem', 0.5, '#fbbf24'),
+						goal('g5', 'Save for the trip', 'universe', 0.3, '#34d399')
+					],
+					asteroids: [0.05, 0.5, 1]
+				},
+				12: {
+					goals: [
+						goal('s1', 'Floss', 'satellite', 1, '#7dd3fc'),
+						goal('s2', 'Journal', 'satellite', 0.5, '#e2e8f0'),
+						goal('s3', 'Duolingo', 'satellite', 0.5, '#34d399'),
+						goal('s4', 'Stretch', 'satellite', 0, '#f472b6', { parentId: 'p1' }),
+						goal('s5', 'Meditate', 'satellite', 1, '#a78bfa', { parentId: 'p1' }),
+						goal('p1', 'Mobility five days', 'planet', 0.4, '#f472b6'),
+						goal('p2', 'Run three times', 'planet', 0.66, '#fb7185', { parentId: 'm1' }),
+						goal('p3', 'Call family', 'planet', 0, '#fbbf24'),
+						goal('m1', 'A good running month', 'starSystem', 0.5, '#fb7185'),
+						goal('m2', 'Read two books', 'starSystem', 0.25, '#fbbf24'),
+						goal('q1', 'Ship the side project', 'galaxy', 0.7, '#a78bfa'),
+						goal('y1', 'Save for the trip', 'universe', 0.62, '#34d399')
+					],
+					asteroids: [0.02, 0.1, 0.35, 0.7, 1]
+				},
+				/** A dozen with no nesting at all: the hardest dozen, one lane each. */
+				'12flat': {
+					goals: [
+						goal('a1', 'Floss', 'satellite', 1, '#7dd3fc'),
+						goal('a2', 'Journal', 'satellite', 0.5, '#e2e8f0'),
+						goal('a3', 'Duolingo', 'satellite', 0.5, '#34d399'),
+						goal('a4', 'Stretch', 'satellite', 0, '#f472b6'),
+						goal('b1', 'Run three times', 'planet', 0.66, '#fb7185'),
+						goal('b2', 'Call family', 'planet', 0, '#fbbf24'),
+						goal('b3', 'Cook at home', 'planet', 0.8, '#34d399'),
+						goal('c1', 'Read two books', 'starSystem', 0.25, '#fbbf24'),
+						goal('c2', 'Four gym weeks', 'starSystem', 0.5, '#a78bfa'),
+						goal('d1', 'Ship the side project', 'galaxy', 0.7, '#a78bfa'),
+						goal('d2', 'Learn to swim', 'galaxy', 0.3, '#7dd3fc'),
+						goal('e1', 'Save for the trip', 'universe', 0.62, '#34d399')
+					],
+					asteroids: [0.02, 0.1, 0.35, 0.7, 1]
+				},
+				40: (() => {
+					const random = seeded(40);
+					const goals = [];
+					const counts = { satellite: 12, planet: 10, starSystem: 8, galaxy: 5, universe: 5 };
+					for (const tier of TIERS) {
+						for (let i = 0; i < counts[tier]; i += 1) {
+							const roll = random();
+							const fraction = roll < 0.2 ? 1 : roll < 0.3 ? 0 : Math.round(random() * 20) / 20;
+							goals.push(
+								goal(
+									`${tier}-${i}`,
+									`${TIER[tier].label} goal ${i + 1}`,
+									tier,
+									fraction,
+									PALETTE[Math.floor(random() * PALETTE.length)]
+								)
+							);
+						}
+					}
+					// Some nesting, the way a real account grows it.
+					const link = (child, parent) => (goals.find((g) => g.id === child).parentId = parent);
+					link('satellite-0', 'planet-0');
+					link('satellite-1', 'planet-0');
+					link('satellite-2', 'planet-1');
+					link('planet-2', 'starSystem-0');
+					link('planet-3', 'starSystem-0');
+					link('starSystem-1', 'galaxy-0');
+					return { goals, asteroids: [0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1, 1, 1] };
+				})()
+			};
+
+			/* ======================================================================
+			   Layout. This is the part the spec asks to live in `$domain/sky` as a
+			   pure function: goals and asteroids in, positions out, no DOM.
+			   ====================================================================== */
+
+			const SKY = {
+				view: 360,
+				centre: 180,
+				sunR: 9,
+				firstLane: 21,
+				/** Centre-to-centre distance between two bodies in neighbouring lanes. */
+				lanePitch: 10.5,
+				tierGap: 4,
+				/** Where the last lane may reach, leaving room for its body. */
+				rim: 176,
+				beltWidth: 11,
+				maxMoons: 3,
+				moonR: 1.9,
+				moonPitch: 3.1,
+				/** A sparse sky spreads out to fill the room, up to this much. */
+				maxSpread: 2.2,
+				/** …and its bodies grow with it, up to this much. */
+				maxBodyScale: 1.6
+			};
+
+			/** Body radius in units ≈ px at phone width. Ramped by tier scale. */
+			function bodyRadius(tier) {
+				const t = (TIER[tier].scale - 0.55) / 0.45;
+				return 3.2 + t * 1.6;
+			}
+
+			/** Seconds for one lap of a closed orbit. A quarter-hour for a universe. */
+			function lapSeconds(tier) {
+				return { satellite: 16, planet: 40, starSystem: 90, galaxy: 240, universe: 900 }[tier];
+			}
+
+			function moonRing(bodyR, index, scale = 1) {
+				return bodyR + (2.4 + index * SKY.moonPitch) * scale;
+			}
+
+			/** How much radius a lane needs: one body, or a body and its moons. */
+			function laneWidth(tier, moonCount) {
+				if (moonCount === 0) return SKY.lanePitch;
+				const reach = moonRing(bodyRadius(tier), moonCount - 1) + SKY.moonR;
+				return Math.max(SKY.lanePitch, 2 * reach + 1);
+			}
+
+			function layout(goals, asteroidDrifts) {
+				const byId = new Map(goals.map((g) => [g.id, g]));
+				const isRoot = (g) => !g.parentId || !byId.has(g.parentId);
+				const childrenOf = (id) => goals.filter((g) => g.parentId === id);
+
+				const roots = goals.filter(isRoot);
+				const perTier = TIERS.map((tier) => ({
+					tier,
+					queue: roots
+						.filter((g) => g.tier === tier)
+						.map((g) => {
+							const kids = childrenOf(g.id);
+							const moons = kids.slice(0, SKY.maxMoons);
+							return { goal: g, moons, width: laneWidth(tier, moons.length) };
+						}),
+					placed: []
+				}));
+
+				const belt = asteroidDrifts.length > 0;
+				const outer = belt ? SKY.rim - SKY.beltWidth - 1 : SKY.rim;
+				/** Lanes are packed edge to edge from here outward. */
+				const innerEdge = SKY.firstLane - SKY.lanePitch / 2;
+				const budget = outer - innerEdge;
+
+				// Round-robin, inner tier first, so every tier with goals gets a
+				// lane before any tier gets its second. Within a tier, sortOrder.
+				let used = 0;
+				let progress = true;
+				while (progress) {
+					progress = false;
+					for (const row of perTier) {
+						const next = row.queue[row.placed.length];
+						if (!next) continue;
+						const opensTier = row.placed.length === 0;
+						const cost = next.width + (opensTier && used > 0 ? SKY.tierGap : 0);
+						if (used + cost > budget) continue;
+						used += cost;
+						row.placed.push(next);
+						progress = true;
+					}
+				}
+
+				// Radii, inner to outer, in tier order.
+				const lanes = [];
+				const dust = [];
+				let edge = innerEdge;
+				for (const row of perTier) {
+					if (row.placed.length === 0) continue;
+					if (lanes.length > 0) edge += SKY.tierGap;
+					for (const lane of row.placed) {
+						lane.r = edge + lane.width / 2;
+						edge += lane.width;
+						lanes.push(lane);
+					}
+					// Goals the tier could not give a lane: dust at their true angle,
+					// in the gap just outside the tier's lanes.
+					for (const hidden of row.queue.slice(row.placed.length)) {
+						dust.push({ goal: hidden.goal, r: edge + SKY.tierGap / 2 });
+					}
+				}
+
+				// A sky with room to spare spreads its lanes out and grows its
+				// bodies, rather than huddling round the sun.
+				const spread = Math.min(SKY.maxSpread, budget / Math.max(used, 1));
+				const bodyScale = Math.min(SKY.maxBodyScale, spread);
+				for (const lane of lanes) lane.r = innerEdge + (lane.r - innerEdge) * spread;
+				for (const d of dust) d.r = innerEdge + (d.r - innerEdge) * spread;
+
+				const drawnIds = new Set();
+				for (const lane of lanes) {
+					drawnIds.add(lane.goal.id);
+					lane.moons.forEach((m) => drawnIds.add(m.id));
+				}
+
+				const rocks = asteroidDrifts.slice(0, 30).map((drift, index) => {
+					const id = `asteroid-${index}`;
+					const angle = (hash(id) % 3600) / 10;
+					const inner = SKY.rim - SKY.beltWidth + 1;
+					const band = drift >= 1 ? 'faint' : drift >= 1 / 3 ? 'drifting' : 'fresh';
+					return {
+						id,
+						angle,
+						r: inner + drift * (SKY.beltWidth - 2),
+						size: 1.5 + (hash(id + 'size') % 10) / 10,
+						band
+					};
+				});
+
+				return {
+					lanes,
+					dust,
+					rocks,
+					drawn: drawnIds.size,
+					total: goals.length,
+					outer,
+					spread,
+					bodyScale
+				};
+			}
+
+			/* ======================================================================
+			   Drawing. Bodies are rough stand-ins for the #10 set — the build uses
+			   `TierBody`, drawn in the same unit circle and scaled by radius.
+			   ====================================================================== */
+
+			function bodyGlyph(tier, variant, r, color) {
+				const pale = `color-mix(in srgb, ${color} 45%, #fff)`;
+				const deep = `color-mix(in srgb, ${color} 40%, #05070f)`;
+				if (tier === 'satellite') {
+					if (variant === 1) {
+						return `<circle r="${r}" fill="${pale}"/><circle cx="${-r * 0.3}" cy="${-r * 0.25}" r="${r * 0.32}" fill="${deep}" opacity=".5"/>`;
+					}
+					const s = r * 0.62;
+					return `<rect x="${-r * 1.35}" y="${-s * 0.45}" width="${r * 0.7}" height="${s * 0.9}" fill="${deep}" stroke="${color}" stroke-width=".4"/>
+						<rect x="${r * 0.65}" y="${-s * 0.45}" width="${r * 0.7}" height="${s * 0.9}" fill="${deep}" stroke="${color}" stroke-width=".4"/>
+						<rect x="${-s}" y="${-s}" width="${s * 2}" height="${s * 2}" rx="${s * 0.3}" fill="${pale}"/>`;
+				}
+				if (tier === 'planet') {
+					const ring =
+						variant === 1
+							? `<ellipse rx="${r * 1.6}" ry="${r * 0.42}" fill="none" stroke="${pale}" stroke-width=".7" transform="rotate(-17)"/>`
+							: '';
+					return `${ring}<circle r="${r}" fill="${color}"/><ellipse cy="${r * 0.1}" rx="${r}" ry="${r * 0.28}" fill="${deep}" opacity=".6"/><circle cx="${r * 1.1}" cy="${r * 0.2}" r="${r}" fill="#04050d" opacity=".35"/>`;
+				}
+				if (tier === 'starSystem') {
+					return `<circle r="${r * 1.7}" fill="${color}" opacity=".18"/><ellipse rx="${r * 1.5}" ry="${r * 0.55}" fill="none" stroke="${pale}" stroke-width=".5" opacity=".8"/><circle r="${r * 0.72}" fill="#fffbe8"/><circle r="${r * 0.72}" fill="${color}" opacity=".45"/><circle cx="${r * 1.45}" cy="${r * 0.12}" r="${r * 0.2}" fill="${pale}"/>`;
+				}
+				if (tier === 'galaxy') {
+					return `<ellipse rx="${r * 1.2}" ry="${r * 0.7}" fill="${color}" opacity=".22" transform="rotate(-20)"/>
+						<path d="M0 0 C ${r * 0.6} ${-r * 0.9}, ${r * 1.3} ${-r * 0.2}, ${r * 1.1} ${r * 0.35}" fill="none" stroke="${pale}" stroke-width=".8"/>
+						<path d="M0 0 C ${-r * 0.6} ${r * 0.9}, ${-r * 1.3} ${r * 0.2}, ${-r * 1.1} ${-r * 0.35}" fill="none" stroke="${pale}" stroke-width=".8"/>
+						<circle r="${r * 0.34}" fill="#fffbe8"/>`;
+				}
+				// universe
+				let dots = '';
+				for (let i = 0; i < 8; i += 1) {
+					const a = (i / 8) * Math.PI * 2;
+					dots += `<circle cx="${Math.cos(a) * r * 0.62}" cy="${Math.sin(a) * r * 0.62}" r="${r * 0.11}" fill="${pale}"/>`;
+				}
+				return `<circle r="${r}" fill="${deep}" stroke="${color}" stroke-width=".8"/>${dots}<circle r="${r * 0.22}" fill="#fffbe8"/>`;
+			}
+
+			/** The size of a closing at sky scale. Same ramp as `celebrationShape`. */
+			function skyBurst(tier) {
+				const t = (TIER[tier].scale - 0.55) / 0.45;
+				return {
+					ms: Math.round(620 + t * 340),
+					rays: Math.round(6 + t * 10),
+					/** Ray length in units ≈ px, floored so a satellite is not a speck. */
+					reach: 14 + t * 22
+				};
+			}
+
+			function drawBody(g, lane, { closing, focus }) {
+				const C = SKY.centre;
+				const cy = C - lane.r;
+				const scale = options.bodyScale;
+				const r = bodyRadius(g.tier) * scale;
+				const angle = g.fraction * 360;
+				const closed = g.fraction >= 1;
+				const variant = hash(g.id) % 3;
+				let moons = '';
+				lane.moons.forEach((moon, index) => {
+					const ring = moonRing(r, index, scale);
+					moons += `<g style="--moon-color:${moon.color}">
+						<circle class="moon-track" cx="${C}" cy="${cy}" r="${ring}"/>
+						<g style="transform: rotate(${moon.fraction * 360}deg); transform-origin: ${C}px ${cy}px">
+							<circle cx="${C}" cy="${cy - ring}" r="${SKY.moonR * scale}" fill="${moon.color}"/>
+						</g></g>`;
+				});
+
+				let burst = '';
+				if (closing === g.id) {
+					const shape = skyBurst(g.tier);
+					let rays = '';
+					for (let i = 0; i < shape.rays; i += 1) {
+						const a = (i * 360) / shape.rays;
+						rays += `<line class="burst__ray" x1="${C}" y1="${cy - r * 1.6}" x2="${C}" y2="${cy - r * 1.6 - shape.reach}" style="transform: rotate(${a}deg); transform-origin: ${C}px ${cy}px"/>`;
+					}
+					burst = `<g class="burst" style="--burst-ms:${shape.ms}ms">
+						<circle class="burst__wave" cx="${C}" cy="${cy}" r="${r * 1.3}" style="--wave:${(shape.reach + r) / (r * 1.3)}"/>
+						<g class="burst__rays" style="transform-origin: ${C}px ${cy}px">${rays}</g>
+						<circle class="burst__flash" cx="${C}" cy="${cy}" r="${r * 1.5}"/>
+					</g>`;
+				}
+
+				const ring =
+					focus === g.id
+						? `<circle class="focus-ring" cx="${C}" cy="${cy}" r="${(lane.moons.length ? moonRing(r, lane.moons.length - 1, scale) : r) + 3.5}"/>`
+						: '';
+
+				return `
+					<g class="lane-group ${closed ? 'lane-group--closed' : ''} ${closing === g.id ? 'is-closing' : ''}"
+						style="--color:${g.color}; --tier:${TIER[g.tier].accent}; --orbit:${lapSeconds(g.tier)}s">
+						<circle class="lane" cx="${C}" cy="${C}" r="${lane.r}"/>
+						<circle class="arc" cx="${C}" cy="${C}" r="${lane.r}" pathLength="100"
+							stroke-dasharray="100" stroke-dashoffset="${100 * (1 - g.fraction)}"/>
+						${closing === g.id ? `<circle class="ring-flash" cx="${C}" cy="${C}" r="${lane.r}" style="--burst-ms:${skyBurst(g.tier).ms}ms"/>` : ''}
+						<g class="travel travel--out" style="transform: rotate(${angle}deg); transform-origin: ${C}px ${C}px">
+							<g class="travel travel--in" style="transform: rotate(${-angle}deg); transform-origin: ${C}px ${cy}px">
+								<circle class="halo" cx="${C}" cy="${cy}" r="${r * 2.1}" fill="url(#glow-${g.id})"/>
+								${burst}
+								<g transform="translate(${C} ${cy})">${bodyGlyph(g.tier, variant, r, g.color)}</g>
+								${moons}
+								${ring}
+							</g>
+						</g>
+					</g>`;
+			}
+
+			function drawSky(model, options) {
+				const C = SKY.centre;
+				const defs = model.lanes
+					.map(
+						(lane) => `<radialGradient id="glow-${lane.goal.id}">
+							<stop offset="0%" stop-color="${lane.goal.color}" stop-opacity=".5"/>
+							<stop offset="100%" stop-color="${lane.goal.color}" stop-opacity="0"/>
+						</radialGradient>`
+					)
+					.join('');
+
+				const dust = model.dust
+					.map((d) => {
+						const a = ((d.goal.fraction * 360 - 90) * Math.PI) / 180;
+						const x1 = C + Math.cos(a) * (d.r - 1.6);
+						const y1 = C + Math.sin(a) * (d.r - 1.6);
+						const x2 = C + Math.cos(a) * (d.r + 1.6);
+						const y2 = C + Math.sin(a) * (d.r + 1.6);
+						return `<line class="dust" style="--tier:${TIER[d.goal.tier].accent}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+					})
+					.join('');
+
+				const rocks = model.rocks
+					.map((rock) => {
+						const a = ((rock.angle - 90) * Math.PI) / 180;
+						const x = C + Math.cos(a) * rock.r;
+						const y = C + Math.sin(a) * rock.r;
+						const random = seeded(hash(rock.id));
+						const points = Array.from({ length: 6 }, (_, i) => {
+							const t = (i / 6) * Math.PI * 2;
+							const k = rock.size * (0.7 + random() * 0.6);
+							return `${(x + Math.cos(t) * k).toFixed(2)},${(y + Math.sin(t) * k).toFixed(2)}`;
+						}).join(' ');
+						return `<polygon class="rock rock--${rock.band}" points="${points}"/>`;
+					})
+					.join('');
+
+				// Draw the closing lane last, so its burst is over everything else.
+				const ordered = [...model.lanes].sort(
+					(a, b) => (a.goal.id === options.closing) - (b.goal.id === options.closing)
+				);
+
+				return `<svg class="sky ${options.closing ? 'sky--closing' : ''} ${options.freeze ? 'frozen' : ''}"
+					viewBox="0 0 ${SKY.view} ${SKY.view}" aria-hidden="true">
+					<defs>
+						<radialGradient id="sun">
+							<stop offset="0%" stop-color="#fffbe8"/>
+							<stop offset="50%" stop-color="#fcd34d"/>
+							<stop offset="100%" stop-color="#fcd34d" stop-opacity="0"/>
+						</radialGradient>
+						${defs}
+					</defs>
+					<circle class="sun" cx="${C}" cy="${C}" r="${SKY.sunR * 1.8}" fill="url(#sun)"/>
+					${model.rocks.length ? `<circle class="belt" cx="${C}" cy="${C}" r="${SKY.rim - SKY.beltWidth / 2}" stroke-width="${SKY.beltWidth}"/>` : ''}
+					${rocks}
+					${dust}
+					${ordered.map((lane) => drawBody(lane.goal, lane, options)).join('')}
+				</svg>`;
+			}
+
+			function standing(g) {
+				const percent = Math.round(g.fraction * 100);
+				return g.fraction >= 1
+					? `orbit closed, ${percent}% of target logged`
+					: `${percent}% of target logged`;
+			}
+
+			function drawList(goals, model, options) {
+				const drawn = new Set();
+				model.lanes.forEach((lane) => {
+					drawn.add(lane.goal.id);
+					lane.moons.forEach((m) => drawn.add(m.id));
+				});
+				const byId = new Map(goals.map((g) => [g.id, g]));
+				const row = (g, moon) => `
+					<li><button class="row ${moon ? 'row--moon' : ''} ${options.focus === g.id ? 'is-focused' : ''}" type="button">
+						<span class="row__dot" style="background:${g.color}"></span>
+						<span class="row__title">${g.title}
+							${drawn.has(g.id) ? '' : '<span class="row__offsky">· not drawn</span>'}</span>
+						<span class="row__standing">${Math.round(g.fraction * 100)}%</span>
+						<span class="visually-hidden">${TIER[g.tier].label}: ${standing(g)}</span>
+					</button></li>`;
+
+				return `<div class="legend">${TIERS.map((tier) => {
+					const roots = goals.filter(
+						(g) => g.tier === tier && (!g.parentId || !byId.has(g.parentId))
+					);
+					if (roots.length === 0) return '';
+					const items = roots
+						.map(
+							(g) =>
+								row(g, false) +
+								goals
+									.filter((c) => c.parentId === g.id)
+									.map((c) => row(c, true))
+									.join('')
+						)
+						.join('');
+					return `<section style="--tier:${TIER[tier].accent}"><h2>${TIER[tier].label}</h2><ul>${items}</ul></section>`;
+				}).join('')}</div>`;
+			}
+
+			/* ====================================================================== */
+
+			const params = new URLSearchParams(location.search);
+			const n = params.get('n') ?? '12';
+			const scenario = SCENARIOS[n] ?? SCENARIOS[12];
+			const asteroids = params.get('belt') === '0' ? [] : scenario.asteroids;
+			if (params.get('motion')) document.documentElement.dataset.motion = params.get('motion');
+			const options = {
+				closing: params.get('closing'),
+				freeze: params.has('closing'),
+				focus: params.get('focus')
+			};
+
+			// A closing on the prototype shows the orbit already full, which is
+			// what the log that triggered it did.
+			if (options.closing) {
+				const g = scenario.goals.find((x) => x.id === options.closing);
+				if (g) g.fraction = 1;
+			}
+
+			const model = layout(scenario.goals, asteroids);
+			options.bodyScale = model.bodyScale;
+			const closed = scenario.goals.filter((g) => g.fraction >= 1).length;
+			const hidden = model.total - model.drawn;
+
+			document.getElementById('app').innerHTML = `
+				<div class="nav">NOVA <span>Today · Goals · Stats</span></div>
+				<div class="head">
+					<div>
+						<h1>Good to see you, Sam.</h1>
+						<p class="muted">${closed} of ${model.total} orbits closed in their current period.</p>
+					</div>
+					<form class="view-toggle" aria-label="Dashboard view">
+						<button type="button" aria-pressed="false">Tiers</button>
+						<button type="button" aria-pressed="true">Sky</button>
+					</form>
+				</div>
+				${drawSky(model, options)}
+				<div class="sky-note muted">
+					<span>${hidden > 0 ? `Drawing ${model.drawn} of ${model.total}. Every goal is listed below.` : 'Every goal is drawn. Tap a body to open it.'}</span>
+					${asteroids.length ? `<a href="#belt">${asteroids.length} asteroids in the belt</a>` : ''}
+				</div>
+				${drawList(scenario.goals, model, options)}
+			`;
+
+			// For the screenshot script: what the layout decided.
+			window.__sky = {
+				lanes: model.lanes.length,
+				drawn: model.drawn,
+				total: model.total,
+				dust: model.dust.length,
+				outer: model.outer,
+				lastLane: Number(model.lanes.at(-1)?.r.toFixed(1)),
+				spread: Number(model.spread.toFixed(2))
+			};
+		</script>
+	</body>
+</html>
