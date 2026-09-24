@@ -2,9 +2,10 @@ import { expect, type Page, test } from '@playwright/test';
 import { hydrated } from './helpers';
 
 /**
- * The universe view's toggle and list (#11 part A) — no three.js yet, so this
- * is the part that has to work without any JavaScript at all: the toggle
- * posts and reloads, and the server-rendered list is the universe in words.
+ * The universe view's toggle and list (#11) — the part that has to work
+ * without any JavaScript at all: the toggle posts and reloads, and the
+ * server-rendered list is the universe in words. The renderer itself, which
+ * needs WebGL, is `universe-journey.spec.ts`, in a project of its own.
  *
  * Setting the account up — registering and nesting a goal under another — uses
  * an ordinary, hydrated page: `#parentId`'s options are filtered by the tier
@@ -72,7 +73,7 @@ test('switches to Universe with JavaScript disabled, sees the nested tree, and s
 		'aria-pressed',
 		'true'
 	);
-	await expect(noScriptPage.locator('.universe__canvas')).toHaveCount(0);
+	await expect(noScriptPage.locator('.universe__view')).toHaveCount(0);
 
 	// Posting the toggle with no JavaScript is a full reload — decision 14's
 	// "without JavaScript it posts and reloads" — and it lands back on `/`.
@@ -83,9 +84,15 @@ test('switches to Universe with JavaScript disabled, sees the nested tree, and s
 		'aria-pressed',
 		'true'
 	);
-	await expect(
-		noScriptPage.getByText("The universe isn't drawn yet — every goal is listed below.")
-	).toBeVisible();
+	// No canvas without a script to draw it, and a sentence saying so. It is a
+	// `<noscript>`, which Playwright's no-JavaScript mode does not display —
+	// it stops scripts without telling the parser — so the markup is what can
+	// be checked here.
+	await expect(noScriptPage.locator('.universe__view noscript')).toHaveCount(1);
+	expect(await noScriptPage.locator('.universe__view noscript').textContent()).toContain(
+		'The universe needs JavaScript — every goal is listed below.'
+	);
+	await expect(noScriptPage.locator('.universe__view canvas')).toHaveCount(0);
 
 	// The list is the universe in words: the daily goal nests under the weekly
 	// one it feeds, in its own `<ul>`, exactly as `$domain/universe` would draw
@@ -101,7 +108,7 @@ test('switches to Universe with JavaScript disabled, sees the nested tree, and s
 		'aria-pressed',
 		'true'
 	);
-	await expect(noScriptPage.locator('.universe__canvas')).toHaveCount(0);
+	await expect(noScriptPage.locator('.universe__view')).toHaveCount(0);
 
 	await noScript.close();
 });

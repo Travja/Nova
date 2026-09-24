@@ -41,7 +41,7 @@ The gaps that stand between "it works" and "I use it every day".
 
 ## M2 — The fun part
 
-_8 of 9 done._
+_9 of 9 done._
 
 The reason to open the app rather than a spreadsheet.
 
@@ -49,7 +49,7 @@ The reason to open the app rather than a spreadsheet.
 | ------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- |
 | [#9](https://github.com/Travja/Nova/issues/9) ✓   | [Celebrate a closed orbit](issues/09-celebrate-closed-orbit.md)       | The best moment currently passes unnoticed                  |
 | [#10](https://github.com/Travja/Nova/issues/10) ✓ | [A body per tier](issues/10-tier-bodies.md)                           | Every tier draws the same circle today                      |
-| [#11](https://github.com/Travja/Nova/issues/11)   | [Solar-system view](issues/11-system-view.md)                         | One sky instead of a grid of dials                          |
+| [#11](https://github.com/Travja/Nova/issues/11) ✓ | [Universe view](issues/11-system-view.md)                             | One sky instead of a grid of dials                          |
 | [#12](https://github.com/Travja/Nova/issues/12) ✓ | [Nested orbits](issues/12-nested-orbits.md)                           | Makes the tier ladder mean something mechanically           |
 | [#13](https://github.com/Travja/Nova/issues/13) ✓ | [A reactive mascot](issues/13-mascot.md)                              | Carries the emotional read of the app                       |
 | [#14](https://github.com/Travja/Nova/issues/14) ✓ | [Motion and theme preferences](issues/14-motion-theme-preferences.md) | Not everyone wants a moving starfield                       |

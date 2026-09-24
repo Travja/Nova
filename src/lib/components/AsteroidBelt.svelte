@@ -80,7 +80,7 @@
 	const atEdge = $derived(asteroids.filter((rock) => atBeltEdge(rock, now)).length);
 </script>
 
-<section class="belt" aria-labelledby="belt-heading">
+<section class="belt" id="belt" aria-labelledby="belt-heading">
 	<h2 id="belt-heading">
 		The belt{#if asteroids.length > 0}&nbsp;({asteroids.length}){/if}
 	</h2>

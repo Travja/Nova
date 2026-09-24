@@ -52,6 +52,13 @@ function installedChromium(): string | undefined {
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? installedChromium();
 
 const OFFLINE_SPEC = '**/offline-logging.spec.ts';
+/**
+ * The universe view (#11) draws with WebGL, which headless Chromium only does
+ * on SwiftShader, its software GPU. Those flags are this project's alone, so
+ * the rest of the suite launches exactly as it always has.
+ */
+const UNIVERSE_SPEC = '**/universe-journey.spec.ts';
+const SWIFTSHADER = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 
 export default defineConfig({
 	testDir: 'e2e',
@@ -68,8 +75,16 @@ export default defineConfig({
 	projects: [
 		{
 			name: 'app',
-			testIgnore: OFFLINE_SPEC,
+			testIgnore: [OFFLINE_SPEC, UNIVERSE_SPEC],
 			use: { baseURL: 'http://localhost:4173' }
+		},
+		{
+			name: 'universe',
+			testMatch: UNIVERSE_SPEC,
+			use: {
+				baseURL: 'http://localhost:4173',
+				launchOptions: { ...(executablePath ? { executablePath } : {}), args: SWIFTSHADER }
+			}
 		},
 		{
 			name: 'offline',

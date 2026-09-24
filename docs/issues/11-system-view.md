@@ -124,13 +124,31 @@ Rejected:
 
 ### 2. Hosts: what each goal orbits
 
-| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                                       |
-| ----------- | --------------------------------- | ----------------------------- | -------------------------------------------------------------- |
-| Satellite   | its parent                        | a **dwarf planet** anchor     | a small craft, its glow held at 12px                           |
-| Planet      | its parent                        | a **star** anchor             | a sphere, ringed for one variant in three                      |
-| Star System | its parent                        | a **galactic core** anchor    | a star in the goal's colour, its own system round it           |
-| Galaxy      | its parent                        | a **cluster** anchor          | a two-armed particle disc wrapping its children                |
-| Universe    | —                                 | the **multiverse barycentre** | a faint shell wrapping its children, the largest body there is |
+| Goal tier   | Orbits, when it has a parent goal | Orbits, when it does not      | Drawn as                                                                        |
+| ----------- | --------------------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| Satellite   | its parent                        | a **dwarf planet** anchor     | a comsat, a cratered moon or a dish probe, its glow held at 10px                |
+| Planet      | its parent                        | a **star** anchor             | a banded, ringed or ice world with an atmosphere                                |
+| Star System | its parent                        | a **galactic core** anchor    | a flaring star with its little worlds, a binary, or a star and one ringed world |
+| Galaxy      | its parent                        | a **cluster** anchor          | a spiral, barred or elliptical disc of stars, swirling                          |
+| Universe    | —                                 | the **multiverse barycentre** | a haze, a nebula or a cosmic web inside a faint shell                           |
+
+**A goal's body is its dial's body, built in 3D.** Each tier's three variants
+(#10, pinned to the goal by `bodyVariant`, which `universeTree` carries as
+`variant`) keep their flat drawing's silhouette and palette — the dial's lit,
+pale and deep shades of the goal's colour — so a goal is recognisably the same
+thing in both views. In the universe they are solid, lit from one side so every
+world has a day side and a night side, and alive: worlds turn on tilted axes,
+craft rock on their struts and blink their beacons, stars breathe their
+four-point flare, little worlds go round their stars, galaxies swirl, a
+universe's far stars breathe. The motion is the dials' own, at their pace; none
+of it says anything about progress, which is the orbit's and the trail's job.
+Bodies are true to scale while there is room and never shrink below a tier's
+minimum pixel size (12px a satellite, 16px a planet, 22px a star system), so a
+model is never lost as a speck in its own glow.
+
+The build first copied the flat drawings onto billboards. It read as 2D art
+pasted into a 3D space rather than the bodies brought to life, so it was
+replaced.
 
 And the anchors themselves: a dwarf planet orbits a star anchor, a star a
 galactic-core anchor, a core a cluster, a cluster the **home universe**, and the
@@ -299,11 +317,24 @@ girder at "Home".
   moment goals are added.
 - **Fly-to:** 900ms, ease-in-out, target and eye together. It frames the host's
   whole extent across the narrower side of the view — on a phone, the width — with
-  the camera above the host's plane at a slant, so rings read as rings. A goal
-  with nothing orbiting it is framed with its own orbit's neighbourhood in view,
-  so its trail comes with it.
-- **The camera never moves on its own.** No idle auto-rotate, no intro fly-through,
-  no following a lapping body.
+  the camera above the host's plane at a slant, so rings read as rings. A galaxy
+  or universe goal is a region and is framed by its extent. A world with nothing
+  orbiting it is framed close — three body radii — near enough to see it turn,
+  with its own orbit running through the frame beside it.
+- **A tapped body stays in view.** A closed body keeps lapping, and framed close
+  it would leave the frame a second after the tap, so the camera keeps the body
+  it was sent to where it is until the next gesture, scrub or tap. An open body
+  is parked, so this moves nothing; under reduced motion nothing laps.
+- **Full screen:** a button in the view's top corner makes it cover the whole
+  window, over the page, the quick-add button and the header, and takes it
+  full screen with the Fullscreen API where the browser allows. A phone's Safari
+  only allows that for video, so there the covering view is all you get. The
+  list and the note behind it are `inert` and the page doesn't scroll. The
+  sheets are `<dialog>`s in the top layer, so a tap still opens one over the
+  view. The button, Escape or the browser's own exit leaves full screen. While
+  a sheet is open, Escape closes the sheet first.
+- **Otherwise the camera never moves on its own.** No idle auto-rotate, no intro
+  fly-through.
 
 Rejected:
 
@@ -315,24 +346,28 @@ Rejected:
   and a second control scheme to learn.
 - **A remembered camera.**
 
-### 8. Tapping: fly to it and show a card
+### 8. Tapping: open its sheet
 
 **A tap — a pointer that went down and up within 6px — picks the nearest goal
-body or asteroid within 24px on screen, flies to it (decision 7), and shows a card
-over the bottom of the view.** Anchors are never candidates. Nearest on screen
-rather than a ray cast, because most bodies are a few pixels across and a ray has
-to hit them exactly.
+body or asteroid within 24px on screen and opens its sheet.** Anchors are never
+candidates. Nearest on screen rather than a ray cast, because most bodies are a
+few pixels across and a ray has to hit them exactly.
 
-- **A goal's card:** tier, title, `orbitStanding()`-style standing, and "N goals
-  orbit it" for a parent, with **Open**, which opens `GoalRowSheet` for that goal
-  — the same sheet the list rows open, where logging happens.
-- **An asteroid's card:** "Asteroid", its title, "Untouched N days · drifting",
-  and **Open in Today**, which goes to `/today#belt`. The camera does not fly to a
-  rock; it is shown where it is (decision 12).
-- **A tap on nothing** closes the card.
+- **A goal** opens `GoalRowSheet` for that goal — the same sheet the list rows
+  open, where logging happens — and the camera flies to it behind the sheet
+  (decision 7), so closing the sheet leaves the goal framed.
+- **An asteroid** opens `AsteroidSheet`, the belt's own sheet from `/today`, whose
+  endings post to Today's actions exactly as they do from Today. The camera does
+  not fly to a rock; it is shown where it is.
+- **A tap on nothing** does nothing.
 
-Nothing is logged from the universe itself. A second log surface on a 5px target
-is a mis-tap generator.
+The build first put a card between the tap and the sheet (tier, title, standing,
+an **Open** button). It was one more tap for nothing the sheet does not already
+say, and the rock's card could only send you away to Today, so the tap opens the
+sheet directly.
+
+Nothing is logged from the canvas itself: the sheet logs, on targets sized for a
+finger.
 
 ### 9. Labels: the title beside the body, when there is room
 
@@ -361,14 +396,19 @@ The dial's rules, kept:
   galaxy and fifteen for a universe (`UNIVERSE_LAP_SECONDS`). A lapping host
   carries its children with it; their angles are relative to it, so they stay
   true.
-- **Anchors, galaxy discs and the belt are still.** Nothing moves that is not a
-  goal saying something.
+- **Goals' bodies are alive** (decision 2): worlds turn, craft rock, stars flare,
+  galaxies swirl — the dials' own idle motion, which says nothing about
+  progress and never moves a body along its orbit.
+- **Anchors and the belt are still.** They are scenery, not goals.
 
-**The frame loop** runs continuously only while motion is allowed and a closed
-body is on screen; otherwise it renders on demand — when the controls change, a
-flight is in progress, or the data does. It stops when the tab is hidden or the
-canvas is scrolled out of view (`IntersectionObserver`). A phone left on the
-dashboard should not run a GPU at 60fps for a picture that is not moving.
+**The frame loop** runs continuously only while motion is allowed and a goal's
+body or a closed orbit is on screen, and then at 30fps: nothing but the
+universe's own life is moving, and half the frame rate is plenty for a world
+turning and half the battery on a phone. It goes to full rate while the controls
+move, a flight or a sweep is in progress, or a closing plays, and renders on
+demand otherwise. It stops when the tab is hidden or the canvas is scrolled out of
+view (`IntersectionObserver`). Under reduced motion it draws only on demand, and
+a still universe costs no frames.
 
 Rejected: continuous orbiting of every goal (position would stop meaning
 progress), an entry animation (every visit, loudest thing on screen, competes with
@@ -384,8 +424,8 @@ browser helper (`$lib/motion.ts`, `motionAllowed()`) rather than inside the scen
 so the next canvas does not re-derive it.
 
 When motion is not allowed: closed bodies stay at the start mark on their full
-ring, which is what 100% looks like; fly-to is an instant cut; damping is off; the
-closing is the lit ring without rays or flash. Gestures still work — moving the
+ring, which is what 100% looks like; every body holds its rest pose; fly-to is an
+instant cut; damping is off; the closing is the lit ring without rays or flash. Gestures still work — moving the
 camera yourself is not motion the app imposes.
 
 Nothing in the universe carries information in motion, so the still frame is the
@@ -398,25 +438,39 @@ whole universe. `universe-12-still.png` is that frame; compare it with
 celebrated inside the sheet by its own `OrbitDial`, exactly as #51 settled.** The
 sheet stays open. That burst is the biggest moment in the app and stays so.
 
-The universe reads `celebrationFor(goalId)` like any dial and, while it is set and
-the universe is not covered by the sheet, draws its own version at the body
-(`universe-12-closing.png`):
+The universe hears every closing `celebration()` raises, and plays its own
+version at the body where it can be seen (`app-12-closing.png`):
 
 - the trail completes and brightens into the whole ring, twice its width, for the
   length of `celebrationShape(tier).ms`;
 - `celebrationShape(tier).rays` rays and a white flash at the body, billboarded to
-  face the camera, reaching six body radii;
+  face the camera, reaching six body radii as the body is drawn and never less
+  than 70px on screen, so a closing is visible from any zoom;
 - the camera does not move to it. Yanking the view to a closing the user did not
   ask to look at is the universe taking control; the ring lighting is visible from
   wherever they are.
+
+**While a sheet covers the view, the universe waits.** Nothing is drawn under a
+sheet: it is the sheet's moment, and a GPU busy behind it only takes frames from
+the sheet's own burst. The new data and the closing are held, and when the sheet
+closes the universe plays them in order — the trail sweeps round to meet the
+body over `SWEEP_MS`, then the ring lights and the rays burst. Both are timed
+from the first frame that draws them, and a stall between frames (a rebuild,
+shaders compiling on a slow GPU) does not count against them, so the moment is
+never used up before anyone sees it.
+
+The first build drew the universe's version only while no sheet was open, on the
+store's clock. Logging happens in the sheet, so the sheet was always open when a
+goal closed and the universe's moment had always ended by the time it closed: the
+universe never showed a closing at all.
 
 A polite live region under the view reads `celebration()`: "{title} closed its
 orbit", the mascot's sentence on `/today`. That is what reduced motion and screen
 readers get in place of the rays.
 
-Rejected: closing the sheet so the universe gets the moment (#51 forbids it), a
-second burst when the sheet closes (`noteOrbits` calls that noise), and flying
-the camera to the closing.
+Rejected: closing the sheet so the universe gets the moment (#51 forbids it),
+drawing the universe's burst under the sheet (no one sees it, and it costs the
+sheet's burst frames), and flying the camera to the closing.
 
 ### 13. Asteroids: a belt round the home star, one rock per asteroid
 
@@ -446,10 +500,10 @@ a rock tapped (the prototype's `&view=belt` exists for that screenshot).
 - **Only active asteroids.** Done ones live in the fold on `/today`, captured ones
   are already here as the goal they became, released ones are in no view (#30,
   decision 4).
-- **Tappable, not actionable.** A rock's card says what it is and how long it has
-  drifted, and sends you to `/today#belt`. Done, release and capture stay on
-  `/today`, where #30 put them at two taps each; the universe is not a second home
-  for the belt.
+- **Tappable, through the belt's own sheet.** A rock opens the same
+  `AsteroidSheet` that `/today` opens, posting to `/today`'s actions — so the belt
+  still has one set of endings, reached from a second place, and finishing a rock
+  lands on Today, where the capture offer is shown.
 
 ### 14. The toggle: an account preference, `dashboard`
 
@@ -593,6 +647,7 @@ export interface UniverseNode {
 	fraction: number; // the trail's length, 0–1
 	closed: boolean;
 	dormant: boolean;
+	lapSeconds: number; // UNIVERSE_LAP_SECONDS[tier] for a goal, 0 for an anchor
 	tilt: number; // this node's own orbital plane, seeded
 	spin: number;
 	children: UniverseNode[];
@@ -603,7 +658,12 @@ export function universeTree(
 	snapshots: readonly GoalSnapshot[],
 	asteroids: readonly (DriftInput & { id: string })[],
 	now: Date
-): { root: UniverseNode; home: UniverseNode | null; galaxy: UniverseNode | null };
+): {
+	root: UniverseNode;
+	home: UniverseNode | null; // the "Home" zoom stop
+	galaxy: UniverseNode | null; // "Galaxy"
+	universe: UniverseNode | null; // "Universe"
+};
 ```
 
 `Belt` holds its inner radius, width, and one `{ id, angle, radius, band }` per
@@ -632,7 +692,7 @@ same input twice.
 
 ### Browser: `src/lib/universe/`
 
-Everything three, nothing else: `scene.ts` builds meshes, lines and sprites from a
+Everything three, nothing else: `bodies.ts` builds each tier's bodies; `scene.ts` builds meshes, lines and sprites from a
 `UniverseNode` tree; `camera.ts` holds controls, framing and fly-to; `pick.ts` the
 screen-space nearest; `loop.ts` the on-demand frame loop. It holds no maths about
 progress — if it needs a number about a goal, the domain tree should already carry
@@ -640,9 +700,9 @@ it.
 
 ### Components and route
 
-- `$components/Universe.svelte` — the view container, zoom, card, live region and
-  note; dynamically imports `src/lib/universe` in `onMount`; holds `openGoalId` for
-  the one `GoalRowSheet`.
+- `$components/Universe.svelte` — the view container, zoom, live region, note and
+  the belt's `AsteroidSheet`; dynamically imports `src/lib/universe` in `onMount`; asks the
+  page, which holds `openGoalId`, for the one `GoalRowSheet`.
 - `/+page.server.ts` loads `listAsteroids(locals.user.id)` when the preference is
   `universe`, and adds the `view` action.
 - `/+page.svelte` renders `Universe` and the nested `GoalRow` list in place of the
@@ -687,10 +747,10 @@ it.
 - Two goals at the same progress round the same host never overlap.
 - Forty goals: every one is reachable and readable from Home, Galaxy or by
   tapping, on a 390px screen.
-- Tapping a body flies to it and shows its card; Open opens the same sheet as its
-  list row; a closing logged there bursts in the sheet, which stays open.
+- Tapping a body opens the same sheet as its list row and flies to it behind the
+  sheet; a closing logged there bursts in the sheet, which stays open.
 - Active asteroids are a belt round the home star, drifted ones further out and
-  dimmer, and tapping one says what it is and links to Today.
+  dimmer, and tapping one opens the belt's own sheet, with Today's endings.
 - Under reduced motion nothing moves by itself and the universe says everything it
   says when moving.
 - Without WebGL the page is the list, with a sentence saying why.

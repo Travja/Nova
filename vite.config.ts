@@ -1,15 +1,58 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
+import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
+
+/**
+ * The universe view's renderer (#11): `src/lib/universe/` and three.js with it.
+ * Its only way in is the dynamic `import()` in `Universe.svelte`'s `onMount`,
+ * so the bundler already gives it a chunk of its own — three is imported
+ * nowhere else to share it with. The chunk only needs a stable name, so the
+ * service worker can tell it apart from every other chunk.
+ */
+const UNIVERSE_CHUNK = 'universe';
+const UNIVERSE_ENTRY = /[\\/]src[\\/]lib[\\/]universe[\\/]index\.ts$/;
+
+/**
+ * Put that name in the file, which SvelteKit's enforced `chunkFileNames`
+ * (`chunks/[hash].js`) leaves out for every chunk. Only the one chunk is
+ * touched, and only in the client build: everything else keeps SvelteKit's
+ * names exactly.
+ */
+function universeChunkName(): Plugin {
+	return {
+		name: 'nova:universe-chunk-name',
+		apply: 'build',
+		outputOptions(options) {
+			const original = options.chunkFileNames;
+			if (typeof original !== 'string' || !original.includes('/chunks/[hash].')) return null;
+			return {
+				...options,
+				chunkFileNames: (chunk) =>
+					chunk.facadeModuleId && UNIVERSE_ENTRY.test(chunk.facadeModuleId)
+						? original.replace('[hash]', `${UNIVERSE_CHUNK}.[hash]`)
+						: original
+			};
+		}
+	};
+}
 
 export default defineConfig({
 	plugins: [
 		sveltekit(),
+		universeChunkName(),
 		SvelteKitPWA({
 			registerType: 'prompt',
 			injectRegister: 'auto',
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+				/*
+				 * Cached on first use, not precached (#11, decision 1). Precaching it
+				 * would have every install download three.js up front — including
+				 * every pilot who never leaves the tiers view. The `CacheFirst` rule
+				 * below keeps it once it has been seen online.
+				 */
+				globIgnores: [`**/${UNIVERSE_CHUNK}.*.js`],
 				/*
 				 * Reminders (#19), added to the generated worker rather than replacing
 				 * it. `generateSW` already carries the precache, the Background Sync
@@ -34,6 +77,22 @@ export default defineConfig({
 				 */
 				navigateFallback: undefined,
 				runtimeCaching: [
+					{
+						/*
+						 * The universe chunk: fetched the first time the view mounts,
+						 * then served from here, so the universe works offline once it
+						 * has been seen online. The name carries a content hash, so a
+						 * cached copy is never stale — a new build is a new URL.
+						 */
+						urlPattern: ({ url, sameOrigin }) =>
+							sameOrigin && /\/_app\/immutable\/chunks\/universe\.[^/]+\.js$/.test(url.pathname),
+						handler: 'CacheFirst',
+						options: {
+							cacheName: 'nova-universe',
+							expiration: { maxEntries: 4 },
+							cacheableResponse: { statuses: [200] }
+						}
+					},
 					{
 						/*
 						 * Where the offline queue flushes, and the reason this stays on

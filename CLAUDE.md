@@ -29,10 +29,12 @@ pnpm db:migrate          # apply migrations
 
 Before opening a pull request: `pnpm lint && pnpm check && pnpm test && pnpm e2e`.
 
-`pnpm e2e` runs two projects. `app` is the suite against the dev server on 4173;
+`pnpm e2e` runs three projects. `app` is the suite against the dev server on 4173;
 `offline` is `e2e/offline-logging.spec.ts` against a production build on 4174,
 because the service worker is not registered in dev and offline logging is
 mostly the service worker. That is why the script builds before it tests.
+`universe` is `e2e/universe-journey.spec.ts` against the dev server, launched
+with SwiftShader's flags because headless Chromium only draws WebGL on it.
 
 ## The one architectural rule
 
@@ -109,7 +111,9 @@ The space theme is the progress bar, not decoration on top of it. The orbit dial
 maps a goal's fraction to an arc and puts the body at the matching angle, so
 position and fill say the same thing twice.
 
-- CSS and inline SVG only. No animation library, no Lottie, no raster assets.
+- CSS and inline SVG only — except the universe view (#11), which is WebGL through
+  three.js, dynamically imported, and lives entirely in `src/lib/universe/`.
+  Nothing else imports three. No animation library, no Lottie, no raster assets.
 - Everything yields to `prefers-reduced-motion`, handled globally in
   `src/lib/styles/app.css`.
 - Anything random (the starfield) uses a seeded generator so server and client
