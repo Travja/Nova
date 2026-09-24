@@ -325,6 +325,14 @@ girder at "Home".
   it would leave the frame a second after the tap, so the camera keeps the body
   it was sent to where it is until the next gesture, scrub or tap. An open body
   is parked, so this moves nothing; under reduced motion nothing laps.
+- **Full screen:** a button in the view's top corner makes it cover the whole
+  window, over the page, the quick-add button and the header, and takes it
+  full screen with the Fullscreen API where the browser allows. A phone's Safari
+  only allows that for video, so there the covering view is all you get. The
+  list and the note behind it are `inert` and the page doesn't scroll. The
+  sheets are `<dialog>`s in the top layer, so a tap still opens one over the
+  view. The button, Escape or the browser's own exit leaves full screen. While
+  a sheet is open, Escape closes the sheet first.
 - **Otherwise the camera never moves on its own.** No idle auto-rotate, no intro
   fly-through.
 

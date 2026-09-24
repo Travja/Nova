@@ -321,6 +321,13 @@ async function context(options = {}) {
 	const { ids, rocks } = await seed(page, 12);
 	await openUniverse(page);
 	await shoot(page, 'app-12');
+	// Full screen: the view over the whole window, the page and its chrome gone.
+	await page.getByRole('button', { name: 'Full screen' }).click();
+	await settle(page);
+	await page.screenshot({ path: `${OUT}/app-12-fullscreen.png` });
+	console.log('app-12-fullscreen.png');
+	await page.getByRole('button', { name: 'Exit full screen' }).click();
+	await settle(page);
 	// The belt, a rock tapped: a drifted one, well out toward the edge.
 	let rock = null;
 	for (const id of [rocks[3], rocks[2], ...rocks]) {

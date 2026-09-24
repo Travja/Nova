@@ -89,6 +89,10 @@
 	let viewState = $state<ViewState>('loading');
 	let stage = $state<HTMLDivElement>();
 	let zoomElement = $state<HTMLDivElement>();
+	let viewElement = $state<HTMLDivElement>();
+	let expandButton = $state<HTMLButtonElement>();
+	/** The view fills the whole screen, over the page and its chrome. */
+	let expanded = $state(false);
 	let view = $state.raw<UniverseView | null>(null);
 	/** The rock whose sheet is open, from a tap on the belt. */
 	let openRockId = $state<string | null>(null);
@@ -120,7 +124,10 @@
 						viewState = next;
 					},
 					// The zoom's words and its track, not the whole column beside them.
-					avoid: () => (zoomElement ? [...zoomElement.querySelectorAll('span, input')] : [])
+					avoid: () => [
+						...(zoomElement ? zoomElement.querySelectorAll('span, input') : []),
+						...(expandButton ? [expandButton] : [])
+					]
 				});
 			} catch {
 				// No WebGL context, or — installed and offline before the view was
@@ -199,11 +206,64 @@
 		focusTimer = setTimeout(() => view?.flyTo(goalId), FOCUS_DEBOUNCE_MS);
 	}
 
+	/**
+	 * Full screen: the view is fixed over the whole window, and where the
+	 * browser allows it, taken full screen too so its own chrome goes as well.
+	 * A phone's Safari allows it only for video, so the fixed view is the
+	 * whole of it there. The sheets are `<dialog>`s in the top layer, which
+	 * sits above a full-screen element, so a tap still opens them over it.
+	 */
+	async function enterExpanded() {
+		expanded = true;
+		if (!viewElement || !document.fullscreenEnabled) return;
+		try {
+			await viewElement.requestFullscreen({ navigationUI: 'hide' });
+		} catch {
+			// Refused: the fixed view still fills the window.
+		}
+	}
+
+	function exitExpanded() {
+		expanded = false;
+		if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+	}
+
+	/** Leaving the browser's full screen by its own means — Escape, a swipe — leaves ours too. */
+	function onFullscreenChange() {
+		if (expanded && !document.fullscreenElement) expanded = false;
+	}
+
+	/** Escape leaves the fixed view — unless a sheet is open, which Escape closes first. */
+	function onWindowKeydown(event: KeyboardEvent) {
+		if (!expanded || event.key !== 'Escape' || document.fullscreenElement) return;
+		if (document.querySelector('dialog[open]')) return;
+		exitExpanded();
+	}
+
+	// The page behind a full-screen view does not scroll.
+	$effect(() => {
+		if (!expanded) return;
+		const root = document.documentElement;
+		const previous = root.style.overflow;
+		root.style.overflow = 'hidden';
+		return () => {
+			root.style.overflow = previous;
+		};
+	});
+
 	const belt = $derived(asteroids.length);
 </script>
 
+<svelte:window onkeydown={onWindowKeydown} />
+<svelte:document onfullscreenchange={onFullscreenChange} />
+
 <section class="universe">
-	<div class="universe__view" data-state={viewState}>
+	<div
+		class="universe__view"
+		class:is-expanded={expanded}
+		data-state={viewState}
+		bind:this={viewElement}
+	>
 		<!-- The canvas and its labels land here on mount. Decorative: the list
 		     below says everything in words and is how a keyboard gets in. -->
 		<div class="universe__stage" bind:this={stage} aria-hidden="true"></div>
@@ -214,6 +274,24 @@
 		<noscript>
 			<p class="universe__fallback">The universe needs JavaScript — every goal is listed below.</p>
 		</noscript>
+
+		{#if viewState === 'ready' || expanded}
+			<button
+				type="button"
+				class="universe__expand"
+				bind:this={expandButton}
+				aria-label={expanded ? 'Exit full screen' : 'Full screen'}
+				onclick={() => (expanded ? exitExpanded() : enterExpanded())}
+			>
+				<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+					{#if expanded}
+						<path d="M8 3v5H3M12 3v5h5M8 17v-5H3M12 17v-5h5" />
+					{:else}
+						<path d="M3 8V3h5M17 8V3h-5M3 12v5h5M17 12v5h-5" />
+					{/if}
+				</svg>
+			</button>
+		{/if}
 
 		{#if stops.length > 1}
 			<div class="zoom" bind:this={zoomElement}>
@@ -250,7 +328,7 @@
 
 	<p class="visually-hidden" role="status" aria-live="polite">{announcement}</p>
 
-	<p class="universe__note muted">
+	<p class="universe__note muted" inert={expanded}>
 		Every goal is in the universe. Tap a body to fly to it, or pick one below.
 		{#if belt > 0}
 			<a href="{resolve('/today')}#belt">{belt} {belt === 1 ? 'asteroid' : 'asteroids'}</a>
@@ -259,7 +337,7 @@
 	</p>
 
 	<!-- The universe in words. Focus here, from a keyboard, flies the camera. -->
-	<div class="universe__list" onfocusin={onListFocus}>
+	<div class="universe__list" inert={expanded} onfocusin={onListFocus}>
 		{@render children()}
 	</div>
 </section>
@@ -281,6 +359,55 @@
 		overflow: hidden;
 		position: relative;
 		touch-action: none;
+	}
+
+	/* Full screen: over the page, the quick-add button and the header. The
+	   controls keep clear of a notch. */
+	.universe__view.is-expanded {
+		border: 0;
+		border-radius: 0;
+		height: auto;
+		inset: 0;
+		position: fixed;
+		z-index: 30;
+	}
+
+	.universe__view.is-expanded .universe__expand {
+		right: calc(8px + env(safe-area-inset-right));
+		top: calc(8px + env(safe-area-inset-top));
+	}
+
+	.universe__view.is-expanded .zoom {
+		right: calc(6px + env(safe-area-inset-right));
+	}
+
+	.universe__expand {
+		align-items: center;
+		background: rgba(4, 5, 13, 0.6);
+		border: 1px solid var(--space-border);
+		border-radius: var(--radius-sm);
+		color: var(--text-bright);
+		cursor: pointer;
+		display: grid;
+		height: var(--tap-min);
+		justify-items: center;
+		padding: 0;
+		position: absolute;
+		right: 8px;
+		top: 8px;
+		width: var(--tap-min);
+	}
+
+	.universe__expand:hover {
+		border-color: var(--space-border-bright);
+	}
+
+	.universe__expand path {
+		fill: none;
+		stroke: currentColor;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		stroke-width: 1.8;
 	}
 
 	.universe__stage {

@@ -229,6 +229,24 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	);
 	await expect(view).toHaveAttribute('data-state', 'ready');
 
+	// Full screen: the view fills the window, the list behind it is out of
+	// reach, and a tap still opens a goal's sheet over it. Escape closes the
+	// sheet, not the view.
+	await page.getByRole('button', { name: 'Full screen' }).click();
+	await expect(view).toHaveClass(/is-expanded/);
+	await expect.poll(() => view.boundingBox()).toEqual({ x: 0, y: 0, ...PHONE });
+	await expect(page.locator('.universe__list')).toHaveAttribute('inert', '');
+	await settled(page);
+	await tap(page, weekly);
+	const weeklySheet = page.getByRole('dialog', { name: /Weekly rhythm/ });
+	await expect(weeklySheet).toBeVisible();
+	await weeklySheet.getByRole('button', { name: 'Close' }).click();
+	await expect(weeklySheet).toBeHidden();
+	await expect(view).toHaveClass(/is-expanded/);
+	await page.getByRole('button', { name: 'Exit full screen' }).click();
+	await expect(view).not.toHaveClass(/is-expanded/);
+	await expect(page.locator('.universe__list')).not.toHaveAttribute('inert', /.*/);
+
 	// And back to Tiers.
 	await page.getByRole('button', { name: 'Tiers' }).click();
 	await expect(page.getByRole('button', { name: 'Tiers' })).toHaveAttribute('aria-pressed', 'true');
