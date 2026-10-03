@@ -41,7 +41,7 @@ The gaps that stand between "it works" and "I use it every day".
 
 ## M2 — The fun part
 
-_9 of 9 done._
+_9 of 10 done._
 
 The reason to open the app rather than a spreadsheet.
 
@@ -56,6 +56,7 @@ The reason to open the app rather than a spreadsheet.
 | [#30](https://github.com/Travja/Nova/issues/30) ✓ | [Asteroids](issues/30-asteroids.md)                                   | One-off tasks have nowhere to live in a cyclic app          |
 | [#41](https://github.com/Travja/Nova/issues/41) ✓ | [Starfield viewport units](issues/41-starfield-viewport-units.md)     | `vmin` rebases when a mobile address bar hides              |
 | [#51](https://github.com/Travja/Nova/issues/51) ✓ | [Closing takes the sheet](issues/51-closing-takes-the-sheet.md)       | The celebration is lost exactly where it is easiest to earn |
+| [#63](https://github.com/Travja/Nova/issues/63)   | [Universe polish](issues/63-universe-polish.md)                       | A pinch opens sheets; the view never idles on a phone       |
 
 ## M3 — Insight
 
