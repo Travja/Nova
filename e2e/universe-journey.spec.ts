@@ -125,6 +125,28 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	expect(drawn, 'living bodies drew no frames').toBeGreaterThan(0);
 	expect(drawn, 'ambient motion ran faster than 30fps').toBeLessThanOrEqual(33);
 
+	// Ambient motion settles after its idle window, and resumes on the next
+	// interaction with no jump. The real window is 20s; the dev probe
+	// shortens it so the test does not have to wait that out.
+	await page.evaluate(() => window.__novaUniverse?.settleAfter(300));
+	await page.waitForTimeout(800);
+	const settledAt = await frames(page);
+	await page.waitForTimeout(500);
+	expect(await frames(page), 'ambient motion kept drawing after settling').toBe(settledAt);
+	// A wheel nudge on the canvas — a gesture, not a tap on a body — still
+	// counts as an interaction and wakes the loop again.
+	await canvas.hover();
+	await page.mouse.wheel(0, 1);
+	await page.waitForTimeout(200);
+	expect(
+		await frames(page),
+		'an interaction after settling did not resume ambient motion'
+	).toBeGreaterThan(settledAt);
+	// Restore a window long enough that nothing later in this journey settles
+	// ambient motion out from under an assertion that expects it running.
+	await page.evaluate(() => window.__novaUniverse?.settleAfter(60_000));
+	await settled(page);
+
 	// Scrolled out of sight, the universe costs no frames at all. A short
 	// window, so two goals' worth of list is enough to scroll past it.
 	await page.setViewportSize({ width: PHONE.width, height: 420 });

@@ -109,6 +109,8 @@ export interface UniverseScene {
 	/** Everything whose size is in pixels, for when the view is resized. */
 	resize(viewport: Viewport): void;
 	dispose(): void;
+	/** Which goals' labels `levelOfDetail` showed last frame (#63, part 4), by goal id. */
+	shownLabels: Set<string>;
 }
 
 /** How wide each line is, in CSS pixels (decision 6). */
@@ -396,14 +398,24 @@ function bodyFor(node: UniverseNode, goal: SceneGoal | null, build: Builder): Bu
 function labelFor(goal: SceneGoal): CSS2DObject {
 	const element = document.createElement('div');
 	element.className = 'universe-label';
-	element.textContent = goal.title;
+	// A span of its own, not a bare text node, so `setLabelText` can update the
+	// title later without `textContent` wiping the percentage beside it.
+	const title = document.createElement('span');
+	title.textContent = goal.title;
 	const percent = document.createElement('small');
 	percent.textContent = `${goal.percent}%`;
-	element.append(percent);
+	element.append(title, percent);
 	const label = new CSS2DObject(element);
 	// Bottom-centre on the body, so the words sit above it rather than across it.
 	label.center.set(0.5, 1);
 	return label;
+}
+
+/** Update a label already built by `labelFor`, in place — no new element. */
+function setLabelText(label: CSS2DObject, goal: SceneGoal): void {
+	const [title, percent] = label.element.children;
+	if (title) title.textContent = goal.title;
+	if (percent) percent.textContent = `${goal.percent}%`;
 }
 
 export interface BuildOptions {
@@ -415,7 +427,15 @@ export interface BuildOptions {
 	labelLayer: HTMLElement;
 	/** What each goal's trail showed before this build, so a log sweeps rather than jumps. */
 	previous: Map<string, { shown: number; lapStart: number | null }>;
+	/** The real clock, for timing a sweep this build starts. */
 	now: number;
+	/**
+	 * The ambient clock's own value right now (#63, part 2) — not the real
+	 * clock — for seeding a newly-closed node's `lapStart` in the same domain
+	 * `index.ts`'s `ambient()` reads it back in, so a lap doesn't jump when
+	 * that clock has been paused.
+	 */
+	ambientNow: number;
 	/** False to draw every trail where it ends up, with no sweep. */
 	animate: boolean;
 }
@@ -479,7 +499,7 @@ export function buildScene(
 			labelSize: null,
 			shown: from,
 			sweep: from !== target ? { from, to: target, start: options.now } : null,
-			lapStart: node.closed && from === target ? (before?.lapStart ?? options.now) : null,
+			lapStart: node.closed && from === target ? (before?.lapStart ?? options.ambientNow) : null,
 			model: built.model,
 			live: built.live
 		};
@@ -558,6 +578,7 @@ export function buildScene(
 		byGoal,
 		everything,
 		rocks,
+		shownLabels: new Set(),
 		resize(viewport) {
 			for (const material of build.lines) material.resolution.set(viewport.width, viewport.height);
 			for (const sprite of build.sprites) {
@@ -573,8 +594,13 @@ export function buildScene(
 					geometry?: BufferGeometry;
 					material?: Material | Material[];
 				};
-				// A sprite's geometry is one three shares between every sprite.
-				if (!(object instanceof Sprite)) disposable.geometry?.dispose();
+				// A sprite's geometry is one three shares between every sprite,
+				// and a geometry from `Kit`'s own cache (#63, part 3) is shared
+				// the same way — the kit disposes it when the view itself goes,
+				// not a rebuild along the way.
+				if (!(object instanceof Sprite) && !disposable.geometry?.userData.shared) {
+					disposable.geometry?.dispose();
+				}
 				const materials = Array.isArray(disposable.material)
 					? disposable.material
 					: disposable.material
@@ -587,6 +613,117 @@ export function buildScene(
 	};
 	universe.resize(options.viewport);
 	return universe;
+}
+
+/**
+ * A fingerprint of everything in the tree that decides what geometry or
+ * material a node gets: every node's id, its parent's, its kind, its goal,
+ * its body variant and its dormant state, and — for the home star — which
+ * rocks are on its belt. Two trees with the same key differ only in the
+ * numbers a log changes: a fraction, a closed flag, a percentage.
+ *
+ * `index.ts`'s `update()` applies those in place through `updateInPlace`
+ * when the key still holds, and rebuilds the scene when it does not — a goal
+ * added, archived, re-parented, moved to another tier, or an asteroid
+ * captured or released, all change it (#63, part 3).
+ */
+export function shapeKey(tree: UniverseTree): string {
+	function fingerprint(node: UniverseNode, parentId: string | null): unknown {
+		return [
+			node.id,
+			parentId,
+			node.kind,
+			node.goalId,
+			node.variant,
+			node.dormant,
+			node.belt ? node.belt.rocks.map((rock) => rock.id) : null,
+			node.children.map((child) => fingerprint(child, node.id))
+		];
+	}
+	return JSON.stringify(fingerprint(tree.root, null));
+}
+
+export interface UpdateInPlaceOptions {
+	/** Where to re-measure a relabelled node's size, same as a fresh build. */
+	labelLayer: HTMLElement;
+	/** The real clock, for timing a sweep this update starts. */
+	now: number;
+	/** The ambient clock's own value right now, for a body that has just closed. */
+	ambientNow: number;
+	/** False to jump every changed trail to where it ends up, with no sweep. */
+	animate: boolean;
+}
+
+/**
+ * Update the scene for a tree whose `shapeKey` still matches the one drawn:
+ * move each changed trail to its new fraction with the usual sweep, switch a
+ * body that has just closed to its closed width and start its lap, and
+ * update the words on a label whose text changed. Nothing is disposed, and
+ * nothing is built — every mesh, line and label already on screen stays the
+ * one it was.
+ */
+export function updateInPlace(
+	universe: UniverseScene,
+	tree: UniverseTree,
+	goals: Readonly<Record<string, SceneGoal>>,
+	options: UpdateInPlaceOptions
+): void {
+	const relabelled: SceneNode[] = [];
+
+	function walk(node: UniverseNode): void {
+		const entry = universe.byId.get(node.id);
+		if (entry) {
+			const goal = node.goalId ? (goals[node.goalId] ?? null) : null;
+			const from = entry.shown;
+			const target = node.fraction;
+			if (from !== target) {
+				if (options.animate) {
+					entry.sweep = { from, to: target, start: options.now };
+				} else {
+					entry.sweep = null;
+					setShown(entry, target);
+				}
+			} else {
+				entry.sweep = null;
+			}
+			entry.lapStart =
+				node.closed && from === target ? (entry.lapStart ?? options.ambientNow) : null;
+			if (entry.trailMaterial) {
+				entry.trailMaterial.linewidth = node.closed ? LINE.closed : LINE.trail;
+			}
+			if (entry.label && goal) {
+				const changed =
+					!entry.goal || entry.goal.title !== goal.title || entry.goal.percent !== goal.percent;
+				if (changed) {
+					setLabelText(entry.label, goal);
+					relabelled.push(entry);
+				}
+			}
+			entry.goal = goal;
+			entry.node = node;
+		}
+		for (const child of node.children) walk(child);
+	}
+
+	walk(tree.root);
+
+	// Measured in one batch — every changed label shown, then every size
+	// read, then every one hidden again — so a run of logs forces one
+	// layout, not one each; the next frame's own render fixes who is really
+	// shown.
+	for (const entry of relabelled) {
+		if (!entry.label) continue;
+		entry.label.element.style.display = '';
+		options.labelLayer.append(entry.label.element);
+	}
+	for (const entry of relabelled) {
+		if (!entry.label) continue;
+		entry.labelSize = {
+			width: entry.label.element.offsetWidth,
+			height: entry.label.element.offsetHeight
+		};
+		entry.label.element.style.display = 'none';
+	}
 }
 
 /**
@@ -718,6 +855,70 @@ function overlaps(a: Box, b: Box): boolean {
 	return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
+/** A label worth showing, if there is room for it: its box and how big its body reads on screen. */
+export interface LabelCandidate {
+	id: string;
+	box: Box;
+	size: number;
+	distance: number;
+}
+
+/** A candidate is at least this much larger, not merely larger, before it displaces one shown last frame. */
+const DISPLACE_FACTOR = 1.5;
+
+/**
+ * Which labels to show this frame: a pure function of this frame's
+ * candidates, the boxes to avoid, which labels were shown last frame, and
+ * how many are ever allowed at once (#63, part 4).
+ *
+ * A label shown last frame keeps its spot — it is placed before any other
+ * candidate, so nothing already decided to fit around it has to move. It
+ * gives way only to a later candidate whose box overlaps it and whose body
+ * is at least `DISPLACE_FACTOR` times larger on screen, never merely larger;
+ * otherwise two labels close in size would trade places as a closed orbit's
+ * lap nudges one a pixel ahead of the other, frame to frame. A candidate
+ * never displaces `avoid` — the zoom's own words are never worth moving for.
+ *
+ * `candidates` should already be limited to ones with room from their host
+ * and inside the view — a label shown last frame that no longer qualifies is
+ * simply absent here, and so is not kept shown.
+ */
+export function declutterLabels(
+	candidates: readonly LabelCandidate[],
+	avoid: readonly Box[],
+	shownLastFrame: ReadonlySet<string>,
+	cap: number
+): Set<string> {
+	const byOrder = (a: LabelCandidate, b: LabelCandidate) =>
+		b.size - a.size || a.distance - b.distance;
+	const sticky = candidates.filter((c) => shownLastFrame.has(c.id)).sort(byOrder);
+	const fresh = candidates.filter((c) => !shownLastFrame.has(c.id)).sort(byOrder);
+
+	const shown = new Map<string, LabelCandidate>();
+
+	for (const candidate of sticky) {
+		if (shown.size >= cap) break;
+		if (avoid.some((box) => overlaps(candidate.box, box))) continue;
+		if ([...shown.values()].some((other) => overlaps(candidate.box, other.box))) continue;
+		shown.set(candidate.id, candidate);
+	}
+
+	for (const candidate of fresh) {
+		if (avoid.some((box) => overlaps(candidate.box, box))) continue;
+		const blockers = [...shown.values()].filter((other) => overlaps(candidate.box, other.box));
+		if (blockers.length === 0) {
+			if (shown.size >= cap) continue;
+			shown.set(candidate.id, candidate);
+			continue;
+		}
+		if (!blockers.every((blocker) => candidate.size >= blocker.size * DISPLACE_FACTOR)) continue;
+		for (const blocker of blockers) shown.delete(blocker.id);
+		shown.set(candidate.id, candidate);
+	}
+
+	return new Set(shown.keys());
+}
+
 /**
  * Level of detail for this frame: which systems fold into their host, how
  * much of a universe's shell to show from where the camera is, and which
@@ -760,15 +961,10 @@ export function levelOfDetail(
 		}
 	}
 
-	// Labels that have room, then declutter: larger body on screen first, then
-	// nearer, and never two overlapping or more than twelve.
-	const candidates: {
-		entry: SceneNode;
-		x: number;
-		y: number;
-		size: number;
-		distance: number;
-	}[] = [];
+	// Labels that have room are candidates; `declutterLabels` (#63, part 4)
+	// decides which of them to show, remembering what it showed last frame.
+	const byLabelId = new Map<string, SceneNode>();
+	const candidates: LabelCandidate[] = [];
 	for (const entry of universe.byGoal.values()) {
 		if (!entry.label || !entry.host) continue;
 		entry.label.visible = false;
@@ -778,33 +974,31 @@ export function levelOfDetail(
 		const a = projectToScreen(hostAt, camera, viewport);
 		const b = projectToScreen(nodeAt, camera, viewport);
 		if (!b.inFront || Math.hypot(a.x - b.x, a.y - b.y) <= LABEL_ROOM_PX) continue;
+		const size = entry.labelSize ?? { width: 80, height: 24 };
+		const box: Box = {
+			left: b.x - size.width / 2,
+			right: b.x + size.width / 2,
+			top: b.y - size.height,
+			bottom: b.y
+		};
+		const inside =
+			box.left >= 0 && box.top >= 0 && box.right <= viewport.width && box.bottom <= viewport.height;
+		if (!inside) continue;
 		const distance = eye.distanceTo(nodeAt);
+		const id = entry.node.id;
+		byLabelId.set(id, entry);
 		candidates.push({
-			entry,
-			x: b.x,
-			y: b.y,
+			id,
+			box,
 			size: entry.node.bodyRadius / Math.max(distance, 1e-6) / viewport.tanHalfFov,
 			distance
 		});
 	}
-	candidates.sort((a, b) => b.size - a.size || a.distance - b.distance);
 
-	const taken: Box[] = [...avoid];
-	let shownLabels = 0;
-	for (const candidate of candidates) {
-		if (shownLabels >= MAX_LABELS) break;
-		const size = candidate.entry.labelSize ?? { width: 80, height: 24 };
-		const box: Box = {
-			left: candidate.x - size.width / 2,
-			right: candidate.x + size.width / 2,
-			top: candidate.y - size.height,
-			bottom: candidate.y
-		};
-		const inside =
-			box.left >= 0 && box.top >= 0 && box.right <= viewport.width && box.bottom <= viewport.height;
-		if (!inside || taken.some((other) => overlaps(box, other))) continue;
-		taken.push(box);
-		shownLabels += 1;
-		if (candidate.entry.label) candidate.entry.label.visible = true;
+	const shown = declutterLabels(candidates, avoid, universe.shownLabels, MAX_LABELS);
+	for (const id of shown) {
+		const entry = byLabelId.get(id);
+		if (entry?.label) entry.label.visible = true;
 	}
+	universe.shownLabels = shown;
 }

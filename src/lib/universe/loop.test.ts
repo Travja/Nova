@@ -88,6 +88,73 @@ describe('createLoop', () => {
 		expect(tick()).toBe(0);
 	});
 
+	it('paces a requested frame with a timer, waking on no raf in between', () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		let calls = 0;
+		const loop = createLoop(() => {
+			calls += 1;
+			loop.requestPaced(30);
+			return true;
+		});
+
+		loop.request();
+		expect(tick()).toBe(1);
+		expect(calls).toBe(1);
+		// No raf is queued while the timer is waiting.
+		expect(tick()).toBe(0);
+		vi.advanceTimersByTime(29);
+		expect(tick()).toBe(0);
+		vi.advanceTimersByTime(1);
+		expect(tick()).toBe(1);
+		expect(calls).toBe(2);
+
+		vi.useRealTimers();
+	});
+
+	it('a request() during a paced wait draws right away, not at the end of the wait', () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		let calls = 0;
+		const loop = createLoop(() => {
+			calls += 1;
+			loop.requestPaced(30);
+			return true;
+		});
+
+		loop.request();
+		tick();
+		expect(calls).toBe(1);
+		// Interrupt the wait: this should not need the remaining 30ms to elapse.
+		loop.request();
+		expect(tick()).toBe(1);
+		expect(calls).toBe(2);
+
+		vi.useRealTimers();
+	});
+
+	it('a pause cancels a pending paced wait, same as a pending frame', () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+		let calls = 0;
+		const loop = createLoop(() => {
+			calls += 1;
+			loop.requestPaced(30);
+			return true;
+		});
+
+		loop.request();
+		tick();
+		expect(calls).toBe(1);
+		loop.pause('hidden', true);
+		vi.advanceTimersByTime(1000);
+		expect(tick()).toBe(0);
+		expect(calls).toBe(1);
+
+		loop.pause('hidden', false);
+		expect(tick()).toBe(1);
+		expect(calls).toBe(2);
+
+		vi.useRealTimers();
+	});
+
 	it('picks up a request made from inside a frame', () => {
 		let asked = false;
 		const loop = createLoop(() => {
