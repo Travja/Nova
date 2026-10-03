@@ -122,6 +122,15 @@ position and fill say the same thing twice.
 - Size in pixels, not SVG user units, for anything inside a stretched viewBox —
   a `preserveAspectRatio="none"` SVG turns circles into ellipses.
 
+## Screenshots
+
+**Never commit an image to `main`.** Screenshots live on the orphan `screenshots`
+branch, so a clone of `main` does not carry them forever. Write them to the
+ignored `.screenshots/`, publish with
+`scripts/publish-screenshots.sh .screenshots/<dir> <issue>-<slug>`, and use the
+raw URLs it prints in the PR body or the docs. App assets under `static/` are
+not screenshots and stay where they are.
+
 ## Gotchas
 
 - `ORIGIN` must match the browsed URL in production or SvelteKit rejects form

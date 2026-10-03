@@ -4,6 +4,12 @@ labels: [performance, backend]
 milestone: 'M4 — Reach and operations'
 ---
 
+> **Closed as not planned.** At personal scale the replay is fast enough, and a
+> rollup is a second source of truth with its own invalidation rules. If the
+> dashboard or the universe view ever gets slow, benchmark first — a few years of
+> synthetic entries across ~40 goals, timing `listGoalSnapshots()` and
+> `universeTree()` — and build this only if the numbers ask for it.
+
 `listGoalSnapshots()` loads every entry for every goal on each dashboard render,
 because lifetime orbit counts are derived from the full history. That is correct
 and it is fine at thousands of entries. It is wrong at a million, and a daily goal

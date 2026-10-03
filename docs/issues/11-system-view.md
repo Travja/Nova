@@ -25,13 +25,13 @@ The prototype this spec was written against is
 — one file, three.js from the CDN, open it in a browser and drag it around. The
 screenshots are it, rendered at 390px by the script beside it.
 
-| 5 goals, home                                                 | 12 goals, universe scale                                            | 12 goals, multiverse                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| ![5 goals](../screenshots/11-system-view/universe-5.png)      | ![Universe](../screenshots/11-system-view/universe-12-universe.png) | ![Multiverse](../screenshots/11-system-view/universe-12-multiverse.png)    |
-| **Tap a star system**                                         | **The belt, a rock tapped**                                         | **A closing**                                                              |
-| ![Focus](../screenshots/11-system-view/universe-12-focus.png) | ![Belt](../screenshots/11-system-view/universe-12-belt.png)         | ![Closing](../screenshots/11-system-view/universe-12-closing.png)          |
-| **40 goals, home**                                            | **40 goals, galaxy**                                                | **40 goals, multiverse**                                                   |
-| ![40 home](../screenshots/11-system-view/universe-40.png)     | ![40 galaxy](../screenshots/11-system-view/universe-40-galaxy.png)  | ![40 multiverse](../screenshots/11-system-view/universe-40-multiverse.png) |
+| 5 goals, home                                                                                            | 12 goals, universe scale                                                                                       | 12 goals, multiverse                                                                                                  |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| ![5 goals](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-5.png)      | ![Universe](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-12-universe.png) | ![Multiverse](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-12-multiverse.png)    |
+| **Tap a star system**                                                                                    | **The belt, a rock tapped**                                                                                    | **A closing**                                                                                                         |
+| ![Focus](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-12-focus.png) | ![Belt](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-12-belt.png)         | ![Closing](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-12-closing.png)          |
+| **40 goals, home**                                                                                       | **40 goals, galaxy**                                                                                           | **40 goals, multiverse**                                                                                              |
+| ![40 home](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-40.png)     | ![40 galaxy](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-40-galaxy.png)  | ![40 multiverse](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/universe-40-multiverse.png) |
 
 ## What the universe is
 
@@ -111,7 +111,7 @@ Rejected:
   one flat sky of concentric lanes, one lane per goal. It is readable at a dozen
   goals and caps at about that, because a circle 360px across holds about twelve
   lanes; forty goals drew fourteen bodies
-  ([screenshot](../screenshots/11-system-view/flat-40.png)). It cannot zoom through
+  ([screenshot](https://raw.githubusercontent.com/Travja/Nova/screenshots/11-system-view/flat-40.png)). It cannot zoom through
   scales, has no depth, and every tier orbits the same point, which is the thing
   this issue's owner asked to get away from.
 - **Canvas 2D with a hand-written projection.** No dependency, and a 3D renderer,
@@ -735,7 +735,9 @@ it.
 - To re-render the screenshots:
   `node docs/prototypes/11-system-view/screenshots.mjs`, with `THREE_DIR` pointing
   at an unpacked `three@0.170.0` where the CDN is blocked (the script's header says
-  how). It prints what the tree decided for each scene.
+  how). It prints what the tree decided for each scene. They land in the
+  ignored `.screenshots/`; `scripts/publish-screenshots.sh` puts them on the
+  `screenshots` branch.
 
 ## Done when
 

@@ -73,7 +73,7 @@ Turning a log into something you learn from.
 
 ## M4 — Reach and operations
 
-_6 of 7 done._
+_6 of 6 done; #21 closed as not planned._
 
 Making it dependable, and making it speak up.
 
@@ -81,7 +81,7 @@ Making it dependable, and making it speak up.
 | ------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------- |
 | [#19](https://github.com/Travja/Nova/issues/19) ✓ | [Push reminders](issues/19-push-reminders.md)         | An app that never speaks up is easy to forget     |
 | [#20](https://github.com/Travja/Nova/issues/20) ✓ | [PWA polish](issues/20-install-and-shortcuts.md)      | Shortcuts, share target, iOS install guidance     |
-| [#21](https://github.com/Travja/Nova/issues/21)   | [Orbit rollups](issues/21-orbit-rollups.md)           | Dashboard cost scales with lifetime entries today |
+| [#21](https://github.com/Travja/Nova/issues/21) — | [Orbit rollups](issues/21-orbit-rollups.md)           | Not planned: benchmark first if it ever gets slow |
 | [#22](https://github.com/Travja/Nova/issues/22) ✓ | [Logging and errors](issues/22-logging-and-errors.md) | Debugging a self-hosted instance is guesswork     |
 | [#23](https://github.com/Travja/Nova/issues/23) ✓ | [Automated backups](issues/23-backups.md)             | Years of history in one file                      |
 | [#24](https://github.com/Travja/Nova/issues/24) ✓ | [Deployment guide](issues/24-deployment-guide.md)     | PWAs need HTTPS and an exact `ORIGIN`             |

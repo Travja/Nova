@@ -31,3 +31,4 @@ playwright-report
 .env.*
 !.env.example
 .shot.mjs
+/.screenshots

@@ -15,6 +15,7 @@
  *   DATABASE_URL=file:./data/shots.db pnpm db:migrate
  *   DATABASE_URL=file:./data/shots.db ORIGIN=http://localhost:4180 pnpm dev --port 4180
  *   node scripts/universe-screenshots.mjs
+ *   scripts/publish-screenshots.sh .screenshots/11-system-view 11-system-view
  *
  * `BASE_URL`, `DB_FILE` and `OUT_DIR` override the defaults below. Headless
  * Chromium draws WebGL on SwiftShader, hence the launch arguments.
@@ -26,7 +27,7 @@ import { join } from 'node:path';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4180';
 const DB_FILE = process.env.DB_FILE ?? 'data/shots.db';
-const OUT = process.env.OUT_DIR ?? 'docs/screenshots/11-system-view';
+const OUT = process.env.OUT_DIR ?? '.screenshots/11-system-view';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TARGET = 20;
 

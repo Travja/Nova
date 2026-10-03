@@ -24,7 +24,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const out = resolve(here, '../../screenshots/11-system-view');
+const out = resolve(here, '../../../.screenshots/11-system-view');
 const CDN = 'https://cdn.jsdelivr.net/npm/three@0.170.0/';
 
 function executablePath() {

@@ -14,7 +14,7 @@ for what is logged, a star at the centre and the body parked where the arc
 stops. The caption sits below the ring rather than inside it, so a goal measured
 in `180 pages / 300 pages` still reads on a phone.
 
-![A goal's detail page](screenshots/goal-detail.png)
+![A goal's detail page](https://raw.githubusercontent.com/Travja/Nova/screenshots/goal-detail.png)
 
 A closed orbit keeps travelling — the body carries on round the ring — because a
 habit you have already hit today should look alive rather than finished.
@@ -26,7 +26,7 @@ ladder the whole app is built on invisible until you read the label. Each tier
 now has its own silhouette, and three bodies inside it, so a dashboard of six
 satellites is not one drawing repeated six times.
 
-![Three bodies per tier](screenshots/tier-variants.png)
+![Three bodies per tier](https://raw.githubusercontent.com/Travja/Nova/screenshots/tier-variants.png)
 
 | Tier            | Bodies                                             |
 | --------------- | -------------------------------------------------- |
@@ -42,7 +42,7 @@ is stored on the goal row: there is no column to migrate, and no way for a body
 to change under a goal that has been flying for a year. Ids are the only thing
 about a goal that never changes — titles, colours and even tiers do.
 
-![One tier, three goals](screenshots/tier-variants-in-place.png)
+![One tier, three goals](https://raw.githubusercontent.com/Travja/Nova/screenshots/tier-variants-in-place.png)
 
 The one place this shows a white lie is the goal form's live preview, which
 draws the tier's first body because the goal has no id yet.
@@ -54,7 +54,7 @@ stops being detail and becomes mush. Below roughly ten pixels across each body
 drops to its tier's silhouette — disc and bar, banded disc, spike, swirl, dot
 field — which is what stays readable when a ring is the size of a full stop.
 
-![The history strip](screenshots/tier-bodies-small-after.png)
+![The history strip](https://raw.githubusercontent.com/Travja/Nova/screenshots/tier-bodies-small-after.png)
 
 ### Dormant orbits
 
@@ -62,7 +62,7 @@ A goal that was archived for a whole period never flew it, and that has to look
 different from a period that was flown and missed. Dormant orbits are drawn
 cold: grey, dimmed, with motion paused rather than removed.
 
-![Dormant orbits in the strip](screenshots/dormant-orbits.png)
+![Dormant orbits in the strip](https://raw.githubusercontent.com/Travja/Nova/screenshots/dormant-orbits.png)
 
 Above, W27–W32 were slept through and W26 and W33 were missed.
 
@@ -72,7 +72,7 @@ The best moment in the app is the one that used to pass unnoticed. When a log
 closes an orbit the arc sweeps up to full, an ignition fires where the body
 reached, the streak lands rather than changing, and the pilot salutes.
 
-![Closing an orbit](screenshots/orbit-celebration.png)
+![Closing an orbit](https://raw.githubusercontent.com/Travja/Nova/screenshots/orbit-celebration.png)
 
 It scales with the tier, because a satellite closing daily and a universe
 closing once a year are not the same news: six rays over 620ms for the one,
@@ -89,14 +89,14 @@ On `/today` a goal that closes leaves the at-risk list and takes its dial with
 it, so the moment there is the row leaving, the live region naming the goal, and
 the pilot's salute.
 
-![Closing an orbit on /today](screenshots/orbit-celebration-today.png)
+![Closing an orbit on /today](https://raw.githubusercontent.com/Travja/Nova/screenshots/orbit-celebration-today.png)
 
 ## The pilot
 
 The astronaut used to drift on empty states and do nothing else. It now reads
 the week off the same split `/today` is drawn from, and says what it sees.
 
-![The pilot's four moods](screenshots/mascot-states.png)
+![The pilot's four moods](https://raw.githubusercontent.com/Travja/Nova/screenshots/mascot-states.png)
 
 | Mood        | When                                                |
 | ----------- | --------------------------------------------------- |
@@ -110,7 +110,7 @@ mood, so the pilot points at that one rather than gesturing at the screen. The
 copy is warm on purpose — a missed orbit is information, not a telling-off — and
 the pilot can be sent away with the ✕ if you find it distracting.
 
-![The pilot in place](screenshots/mascot-today.png)
+![The pilot in place](https://raw.githubusercontent.com/Travja/Nova/screenshots/mascot-today.png)
 
 ## The belt
 
@@ -119,7 +119,7 @@ one thing that is deliberately **not** a dial. There is no arc to fill and no
 body travelling round to meet it. What there is instead is a distance — and a
 distance needs two things to be a distance.
 
-![The belt: rocks drifting, and finished ones settled back in](screenshots/30-asteroids/drift-and-done.png)
+![The belt: rocks drifting, and finished ones settled back in](https://raw.githubusercontent.com/Travja/Nova/screenshots/30-asteroids/drift-and-done.png)
 
 The swarm on the left is the belt itself, drawn as a slice of a very large ring
 whose centre is far off the left of the box: a belt is an orbit that never
@@ -170,7 +170,7 @@ over it. Give that strip `height: 100%` and not `top: 0; bottom: 0`: an SVG
 carrying a viewBox is a replaced element with an intrinsic aspect ratio, and
 that ratio wins over a pair of offsets.
 
-![A row opened, with the belt running its full height](screenshots/30-asteroids/row-opened.png)
+![A row opened, with the belt running its full height](https://raw.githubusercontent.com/Travja/Nova/screenshots/30-asteroids/row-opened.png)
 
 The belt never raises its voice. Both endings are outline pills rather than
 `.button`s, the three-clear capture offer is a bordered note with no gradient
@@ -183,7 +183,7 @@ A belt row is a rock, a title and how long it has been out there. It carries no
 controls at all: its two endings are a swipe — right to finish, left to let go —
 and everything else is a tap on the words, which are themselves the disclosure.
 
-![The belt on a phone, compact](screenshots/30-asteroids/belt-on-a-phone-compact.png)
+![The belt on a phone, compact](https://raw.githubusercontent.com/Travja/Nova/screenshots/30-asteroids/belt-on-a-phone-compact.png)
 
 That is what bought the row its size. A control carries the touch floor, so any
 line one sits on is 44px tall whatever else is on it, and a line holding nothing
@@ -199,7 +199,7 @@ reads as a layer the card is moving off rather than as a stain spreading through
 it. Both sides are muted until the drag commits and then lit, which is the whole
 of the feedback.
 
-![A row mid-swipe](screenshots/30-asteroids/swipe-right.png)
+![A row mid-swipe](https://raw.githubusercontent.com/Travja/Nova/screenshots/30-asteroids/swipe-right.png)
 
 Standing still, each end of the card carries a wash of the colour a drag that
 way would uncover — feathered far enough that there is no edge anywhere to read

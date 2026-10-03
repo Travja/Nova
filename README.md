@@ -7,7 +7,7 @@ around its orbit; logging progress moves it along, and hitting the target for
 the period closes one full revolution. Small goals are **Satellites** that come
 around every day; the biggest are **Universes** that close once a year.
 
-![Nova dashboard](docs/screenshots/dashboard.png)
+![Nova dashboard](https://raw.githubusercontent.com/Travja/Nova/screenshots/dashboard.png)
 
 ## The model
 
@@ -35,7 +35,7 @@ and what has fallen behind the pace its period calls for — and logs against an
 of it without navigating away. Closed orbits fold out of the way rather than
 disappearing; seeing them done is part of the reward.
 
-![The Today view](docs/screenshots/today.png)
+![The Today view](https://raw.githubusercontent.com/Travja/Nova/screenshots/today.png)
 
 On a narrow screen it is where a fresh visit lands, and the tiered dashboard
 stays one tap away.
@@ -46,7 +46,7 @@ The orbit is the progress bar, not decoration on top of one. Each tier has its
 own body — and three of them, so a screen full of satellites is not one drawing
 repeated — pinned to the goal so it never changes under you.
 
-![Three bodies per tier](docs/screenshots/tier-variants.png)
+![Three bodies per tier](https://raw.githubusercontent.com/Travja/Nova/screenshots/tier-variants.png)
 
 Closing an orbit is a moment rather than a line of text changing, and the pilot
 on `/today` reads the week off the same numbers the list is drawn from. All of
