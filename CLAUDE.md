@@ -159,7 +159,7 @@ function.
 
 ## Where the work is
 
-Work is tracked as GitHub issues, grouped into four milestones. The original
+Work is tracked as GitHub issues, grouped into five milestones. The original
 set was #1–24; everything since is a follow-up filed while building, numbered as
 GitHub assigned it. The full spec for each lives in `docs/issues/`, numbered to
 match — `docs/issues/12-nested-orbits.md` is issue #12.
