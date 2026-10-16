@@ -120,6 +120,15 @@ function seeded(seed: number): () => number {
  */
 export class Kit {
 	private readonly cache = new Map<string, Texture>();
+	/**
+	 * Geometry that depends only on a body's variant, not on the goal wearing
+	 * it (#63, part 3) — a craft's boxes and cylinders, a planet's sphere, a
+	 * star's — kept one instance to a shape rather than one to a body. A
+	 * moon's craters are seeded from the goal's own id, so they never go in
+	 * here; neither does a galaxy or universe interior, sized by the node's
+	 * own extent rather than its variant.
+	 */
+	private readonly geometries = new Map<string, BufferGeometry>();
 
 	constructor(readonly glow: Texture) {}
 
@@ -135,6 +144,20 @@ export class Kit {
 		texture.anisotropy = 4;
 		this.cache.set(key, texture);
 		return texture;
+	}
+
+	/**
+	 * A geometry shared by every body built with the same `key`. Tagged in
+	 * its own `userData` so a scene's `dispose()` can tell a shared geometry
+	 * from a body's own and leave this one for the kit to dispose instead.
+	 */
+	geometry<T extends BufferGeometry>(key: string, make: () => T): T {
+		const known = this.geometries.get(key);
+		if (known) return known as T;
+		const built = make();
+		built.userData.shared = true;
+		this.geometries.set(key, built);
+		return built;
 	}
 
 	/** The dial's flare path — four long points and four short — as a soft-edged sprite map. */
@@ -161,6 +184,8 @@ export class Kit {
 	dispose(): void {
 		for (const texture of this.cache.values()) texture.dispose();
 		this.cache.clear();
+		for (const geometry of this.geometries.values()) geometry.dispose();
+		this.geometries.clear();
 	}
 }
 
@@ -219,9 +244,9 @@ function panelTexture(kit: Kit, colors: Palette): Texture {
 	});
 }
 
-function beacon(): Mesh {
+function beacon(kit: Kit): Mesh {
 	return new Mesh(
-		new SphereGeometry(0.15, 12, 8),
+		kit.geometry('beacon', () => new SphereGeometry(0.15, 12, 8)),
 		new MeshBasicMaterial({ color: '#fff6d8', transparent: true })
 	);
 }
@@ -234,10 +259,13 @@ function blink(light: Mesh, seconds: number): void {
 function comsat(colors: Palette, kit: Kit): Body {
 	const craft = new Group();
 	const hull = new Mesh(
-		new BoxGeometry(1.1, 1.3, 0.8),
+		kit.geometry('comsat:hull', () => new BoxGeometry(1.1, 1.3, 0.8)),
 		standard(colors.lit.clone().lerp(colors.pale, 0.5), { metalness: 0.3, roughness: 0.55 })
 	);
-	const strut = new Mesh(new CylinderGeometry(0.05, 0.05, 1.7, 8), standard(colors.pale));
+	const strut = new Mesh(
+		kit.geometry('comsat:strut', () => new CylinderGeometry(0.05, 0.05, 1.7, 8)),
+		standard(colors.pale)
+	);
 	strut.rotation.z = Math.PI / 2;
 	const panelMaterial = new MeshStandardMaterial({
 		map: panelTexture(kit, colors),
@@ -246,20 +274,27 @@ function comsat(colors: Palette, kit: Kit): Body {
 		emissive: colors.lit,
 		emissiveIntensity: 0.12
 	});
+	const panelGeometry = kit.geometry('comsat:panel', () => new BoxGeometry(0.98, 0.96, 0.04));
 	for (const side of [-1, 1]) {
-		const panel = new Mesh(new BoxGeometry(0.98, 0.96, 0.04), panelMaterial);
+		const panel = new Mesh(panelGeometry, panelMaterial);
 		panel.position.x = side * 1.3;
 		craft.add(panel);
 	}
-	const mast = new Mesh(new CylinderGeometry(0.05, 0.05, 0.34, 8), standard(colors.pale));
+	const mast = new Mesh(
+		kit.geometry('comsat:mast', () => new CylinderGeometry(0.05, 0.05, 0.34, 8)),
+		standard(colors.pale)
+	);
 	mast.position.y = 0.8;
 	const dish = new Mesh(
-		new SphereGeometry(0.42, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2.4),
+		kit.geometry(
+			'comsat:dish',
+			() => new SphereGeometry(0.42, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2.4)
+		),
 		new MeshStandardMaterial({ color: colors.pale, side: DoubleSide, metalness: 0.3 })
 	);
 	dish.rotation.x = Math.PI;
 	dish.position.y = 1.2;
-	const light = beacon();
+	const light = beacon(kit);
 	light.position.y = -0.82;
 	craft.add(hull, strut, mast, dish, light);
 
@@ -327,38 +362,50 @@ function probe(colors: Palette, kit: Kit): Body {
 		const r = (step / 11) * 0.98;
 		return new Vector2(r, r * r * 0.45);
 	});
+	// Outside and inside are the same shape, back- and front-facing: one
+	// cached geometry serves both.
+	const dishGeometry = kit.geometry('probe:dish', () => new LatheGeometry(profile, 32));
 	const outside = new Mesh(
-		new LatheGeometry(profile, 32),
+		dishGeometry,
 		new MeshStandardMaterial({ color: colors.pale, side: BackSide, metalness: 0.3 })
 	);
 	const inside = new Mesh(
-		new LatheGeometry(profile, 32),
+		dishGeometry,
 		new MeshStandardMaterial({ color: colors.deep, side: FrontSide, roughness: 0.4 })
 	);
 	const dish = new Group();
 	dish.add(outside, inside);
-	const feedStrut = new Mesh(new CylinderGeometry(0.03, 0.03, 0.5, 6), standard(colors.pale));
+	const feedStrut = new Mesh(
+		kit.geometry('probe:feed-strut', () => new CylinderGeometry(0.03, 0.03, 0.5, 6)),
+		standard(colors.pale)
+	);
 	feedStrut.position.y = 0.25;
-	const feed = new Mesh(new SphereGeometry(0.13, 12, 8), standard(colors.pale));
+	const feed = new Mesh(
+		kit.geometry('probe:feed', () => new SphereGeometry(0.13, 12, 8)),
+		standard(colors.pale)
+	);
 	feed.position.y = 0.5;
 	dish.add(feedStrut, feed);
 	dish.position.set(-0.35, 0.3, 0);
 	dish.rotation.z = (38 * Math.PI) / 180;
 
-	const strut = new Mesh(new CylinderGeometry(0.06, 0.06, 0.9, 8), standard(colors.pale));
+	const strut = new Mesh(
+		kit.geometry('probe:strut', () => new CylinderGeometry(0.06, 0.06, 0.9, 8)),
+		standard(colors.pale)
+	);
 	strut.position.set(0.1, -0.15, 0);
 	strut.rotation.z = Math.PI / 4;
 	const hull = new Mesh(
-		new BoxGeometry(0.9, 0.78, 0.7),
+		kit.geometry('probe:hull', () => new BoxGeometry(0.9, 0.78, 0.7)),
 		standard(colors.lit.clone().lerp(colors.pale, 0.5), { metalness: 0.3, roughness: 0.55 })
 	);
 	hull.position.set(0.5, -0.55, 0);
 	const panel = new Mesh(
-		new BoxGeometry(0.78, 0.44, 0.04),
+		kit.geometry('probe:panel', () => new BoxGeometry(0.78, 0.44, 0.04)),
 		new MeshStandardMaterial({ map: panelTexture(kit, colors), metalness: 0.4, roughness: 0.35 })
 	);
 	panel.position.set(1.34, -0.5, 0);
-	const light = beacon();
+	const light = beacon(kit);
 	light.scale.setScalar(0.6);
 	light.position.set(0.5, -0.1, 0.2);
 	craft.add(dish, strut, hull, panel, light);
@@ -471,18 +518,25 @@ function ringTexture(kit: Kit, colors: Palette): Texture {
 	});
 }
 
-function world(radius: number, map: Texture, colors: Palette, roughness: number): Group {
+function world(
+	kit: Kit,
+	key: string,
+	radius: number,
+	map: Texture,
+	colors: Palette,
+	roughness: number
+): Group {
 	const world = new Group();
 	world.add(
 		new Mesh(
-			new SphereGeometry(radius, 48, 32),
+			kit.geometry(`${key}:globe`, () => new SphereGeometry(radius, 48, 32)),
 			new MeshStandardMaterial({ map, roughness, metalness: 0 })
 		)
 	);
 	// An atmosphere: a thin shell seen from behind, lit at the limb.
 	world.add(
 		new Mesh(
-			new SphereGeometry(radius * 1.07, 48, 32),
+			kit.geometry(`${key}:atmosphere`, () => new SphereGeometry(radius * 1.07, 48, 32)),
 			new MeshBasicMaterial({
 				color: colors.pale,
 				side: BackSide,
@@ -502,13 +556,20 @@ function planet(variant: number, colors: Palette, kit: Kit): Body {
 	body.rotation.z = (-17 * Math.PI) / 180;
 	const globe =
 		variant === 2
-			? world(1, iceTexture(kit, colors), colors, 0.5)
-			: world(variant === 1 ? 0.82 : 1, bandTexture(kit, colors, variant === 0), colors, 0.85);
+			? world(kit, 'planet:ice', 1, iceTexture(kit, colors), colors, 0.5)
+			: world(
+					kit,
+					variant === 1 ? 'planet:ringed' : 'planet:banded',
+					variant === 1 ? 0.82 : 1,
+					bandTexture(kit, colors, variant === 0),
+					colors,
+					0.85
+				);
 	body.add(globe);
 
 	if (variant === 1) {
 		const ring = new Mesh(
-			new RingGeometry(1.15, 1.7, 96),
+			kit.geometry('planet:ring', () => new RingGeometry(1.15, 1.7, 96)),
 			new MeshBasicMaterial({
 				map: ringTexture(kit, colors),
 				transparent: true,
@@ -541,7 +602,7 @@ function star(kit: Kit, colors: Palette, core: number, dim = false): Star {
 	const group = new Group();
 	group.add(
 		new Mesh(
-			new SphereGeometry(core, 32, 16),
+			kit.geometry(`star:${core}`, () => new SphereGeometry(core, 32, 16)),
 			new MeshBasicMaterial({ color: dim ? colors.pale : new Color('#fffdf2') })
 		)
 	);
@@ -560,20 +621,28 @@ function flareAt(flare: Sprite, base: number, seconds: number, delay = 0): void 
 	material.opacity = 0.75 + 0.25 * phase;
 }
 
-function orbitRing(radius: number, colors: Palette): Mesh {
+function orbitRing(kit: Kit, radius: number, colors: Palette): Mesh {
 	const ring = new Mesh(
-		new TorusGeometry(radius, 0.012, 6, 96),
+		kit.geometry(`orbitRing:${radius}`, () => new TorusGeometry(radius, 0.012, 6, 96)),
 		new MeshBasicMaterial({ color: colors.pale, transparent: true, opacity: 0.55 })
 	);
 	ring.rotation.x = Math.PI / 2;
 	return ring;
 }
 
-function ringedWorld(radius: number, colors: Palette): Group {
+function ringedWorld(kit: Kit, radius: number, colors: Palette): Group {
 	const world = new Group();
-	world.add(new Mesh(new SphereGeometry(radius, 20, 12), standard(colors.pale)));
+	world.add(
+		new Mesh(
+			kit.geometry(`ringedWorld:sphere:${radius}`, () => new SphereGeometry(radius, 20, 12)),
+			standard(colors.pale)
+		)
+	);
 	const ring = new Mesh(
-		new TorusGeometry(radius * 1.6, radius * 0.08, 6, 48),
+		kit.geometry(
+			`ringedWorld:ring:${radius}`,
+			() => new TorusGeometry(radius * 1.6, radius * 0.08, 6, 48)
+		),
 		new MeshBasicMaterial({ color: colors.pale, transparent: true, opacity: 0.8 })
 	);
 	ring.rotation.x = Math.PI / 2 - 0.35;
@@ -611,9 +680,9 @@ function starSystem(variant: number, colors: Palette, kit: Kit): Body {
 		// One star, one big world, one tilted orbit.
 		const plane = new Group();
 		plane.rotation.set(0.5, 0, (-22 * Math.PI) / 180);
-		plane.add(orbitRing(1.3, colors));
+		plane.add(orbitRing(kit, 1.3, colors));
 		const carrier = new Group();
-		const big = ringedWorld(0.24, colors);
+		const big = ringedWorld(kit, 0.24, colors);
 		big.position.x = 1.3;
 		carrier.add(big);
 		plane.add(carrier);
@@ -630,13 +699,16 @@ function starSystem(variant: number, colors: Palette, kit: Kit): Body {
 	// A star with worlds of its own, on rings it keeps.
 	const plane = new Group();
 	plane.rotation.x = 0.35;
-	plane.add(orbitRing(0.74, colors), orbitRing(1.18, colors));
+	plane.add(orbitRing(kit, 0.74, colors), orbitRing(kit, 1.18, colors));
 	const inner = new Group();
-	const small = new Mesh(new SphereGeometry(0.13, 16, 10), standard(colors.pale));
+	const small = new Mesh(
+		kit.geometry('starSystem:small', () => new SphereGeometry(0.13, 16, 10)),
+		standard(colors.pale)
+	);
 	small.position.x = 0.74;
 	inner.add(small);
 	const outer = new Group();
-	const ringed = ringedWorld(0.17, colors);
+	const ringed = ringedWorld(kit, 0.17, colors);
 	ringed.position.x = -1.18;
 	outer.add(ringed);
 	plane.add(inner, outer);
@@ -909,7 +981,10 @@ export function goalBody(
 export function core(colors: Palette, kit: Kit, radius: number): Object3D {
 	const group = new Group();
 	group.add(
-		new Mesh(new SphereGeometry(radius * 0.35, 24, 16), new MeshBasicMaterial({ color: '#fffdf2' }))
+		new Mesh(
+			kit.geometry(`core:${radius}`, () => new SphereGeometry(radius * 0.35, 24, 16)),
+			new MeshBasicMaterial({ color: '#fffdf2' })
+		)
 	);
 	group.add(aura(kit, colors.pale, radius * 3, 0.7));
 	group.add(aura(kit, colors.lit, radius * 7, 0.35));

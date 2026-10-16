@@ -1,6 +1,13 @@
 import { PerspectiveCamera, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { PICK_RADIUS_PX, nearestOnScreen, projectToScreen, type Viewport } from './pick';
+import {
+	PICK_RADIUS_PX,
+	TAP_SLOP_PX,
+	TapTracker,
+	nearestOnScreen,
+	projectToScreen,
+	type Viewport
+} from './pick';
 
 /** A 390 × 600 view looking down -z from 10 units back, so the origin is dead centre. */
 function view(): { camera: PerspectiveCamera; viewport: Viewport } {
@@ -57,5 +64,67 @@ describe('nearestOnScreen', () => {
 		// Straight behind the eye projects to the middle of the view, mirrored.
 		const candidates = [{ value: 'behind', at: new Vector3(0, 0, 20) }];
 		expect(nearestOnScreen(candidates, setup.camera, setup.viewport, 195, 300)).toBeNull();
+	});
+});
+
+describe('TapTracker', () => {
+	it('is a tap when one finger goes down and comes up without moving', () => {
+		const taps = new TapTracker();
+		taps.onPointerDown(1, 100, 100);
+		expect(taps.onPointerUp(1, 100, 100)).toEqual({ x: 100, y: 100 });
+	});
+
+	it('is not a tap once a finger moves past the slop', () => {
+		const taps = new TapTracker();
+		taps.onPointerDown(1, 100, 100);
+		taps.onPointerMove(1, 100, 100 + TAP_SLOP_PX + 1);
+		expect(taps.onPointerUp(1, 100, 100 + TAP_SLOP_PX + 1)).toBeNull();
+	});
+
+	it('moving back within the slop by the lift does not save a tap that strayed', () => {
+		const taps = new TapTracker();
+		taps.onPointerDown(1, 100, 100);
+		taps.onPointerMove(1, 100, 100 + TAP_SLOP_PX + 20);
+		expect(taps.onPointerUp(1, 100, 100)).toBeNull();
+	});
+
+	it('voids the tap when a second pointer goes down, still finger down second and lifting first', () => {
+		const taps = new TapTracker();
+		// The moving finger goes down first.
+		taps.onPointerDown(1, 100, 100);
+		// The still finger goes down second — this used to measure zero and tap.
+		taps.onPointerDown(2, 200, 200);
+		expect(taps.onPointerUp(2, 200, 200)).toBeNull();
+		expect(taps.onPointerUp(1, 140, 160)).toBeNull();
+	});
+
+	it('voids the tap the other way round too: still finger down first, moving finger second', () => {
+		const taps = new TapTracker();
+		taps.onPointerDown(1, 200, 200);
+		taps.onPointerDown(2, 100, 100);
+		// The still finger (down first) lifts first.
+		expect(taps.onPointerUp(1, 200, 200)).toBeNull();
+		expect(taps.onPointerUp(2, 140, 160)).toBeNull();
+	});
+
+	it('a pointercancel voids the gesture, but the next clean tap still works', () => {
+		const taps = new TapTracker();
+		taps.onPointerDown(1, 100, 100);
+		taps.onPointerMove(1, 101, 100);
+		taps.onPointerCancel(1);
+		// Nothing left down, so the cancelled pointer leaves no tap to collect.
+		taps.onPointerDown(2, 50, 50);
+		expect(taps.onPointerUp(2, 50, 50)).toEqual({ x: 50, y: 50 });
+	});
+
+	it('a pointercancel on one finger of a pinch voids the other finger too', () => {
+		const taps = new TapTracker();
+		taps.onPointerDown(1, 100, 100);
+		taps.onPointerDown(2, 200, 200);
+		taps.onPointerCancel(1);
+		expect(taps.onPointerUp(2, 200, 200)).toBeNull();
+		// The gesture is over now; the next one starts clean.
+		taps.onPointerDown(3, 10, 10);
+		expect(taps.onPointerUp(3, 10, 10)).toEqual({ x: 10, y: 10 });
 	});
 });

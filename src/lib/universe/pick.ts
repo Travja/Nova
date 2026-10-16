@@ -29,6 +29,59 @@ export const TAP_SLOP_PX = 6;
 /** How far from a body a tap can land and still pick it. */
 export const PICK_RADIUS_PX = 24;
 
+/** Where a tap landed, in CSS pixels. */
+export interface Tap {
+	x: number;
+	y: number;
+}
+
+/**
+ * Which pointer, if any, is tapping (#63, part 1).
+ *
+ * A gesture is a tap only if exactly one pointer was down for its whole
+ * length, from the first `pointerdown` to the last `pointerup`, and that
+ * pointer never moved past `TAP_SLOP_PX` from where it went down. A second
+ * pointer touching down at any point voids the gesture for every pointer
+ * still in it — a pinch's still finger must not read as a tap just because it
+ * measures zero against its own down position. `cancel()` does the same: the
+ * browser took the gesture for itself, so nothing in it is a tap.
+ *
+ * Voiding clears once every pointer has lifted or been cancelled, so the next
+ * gesture starts clean.
+ */
+export class TapTracker {
+	private readonly down = new Map<number, { x: number; y: number; moved: boolean }>();
+	private voided = false;
+
+	onPointerDown(pointerId: number, x: number, y: number): void {
+		this.down.set(pointerId, { x, y, moved: false });
+		if (this.down.size > 1) this.voided = true;
+	}
+
+	onPointerMove(pointerId: number, x: number, y: number): void {
+		const start = this.down.get(pointerId);
+		if (!start) return;
+		if (Math.hypot(x - start.x, y - start.y) > TAP_SLOP_PX) start.moved = true;
+	}
+
+	/** The tap this pointer's lift completes, or null if this gesture is not one. */
+	onPointerUp(pointerId: number, x: number, y: number): Tap | null {
+		const start = this.down.get(pointerId);
+		this.down.delete(pointerId);
+		if (!start) return null;
+		if (Math.hypot(x - start.x, y - start.y) > TAP_SLOP_PX) start.moved = true;
+		const tap =
+			!this.voided && !start.moved && this.down.size === 0 ? { x: start.x, y: start.y } : null;
+		if (this.down.size === 0) this.voided = false;
+		return tap;
+	}
+
+	onPointerCancel(pointerId: number): void {
+		this.down.delete(pointerId);
+		this.voided = this.down.size > 0;
+	}
+}
+
 const scratch = new Vector3();
 
 /** Where a world-space point lands in the view, in CSS pixels from its top left. */

@@ -19,7 +19,7 @@ import { motionAllowed, onMotionChange } from '$lib/motion';
 import { Kit } from './bodies';
 import { CameraRig } from './camera';
 import { createLoop } from './loop';
-import { TAP_SLOP_PX, nearestOnScreen, projectToScreen, type Viewport } from './pick';
+import { TapTracker, nearestOnScreen, projectToScreen, type Viewport } from './pick';
 import {
 	LINE,
 	buildScene,
@@ -27,6 +27,8 @@ import {
 	glowTexture,
 	levelOfDetail,
 	setShown,
+	shapeKey,
+	updateInPlace,
 	type Box,
 	type SceneGoal,
 	type SceneNode,
@@ -108,10 +110,19 @@ export interface UniverseProbe {
 	celebrated(): string | null;
 	/** Fly to a goal, as a tap on it would. */
 	flyTo(goalId: string): void;
+	/**
+	 * Shorten how long ambient motion runs after an interaction before it
+	 * settles, so a test does not have to wait out the real 20s window — and
+	 * take effect immediately, as if an interaction had just happened.
+	 */
+	settleAfter(ms: number): void;
 }
 
 /** The frame interval when only ambient motion is running: 30fps. */
 const AMBIENT_FRAME_MS = 1000 / 30 - 2;
+
+/** How long ambient motion keeps running after the last interaction (#63, part 2). */
+let AMBIENT_IDLE_MS = 20_000;
 
 /** How far a closing's rays reach, in the body's own radii (decision 12). */
 const BURST_REACH = 6;
@@ -164,6 +175,8 @@ export function mountUniverse(
 	let viewport: Viewport = { width: 1, height: 1, tanHalfFov: Math.tan(Math.PI / 7.2) };
 	// Assigned by the first `build()`, below, before anything reads it.
 	let universe!: UniverseScene;
+	/** The shape key the scene currently on screen was built from (#63, part 3). */
+	let drawnShapeKey = '';
 	let stops: SceneNode[] = [];
 	/** A closing being played in the universe: lit, and bursting unless motion is off. */
 	interface Playing extends Closing {
@@ -193,6 +206,31 @@ export function mountUniverse(
 	let pendingClosing: Closing | null = null;
 	let scrubbing = false;
 
+	/**
+	 * Ambient motion's own clock (#63, part 2), in milliseconds — not the real
+	 * clock a flight or a sweep is timed by. It only advances across a gap
+	 * between ambient frames shorter than `STALL_MS`; a longer gap, from
+	 * settling, hiding or covering the view, parks it instead, so a world's
+	 * spin or a closed body's lap resumes from where it paused rather than
+	 * jumping by however long nothing was drawn.
+	 */
+	let ambientNow = 0;
+	let ambientLastReal: number | null = null;
+
+	function advanceAmbientClock(time: number): number {
+		if (ambientLastReal !== null && time - ambientLastReal < STALL_MS) {
+			ambientNow += time - ambientLastReal;
+		}
+		ambientLastReal = time;
+		return ambientNow;
+	}
+
+	/** The real-clock deadline past which ambient motion settles, reset by an interaction. */
+	let idleUntil = -Infinity;
+	function noteInteraction(): void {
+		idleUntil = performance.now() + AMBIENT_IDLE_MS;
+	}
+
 	function measure(): Viewport {
 		const width = Math.max(1, host.clientWidth);
 		const height = Math.max(1, host.clientHeight);
@@ -202,6 +240,7 @@ export function mountUniverse(
 
 	/** Build (or rebuild) the scene from `input`, carrying each trail's last reading so a log sweeps. */
 	function build(sweep: boolean) {
+		drawnShapeKey = shapeKey(input.tree);
 		const previous = new Map<string, { shown: number; lapStart: number | null }>();
 		if (universe !== undefined) {
 			for (const [goalId, entry] of universe.byGoal) {
@@ -217,6 +256,7 @@ export function mountUniverse(
 			labelLayer: labels.domElement,
 			previous,
 			now: performance.now(),
+			ambientNow,
 			animate: sweep && animate
 		});
 		// A sweep is timed from the first frame that draws it, for the same
@@ -234,6 +274,28 @@ export function mountUniverse(
 			closing.spokes = null;
 			closing.flash = null;
 		}
+		// A rebuild can change how many stops the zoom has, so its own box may
+		// have changed too.
+		refreshAvoidBoxes();
+	}
+
+	/**
+	 * Apply new data: in place when the shape key still matches what is drawn
+	 * (#63, part 3), a full rebuild otherwise.
+	 */
+	function applyInput(next: UniverseInput) {
+		input = next;
+		if (shapeKey(next.tree) === drawnShapeKey) {
+			updateInPlace(universe, next.tree, next.goals, {
+				labelLayer: labels.domElement,
+				now: performance.now(),
+				ambientNow,
+				animate
+			});
+		} else {
+			build(true);
+			universe.resize(viewport);
+		}
 	}
 
 	function resize() {
@@ -242,14 +304,41 @@ export function mountUniverse(
 		labels.setSize(viewport.width, viewport.height);
 		rig.resize(viewport.width, viewport.height);
 		universe.resize(viewport);
+		refreshAvoidBoxes();
 		loop.request();
 	}
 
-	function avoidBoxes(): Box[] {
+	/**
+	 * Boxes to avoid, cached (#63, part 4): `getBoundingClientRect()` on the
+	 * canvas, the zoom's words and track, and the full-screen button forces a
+	 * synchronous layout, which `frame()` must never do. Measured once, then
+	 * again whenever `refreshAvoidBoxes` is called — on a resize, after a
+	 * rebuild (which can change the zoom's stops), and whenever one of the
+	 * avoided elements itself resizes.
+	 */
+	let cachedAvoidBoxes: Box[] = [];
+	// Which elements are currently observed, so re-observing the same ones
+	// every call doesn't retrigger their initial notification forever —
+	// `observe()` only fires one of those for an element newly added to it.
+	let observedAvoidElements = new Set<Element>();
+	const avoidResize = new ResizeObserver(() => refreshAvoidBoxes());
+
+	function refreshAvoidBoxes() {
 		const elements = options.avoid?.() ?? [];
-		if (elements.length === 0) return [];
+		const next = new Set(elements);
+		for (const element of observedAvoidElements) {
+			if (!next.has(element)) avoidResize.unobserve(element);
+		}
+		for (const element of next) {
+			if (!observedAvoidElements.has(element)) avoidResize.observe(element);
+		}
+		observedAvoidElements = next;
+		if (elements.length === 0) {
+			cachedAvoidBoxes = [];
+			return;
+		}
 		const origin = canvas.getBoundingClientRect();
-		return elements.map((element) => {
+		cachedAvoidBoxes = elements.map((element) => {
 			const rect = element.getBoundingClientRect();
 			return {
 				left: rect.left - origin.left,
@@ -258,6 +347,7 @@ export function mountUniverse(
 				bottom: rect.bottom - origin.top
 			};
 		});
+		loop.request();
 	}
 
 	function syncZoom() {
@@ -431,7 +521,7 @@ export function mountUniverse(
 			setShown(entry, from + (to - from) * easeInOut(t));
 			if (t >= 1) {
 				entry.sweep = null;
-				if (entry.node.closed) entry.lapStart = time;
+				if (entry.node.closed) entry.lapStart = ambientNow;
 			} else {
 				more = true;
 			}
@@ -447,7 +537,7 @@ export function mountUniverse(
 	 * own life — worlds turning, craft rocking, stars flaring. True while any of
 	 * it is on screen. None of it runs under reduced motion.
 	 */
-	function ambient(time: number): boolean {
+	function ambient(ambientNow: number): boolean {
 		let more = false;
 		for (const entry of universe.everything) {
 			if (entry.live) {
@@ -456,7 +546,7 @@ export function mountUniverse(
 					resting.add(entry);
 				} else if (drawn(entry.holder) && (entry.model === null || onScreen(entry))) {
 					resting.delete(entry);
-					entry.live(time / 1000);
+					entry.live(ambientNow / 1000);
 					more = true;
 				}
 			}
@@ -466,10 +556,10 @@ export function mountUniverse(
 				// full ring, which is what 100% looks like, and laps from there
 				// if motion is allowed again.
 				entry.pivot.rotation.y = -Math.PI * 2;
-				entry.lapStart = time;
+				entry.lapStart = ambientNow;
 				continue;
 			}
-			const laps = (time - entry.lapStart) / 1000 / entry.node.lapSeconds;
+			const laps = (ambientNow - entry.lapStart) / 1000 / entry.node.lapSeconds;
 			entry.pivot.rotation.y = -Math.PI * 2 * (1 + (laps % 1));
 			if (onScreen(entry)) more = true;
 		}
@@ -480,7 +570,6 @@ export function mountUniverse(
 	 * The frame.
 	 * ------------------------------------------------------------------ */
 
-	let lastDrawn = -Infinity;
 	let alive = false;
 
 	let lastFrame: number | null = null;
@@ -512,20 +601,29 @@ export function mountUniverse(
 		bridge(time);
 		let busy = rig.step(time);
 		if (rig.controls.update()) busy = true;
+		ambientNow = advanceAmbientClock(time);
 		if (sweep(time)) busy = true;
 		if (closing) busy = true;
-		// Nothing but the universe's own life moving: half the frame rate is
-		// plenty for a world turning, and half the battery on a phone.
-		if (!busy && alive && time - lastDrawn < AMBIENT_FRAME_MS) return true;
 
-		alive = ambient(time);
+		// Ambient motion settles after the idle window: bodies stay exactly
+		// where they are, with nothing left asking for another frame on their
+		// account. A sweep, a flight or a closing — all counted in `busy` —
+		// always runs to the end regardless, and a frame asked for some other
+		// reason, such as a resize, still draws once even while settled.
+		const idling = !busy && time >= idleUntil;
+		alive = idling ? false : ambient(ambientNow);
 		universe.scene.updateMatrixWorld();
 		follow();
 		const closingMore = stepClosing(time);
-		levelOfDetail(universe, rig.camera, viewport, avoidBoxes());
+		levelOfDetail(universe, rig.camera, viewport, cachedAvoidBoxes);
 		renderer.render(universe.scene, rig.camera);
 		labels.render(universe.scene, rig.camera);
-		lastDrawn = time;
+
+		// Nothing but the universe's own life moving: half the frame rate is
+		// plenty for a world turning, and half the battery on a phone — paced
+		// by a timer rather than a `requestAnimationFrame` that would fire, and
+		// do nothing, on every refresh in between.
+		if (!busy && !closingMore && alive) loop.requestPaced(AMBIENT_FRAME_MS);
 		return busy || alive || closingMore;
 	}
 
@@ -552,31 +650,39 @@ export function mountUniverse(
 		}
 	}
 
-	let down: { x: number; y: number } | null = null;
+	const taps = new TapTracker();
 	function onPointerDown(event: PointerEvent) {
-		down = { x: event.clientX, y: event.clientY };
+		noteInteraction();
+		taps.onPointerDown(event.pointerId, event.clientX, event.clientY);
+	}
+	function onPointerMove(event: PointerEvent) {
+		taps.onPointerMove(event.pointerId, event.clientX, event.clientY);
 	}
 	function onPointerUp(event: PointerEvent) {
-		if (!down) return;
-		const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
-		down = null;
-		if (moved > TAP_SLOP_PX) return;
+		const tap = taps.onPointerUp(event.pointerId, event.clientX, event.clientY);
+		if (!tap) return;
 		const rect = canvas.getBoundingClientRect();
 		const picked = nearestOnScreen(
 			candidates(),
 			rig.camera,
 			viewport,
-			event.clientX - rect.left,
-			event.clientY - rect.top
+			tap.x - rect.left,
+			tap.y - rect.top
 		);
 		options.onpick(picked);
 		// A rock is shown where it is; the belt's actions live on Today.
 		if (picked?.kind === 'goal') flyTo(picked.goalId);
 	}
+	function onPointerCancel(event: PointerEvent) {
+		taps.onPointerCancel(event.pointerId);
+	}
 	canvas.addEventListener('pointerdown', onPointerDown);
+	canvas.addEventListener('pointermove', onPointerMove);
 	canvas.addEventListener('pointerup', onPointerUp);
+	canvas.addEventListener('pointercancel', onPointerCancel);
 
 	function onControlsChange() {
+		noteInteraction();
 		loop.request();
 		if (!scrubbing) syncZoom();
 	}
@@ -615,6 +721,7 @@ export function mountUniverse(
 	function flyTo(goalId: string) {
 		const entry = universe.byGoal.get(goalId);
 		if (!entry) return;
+		noteInteraction();
 		universe.scene.updateMatrixWorld(true);
 		rig.go(rig.viewFor(entry), !animate, performance.now());
 		focus = { goalId, at: entry.holder.getWorldPosition(new Vector3()) };
@@ -623,6 +730,7 @@ export function mountUniverse(
 
 	function zoomTo(value: number) {
 		if (stops.length === 0) return;
+		noteInteraction();
 		scrubbing = true;
 		rig.cancelFlight();
 		focus = null;
@@ -642,13 +750,18 @@ export function mountUniverse(
 	const resizer = new ResizeObserver(resize);
 	resizer.observe(host);
 
-	const onVisibility = () => loop.pause('hidden', document.hidden);
+	const onVisibility = () => {
+		if (!document.hidden) noteInteraction();
+		loop.pause('hidden', document.hidden);
+	};
 	document.addEventListener('visibilitychange', onVisibility);
 	onVisibility();
 
 	const intersection = new IntersectionObserver((records) => {
 		const record = records[records.length - 1];
-		if (record) loop.pause('offscreen', !record.isIntersecting);
+		if (!record) return;
+		if (record.isIntersecting) noteInteraction();
+		loop.pause('offscreen', !record.isIntersecting);
 	});
 	intersection.observe(host);
 
@@ -710,19 +823,22 @@ export function mountUniverse(
 			settled: () => !rig.flying && !closing,
 			celebrating: () => (closing?.lit ? closing.goalId : null),
 			celebrated: () => lastLit,
-			flyTo: (goalId) => flyTo(goalId)
+			flyTo: (goalId) => flyTo(goalId),
+			settleAfter(ms) {
+				AMBIENT_IDLE_MS = ms;
+				idleUntil = performance.now() + ms;
+			}
 		};
 	}
 
 	return {
 		update(next) {
+			noteInteraction();
 			if (covered) {
 				pendingInput = next;
 				return;
 			}
-			input = next;
-			build(true);
-			universe.resize(viewport);
+			applyInput(next);
 			loop.request();
 		},
 		flyTo,
@@ -732,6 +848,7 @@ export function mountUniverse(
 			// a closing plays out on its own clock, which may not have started.
 			if (!next) return;
 			if (closing?.stamp === next.stamp || pendingClosing?.stamp === next.stamp) return;
+			noteInteraction();
 			if (covered) pendingClosing = next;
 			else play(next, 0);
 		},
@@ -745,13 +862,13 @@ export function mountUniverse(
 				loop.request();
 				return;
 			}
+			noteInteraction();
 			loop.pause('covered', false);
 			let sweeping = false;
 			if (pendingInput) {
-				input = pendingInput;
+				const next = pendingInput;
 				pendingInput = null;
-				build(true);
-				universe.resize(viewport);
+				applyInput(next);
 				sweeping = animate;
 			}
 			if (pendingClosing) {
@@ -764,11 +881,14 @@ export function mountUniverse(
 		destroy() {
 			loop.stop();
 			resizer.disconnect();
+			avoidResize.disconnect();
 			intersection.disconnect();
 			stopMotion();
 			document.removeEventListener('visibilitychange', onVisibility);
 			canvas.removeEventListener('pointerdown', onPointerDown);
+			canvas.removeEventListener('pointermove', onPointerMove);
 			canvas.removeEventListener('pointerup', onPointerUp);
+			canvas.removeEventListener('pointercancel', onPointerCancel);
 			canvas.removeEventListener('webglcontextlost', onContextLost);
 			canvas.removeEventListener('webglcontextrestored', onContextRestored);
 			rig.controls.removeEventListener('change', onControlsChange);
