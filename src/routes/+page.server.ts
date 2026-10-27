@@ -1,6 +1,7 @@
 import { isTier } from '$domain/tiers';
 import { entrySchema, fieldErrors, formError } from '$domain/validation';
 import { mergePreferences } from '$domain/preferences';
+import { inReviewSeason, reviewYearFor } from '$domain/review';
 import { listAsteroids } from '$lib/server/asteroids';
 import {
 	listGoalSnapshots,
@@ -13,8 +14,25 @@ import { updateProfile } from '$lib/server/users';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals, url }) => {
-	if (!locals.user) return { snapshots: null, reordering: false, asteroids: [], now: locals.now };
+/**
+ * Which year's review the dashboard card was dismissed for. A cookie rather
+ * than a column: the card is a seasonal nudge, and the review itself is always
+ * one link away from `/stats`, so forgetting it on a new device costs a tap.
+ * Keyed by year so next December's card is not already dismissed.
+ */
+const REVIEW_DISMISSED = 'nova_review_dismissed';
+
+/** The year the dashboard invites you to look back on, or null outside the season. */
+function reviewInvite(now: Date, timeZone: string, dismissed: string | undefined): number | null {
+	if (!inReviewSeason(now, timeZone)) return null;
+	const year = reviewYearFor(now, timeZone);
+	return dismissed === String(year) ? null : year;
+}
+
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
+	if (!locals.user) {
+		return { snapshots: null, reordering: false, asteroids: [], review: null, now: locals.now };
+	}
 
 	// The universe view draws the belt round the home star; the tiered grid
 	// never touches an asteroid, so there is nothing to load for it here.
@@ -25,12 +43,31 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		/** Reorder mode lives in the URL, so it survives a submit without JavaScript. */
 		reordering: url.searchParams.get('reorder') === '1',
 		asteroids: universe ? await listAsteroids(locals.user.id) : [],
+		/** The year in review card (#68), from 26 December to 31 January. */
+		review: reviewInvite(locals.now, locals.user.timeZone, cookies.get(REVIEW_DISMISSED)),
 		/** How far each rock has drifted is measured against the request's one clock. */
 		now: locals.now
 	};
 };
 
 export const actions: Actions = {
+	/** Put the year in review card away until next season. */
+	dismissReview: async ({ request, locals, cookies }) => {
+		if (!locals.user) redirect(303, '/login');
+
+		const year = String((await request.formData()).get('year') ?? '');
+		if (!/^\d{4}$/.test(year)) return fail(400, { errors: formError('That is not a year.') });
+
+		cookies.set(REVIEW_DISMISSED, year, {
+			path: '/',
+			httpOnly: true,
+			sameSite: 'lax',
+			// Past the end of the season it was dismissed in, and short of the next.
+			maxAge: 60 * 60 * 24 * 90
+		});
+		return { dismissedReview: true };
+	},
+
 	/** Quick-log from a goal card. */
 	log: async ({ request, locals }) => {
 		if (!locals.user) redirect(303, '/login');

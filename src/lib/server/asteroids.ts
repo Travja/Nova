@@ -72,6 +72,19 @@ export async function listDoneAsteroids(userId: string, limit = DONE_VISIBLE): P
 }
 
 /**
+ * When each of this user's asteroids was cleared, for the year in review (#68)
+ * to count by year. Only the instants: the review says how many, not which.
+ */
+export async function clearedAsteroidTimes(userId: string): Promise<Date[]> {
+	const rows = await db
+		.select({ resolvedAt: asteroids.resolvedAt })
+		.from(asteroids)
+		.where(and(eq(asteroids.userId, userId), eq(asteroids.resolution, 'cleared')));
+
+	return rows.flatMap((row) => (row.resolvedAt ? [row.resolvedAt] : []));
+}
+
+/**
  * One asteroid, under this user.
  *
  * Resolved rows come back too: capture is offered on the asteroid that was

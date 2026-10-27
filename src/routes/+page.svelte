@@ -221,6 +221,41 @@
 			</div>
 		</div>
 
+		{#if data.review !== null && !data.reordering}
+			<aside class="review-card panel" aria-labelledby="review-card-title">
+				<!-- Twelve marks on a ring, one per month, the last one lit: a year
+				     flown. Decorative; the heading says it in words. -->
+				<svg class="review-card__ring" viewBox="0 0 48 48" aria-hidden="true">
+					<circle cx="24" cy="24" r="17" />
+					{#each { length: 12 } as _, month (month)}
+						<circle
+							class="review-card__month"
+							class:is-lit={month === 11}
+							cx={24 + 17 * Math.sin((month + 1) * (Math.PI / 6))}
+							cy={24 - 17 * Math.cos((month + 1) * (Math.PI / 6))}
+							r={month === 11 ? 3.4 : 1.6}
+						/>
+					{/each}
+				</svg>
+				<div class="review-card__copy">
+					<h2 id="review-card-title">Your {data.review} in orbit</h2>
+					<p class="muted">
+						Every orbit you closed this year, your longest flight, and the notes you wrote along the
+						way — in one place.
+					</p>
+				</div>
+				<div class="review-card__actions">
+					<a class="button" href={resolve('/review/[year]', { year: String(data.review) })}>
+						Look back on {data.review}
+					</a>
+					<form method="POST" action="?/dismissReview" use:enhance>
+						<input type="hidden" name="year" value={data.review} />
+						<button type="submit" class="button button--ghost">Dismiss</button>
+					</form>
+				</div>
+			</aside>
+		{/if}
+
 		{#if form?.errors?.form}
 			<p class="error">{form.errors.form}</p>
 		{/if}
@@ -393,6 +428,60 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
+	}
+
+	.review-card {
+		align-items: center;
+		border-color: var(--space-border-bright);
+		display: grid;
+		gap: 0.75rem 1rem;
+		grid-template-columns: auto 1fr auto;
+		padding: var(--pad-panel);
+	}
+
+	.review-card h2 {
+		margin: 0 0 0.2rem;
+	}
+
+	.review-card p {
+		margin: 0;
+	}
+
+	.review-card__ring {
+		height: 3.5rem;
+		width: 3.5rem;
+	}
+
+	.review-card__ring > circle:first-child {
+		fill: none;
+		stroke: var(--space-border);
+		stroke-width: 1.2;
+	}
+
+	.review-card__month {
+		fill: var(--text-dim);
+	}
+
+	.review-card__month.is-lit {
+		fill: var(--accent-warm);
+		filter: drop-shadow(0 0 3px var(--accent-warm));
+	}
+
+	.review-card__actions {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	@media (max-width: 40rem) {
+		.review-card {
+			grid-template-columns: auto 1fr;
+		}
+
+		.review-card__actions {
+			grid-column: 1 / -1;
+		}
 	}
 
 	.reorder-hint {
