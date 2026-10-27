@@ -306,8 +306,9 @@
 					This goal has finished. A later last day brings it back, and the periods since it landed
 					count as missed.
 				{:else}
-					A goal with an end finishes after the last {tierDef.cadence} that holds its last day, and keeps
-					its record.
+					A goal with an end flies {tierDef.cadence === 'day'
+						? 'through its last day'
+						: `the whole ${tierDef.cadence} holding its last day`}, then lands with its record.
 				{/if}
 			</p>
 		</div>
