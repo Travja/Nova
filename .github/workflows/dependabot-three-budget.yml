@@ -1,0 +1,32 @@
+name: Dependabot three budget note
+
+# Dependabot's own PR body isn't configurable from dependabot.yml, so this
+# leaves the reminder as a comment instead: the universe view (#11) is the
+# only thing that imports three, and a minor release of it has broken things
+# before.
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    if: >
+      github.actor == 'dependabot[bot]' &&
+      contains(github.event.pull_request.title, 'the three group')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remind the reviewer about the universe chunk budget
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body:
+                'three only ships to the universe view (#11). Before merging, ' +
+                "check the universe chunk's gzipped size against the 180 kB budget."
+            });

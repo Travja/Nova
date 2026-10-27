@@ -14,6 +14,12 @@ queue, no cache to run.
   storing the session cookie both require it on anything other than `localhost`.
 - Ports 80 and 443 open, so the proxy can get a certificate.
 
+Dependabot keeps dependencies, GitHub Actions and the base image moving
+(`.github/dependabot.yml`), but Dependabot security updates — the ones that
+fire outside the weekly schedule the moment a GitHub advisory lands — are a
+repository setting, not a file: turn them on under the repo's **Settings →
+Code security → Dependabot security updates**.
+
 ## 1. Configure Nova
 
 Create a `.env` next to `compose.yaml`:
