@@ -1,4 +1,5 @@
 import { periodFor, recentPeriods, type Period, type PeriodOptions } from './period';
+import { restDayUnder, type RestSchedule } from './schedule';
 import { cadenceOf, type Tier } from './tiers';
 import type { Goal, MetricDefinition, ProgressEntry } from './types';
 
@@ -22,8 +23,19 @@ export interface Orbit {
 	complete: boolean;
 	/** How much is still needed to close the orbit. Zero once complete. */
 	remaining: number;
-	/** The goal was archived for the whole of this period, so it never flew. */
+	/**
+	 * Nothing was expected of this period: the goal was archived for the whole
+	 * of it, or it is a rest day that did not close. Every rule that judges an
+	 * orbit steps over a dormant one.
+	 */
 	dormant: boolean;
+	/**
+	 * A rest day under the goal's schedule (#66), and not one the goal spent
+	 * archived — archiving is the stronger reason and wins. A rest day that
+	 * closed is still `rest` but no longer `dormant`: it was flown anyway, and
+	 * counts like any other closed orbit.
+	 */
+	rest: boolean;
 }
 
 /**
@@ -102,10 +114,24 @@ export function bucketByPeriod(
 	return totals;
 }
 
-export function buildOrbit(period: Period, logged: number, target: number, dormant = false): Orbit {
+/**
+ * One orbit from its amount and the reasons it might be asleep.
+ *
+ * `archived` makes it dormant outright. `rest` makes it dormant only while it
+ * has not closed, which is the whole of "a rest day you flew anyway counts".
+ */
+export function buildOrbit(
+	period: Period,
+	logged: number,
+	target: number,
+	archived = false,
+	rest = false
+): Orbit {
 	const safeTarget = target > 0 ? target : 1;
 	const ratio = logged / safeTarget;
 	const fraction = Math.max(0, Math.min(1, ratio));
+	const complete = ratio >= 1;
+	const resting = rest && !archived;
 	return {
 		period,
 		logged,
@@ -113,10 +139,28 @@ export function buildOrbit(period: Period, logged: number, target: number, dorma
 		ratio,
 		fraction,
 		angle: fraction * 360,
-		complete: ratio >= 1,
+		complete,
 		remaining: Math.max(0, safeTarget - logged),
-		dormant
+		dormant: archived || (resting && !complete),
+		rest: resting
 	};
+}
+
+/** Whether an orbit is dormant because the goal was archived, rather than resting. */
+export function wasArchived(orbit: Orbit): boolean {
+	return orbit.dormant && !orbit.rest;
+}
+
+/**
+ * The same orbit with a different amount logged against it.
+ *
+ * Anything that moves an orbit after it was built — the offline overlay, a
+ * parent counting a child's fresh closure — goes through here rather than
+ * passing `orbit.dormant` back in, because a rest day that closes stops being
+ * dormant and one that un-closes starts again.
+ */
+export function relogOrbit(orbit: Orbit, logged: number): Orbit {
+	return buildOrbit(orbit.period, logged, orbit.target, wasArchived(orbit), orbit.rest);
 }
 
 /** True when a period sits entirely inside a span the goal spent archived. */
@@ -128,12 +172,34 @@ export function isDormant(period: Period, windows: readonly DormantWindow[]): bo
 	);
 }
 
-export interface SnapshotOptions extends PeriodOptions {
+/** Why a goal's periods might be asleep: archived spans, and its rest-day schedule. */
+export interface Dormancy {
+	/** Spans the goal spent archived, which the streak steps over. */
+	dormantWindows?: readonly DormantWindow[];
+	/** The goal's schedule spans, oldest first or not — see `$domain/schedule`. */
+	restSchedules?: readonly RestSchedule[];
+}
+
+export interface SnapshotOptions extends PeriodOptions, Dormancy {
 	/** How many orbits of history to include. */
 	historyLength?: number;
 	now?: Date;
-	/** Spans the goal spent archived, which the streak steps over. */
-	dormantWindows?: readonly DormantWindow[];
+}
+
+/** An orbit for one period of a goal, with both kinds of dormancy applied. */
+export function orbitFor(
+	period: Period,
+	logged: number,
+	target: number,
+	dormancy: Dormancy & { timeZone: string }
+): Orbit {
+	return buildOrbit(
+		period,
+		logged,
+		target,
+		isDormant(period, dormancy.dormantWindows ?? []),
+		restDayUnder(period, dormancy.restSchedules ?? [], dormancy.timeZone)
+	);
 }
 
 export function snapshotGoal(
@@ -141,12 +207,19 @@ export function snapshotGoal(
 	entries: readonly EntryLike[],
 	options: SnapshotOptions
 ): GoalSnapshot {
-	const { historyLength = 12, now = new Date(), dormantWindows = [], ...periodOptions } = options;
+	const {
+		historyLength = 12,
+		now = new Date(),
+		dormantWindows = [],
+		restSchedules = [],
+		...periodOptions
+	} = options;
 	const cadence = cadenceOf(goal.tier);
 	const totals = bucketByPeriod(entries, cadence, periodOptions);
+	const dormancy = { dormantWindows, restSchedules, timeZone: periodOptions.timeZone };
 
 	const history = recentPeriods(now, cadence, historyLength, periodOptions).map((period) =>
-		buildOrbit(period, totals.get(period.key) ?? 0, goal.target, isDormant(period, dormantWindows))
+		orbitFor(period, totals.get(period.key) ?? 0, goal.target, dormancy)
 	);
 
 	let totalOrbits = 0;
@@ -170,9 +243,10 @@ export function snapshotGoal(
  * Consecutive closed orbits, newest first.
  *
  * The in-flight orbit counts once it closes but never breaks a streak while it
- * is still open — you have not missed this week until the week is over. Orbits
- * the goal spent archived are stepped over entirely, so the newest orbit the
- * goal was actually flying gets that same benefit of the doubt.
+ * is still open — you have not missed this week until the week is over. Dormant
+ * orbits — archived, or a rest day that did not close — are stepped over
+ * entirely, so the newest orbit the goal was actually flying gets that same
+ * benefit of the doubt. A rest day that closed is not dormant and counts.
  */
 export function streakFrom(history: readonly Orbit[]): number {
 	let streak = 0;
@@ -397,13 +471,19 @@ function byUrgency(rows: FocusRow[]): FocusRow[] {
  * Every orbit visual in Nova is decorative (see `OrbitDial`), so whatever draws
  * one puts this next to it instead. It lives here rather than in a component so
  * the 24px ring in the history strip and the 230px dial on a goal page cannot
- * drift into saying different things, and so the dormant case — a period the
- * goal spent archived, which the drawing distinguishes only by going cold — is
- * spelled out in one place rather than left to a colour.
+ * drift into saying different things, and so the dormant cases — a period the
+ * goal spent archived, or a rest day, which the drawing distinguishes only by
+ * going cold — are spelled out in one place rather than left to a colour.
  */
 export function orbitStanding(orbit: Orbit): string {
-	if (orbit.dormant) return 'archived for this period, no orbit expected';
+	if (orbit.dormant) {
+		return orbit.rest
+			? 'rest day, no orbit expected'
+			: 'archived for this period, no orbit expected';
+	}
 	const percent = Math.round(orbit.ratio * 100);
+	if (orbit.complete && orbit.rest)
+		return `orbit closed on a rest day, ${percent}% of target logged`;
 	if (orbit.complete) return `orbit closed, ${percent}% of target logged`;
 	return `${percent}% of target logged`;
 }

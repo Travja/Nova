@@ -1,6 +1,13 @@
 import { parentPeriodFor } from './nesting';
 import type { PeriodOptions } from './period';
-import { bucketByPeriod, buildOrbit, streakFrom, type GoalSnapshot, type Orbit } from './progress';
+import {
+	bucketByPeriod,
+	relogOrbit,
+	streakFrom,
+	wasArchived,
+	type GoalSnapshot,
+	type Orbit
+} from './progress';
 import { cadenceOf, cadenceRank } from './tiers';
 
 /**
@@ -72,7 +79,7 @@ export function overlayQueued(
 		const extra = totals.get(orbit.period.key);
 		if (extra === undefined) return orbit;
 
-		const moved = buildOrbit(orbit.period, orbit.logged + extra, orbit.target, orbit.dormant);
+		const moved = relogOrbit(orbit, orbit.logged + extra);
 		if (moved.complete !== orbit.complete) closedMore += moved.complete ? 1 : -1;
 		return moved;
 	});
@@ -155,8 +162,9 @@ function closureDeltas(
 	after.forEach((orbit, index) => {
 		const was = before[index];
 		if (!was || was.complete === orbit.complete) return;
-		// A period the child spent archived never closed and never will.
-		if (orbit.dormant || was.dormant) return;
+		// A period the child spent archived never closed and never will. A rest
+		// day can: closing one is exactly what makes it stop being dormant.
+		if (wasArchived(orbit) || wasArchived(was)) return;
 
 		const { key } = parentPeriodFor(orbit.period, parentCadence, options);
 		deltas.set(key, (deltas.get(key) ?? 0) + (orbit.complete ? 1 : -1));
@@ -176,7 +184,7 @@ function withClosures(
 		const delta = deltas.get(orbit.period.key);
 		if (!delta) return orbit;
 
-		const moved = buildOrbit(orbit.period, orbit.logged + delta, orbit.target, orbit.dormant);
+		const moved = relogOrbit(orbit, orbit.logged + delta);
 		if (moved.complete !== orbit.complete) closedMore += moved.complete ? 1 : -1;
 		return moved;
 	});

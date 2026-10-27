@@ -4,6 +4,7 @@ import {
 	closedPeriods,
 	ORBIT_METRIC,
 	parentProblem,
+	restDayCapacity,
 	snapshotWithChildren,
 	tierProblem,
 	type ChildInput,
@@ -24,10 +25,13 @@ import { db } from '$lib/server/db';
 import {
 	entries,
 	goalArchiveWindows,
+	goalSchedules,
 	goals,
+	users,
 	type EntryRow,
 	type GoalRow
 } from '$lib/server/db/schema';
+import { scheduleChange, type RestSchedule } from '$domain/schedule';
 import type { SessionUser } from '$lib/server/auth/session';
 import { newId } from '$lib/server/auth/session';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
@@ -86,6 +90,26 @@ async function dormantWindowsFor(goalIds: string[]): Promise<Map<string, Dormant
 	return byGoal;
 }
 
+/** Each of these goals' rest-day schedule spans, keyed by goal id. */
+async function restSchedulesFor(goalIds: string[]): Promise<Map<string, RestSchedule[]>> {
+	const byGoal = new Map<string, RestSchedule[]>();
+	if (goalIds.length === 0) return byGoal;
+
+	const rows = await db
+		.select()
+		.from(goalSchedules)
+		.where(inArray(goalSchedules.goalId, goalIds))
+		.orderBy(asc(goalSchedules.from));
+
+	for (const row of rows) {
+		const schedule = { from: row.from, restDays: row.restDays };
+		const bucket = byGoal.get(row.goalId);
+		if (bucket) bucket.push(schedule);
+		else byGoal.set(row.goalId, [schedule]);
+	}
+	return byGoal;
+}
+
 /**
  * Everything a user's goal trees are computed from, loaded once.
  *
@@ -99,6 +123,7 @@ interface Forest {
 	goals: Goal[];
 	entriesByGoal: Map<string, ProgressEntry[]>;
 	dormantByGoal: Map<string, DormantWindow[]>;
+	schedulesByGoal: Map<string, RestSchedule[]>;
 }
 
 function bucketEntries(rows: EntryRow[]): Map<string, ProgressEntry[]> {
@@ -112,11 +137,16 @@ function bucketEntries(rows: EntryRow[]): Map<string, ProgressEntry[]> {
 	return byGoal;
 }
 
-/** Every goal the user owns, with its entries and dormant windows. */
+/** Every goal the user owns, with its entries, dormant windows and rest-day schedules. */
 async function loadForest(userId: string): Promise<Forest> {
 	const all = await listGoals(userId, true);
 	if (all.length === 0) {
-		return { goals: [], entriesByGoal: new Map(), dormantByGoal: new Map() };
+		return {
+			goals: [],
+			entriesByGoal: new Map(),
+			dormantByGoal: new Map(),
+			schedulesByGoal: new Map()
+		};
 	}
 
 	const ids = all.map((goal) => goal.id);
@@ -125,7 +155,8 @@ async function loadForest(userId: string): Promise<Forest> {
 	return {
 		goals: all,
 		entriesByGoal: bucketEntries(rows),
-		dormantByGoal: await dormantWindowsFor(ids)
+		dormantByGoal: await dormantWindowsFor(ids),
+		schedulesByGoal: await restSchedulesFor(ids)
 	};
 }
 
@@ -144,6 +175,7 @@ function childInputs(goalId: string, forest: Forest, depth = 0): ChildInput[] {
 		goal: child,
 		entries: forest.entriesByGoal.get(child.id) ?? [],
 		dormantWindows: forest.dormantByGoal.get(child.id) ?? [],
+		restSchedules: forest.schedulesByGoal.get(child.id) ?? [],
 		children: childInputs(child.id, forest, depth + 1)
 	}));
 }
@@ -170,7 +202,8 @@ function snapshotFromForest(
 			...periodOptions(user),
 			now,
 			historyLength,
-			dormantWindows: forest.dormantByGoal.get(goal.id) ?? []
+			dormantWindows: forest.dormantByGoal.get(goal.id) ?? [],
+			restSchedules: forest.schedulesByGoal.get(goal.id) ?? []
 		}
 	);
 }
@@ -241,7 +274,12 @@ export interface StatsInputs {
 	 * which a derived goal does not carry: its number only moves when a child
 	 * orbit closes, not while its own period runs.
 	 */
-	leaves: { goal: Goal; entries: ProgressEntry[]; dormantWindows: DormantWindow[] }[];
+	leaves: {
+		goal: Goal;
+		entries: ProgressEntry[];
+		dormantWindows: DormantWindow[];
+		restSchedules: RestSchedule[];
+	}[];
 }
 
 /**
@@ -274,7 +312,8 @@ export async function loadStatsInputs(user: SessionUser, now = new Date()): Prom
 		.map((goal) => ({
 			goal,
 			entries: forest.entriesByGoal.get(goal.id) ?? [],
-			dormantWindows: forest.dormantByGoal.get(goal.id) ?? []
+			dormantWindows: forest.dormantByGoal.get(goal.id) ?? [],
+			restSchedules: forest.schedulesByGoal.get(goal.id) ?? []
 		}));
 
 	return { snapshots, leaves };
@@ -418,6 +457,77 @@ export async function orbitAt(
 }
 
 /**
+ * A goal's rest-day schedule spans, oldest first, or null when the goal is not
+ * this user's. Read under the user's id like everything else here.
+ */
+export async function getGoalSchedule(
+	userId: string,
+	goalId: string
+): Promise<RestSchedule[] | null> {
+	const goal = await getGoal(userId, goalId);
+	if (!goal) return null;
+	return (await restSchedulesFor([goalId])).get(goalId) ?? [];
+}
+
+/**
+ * How many orbits this goal's children can close in its current period without
+ * flying a rest day, or null when none of them rests — see `restDayCapacity`.
+ * The parent's form warns when its target is above it.
+ */
+export async function childRestDayCapacity(
+	user: SessionUser,
+	goalId: string,
+	now: Date
+): Promise<number | null> {
+	const goal = await getGoal(user.id, goalId);
+	if (!goal) return null;
+	const forest = await loadForest(user.id);
+	const children = childInputs(goal.id, forest).filter((child) => child.goal.archivedAt === null);
+	if (children.length === 0) return null;
+	return restDayCapacity(goal, children, now, periodOptions(user));
+}
+
+/** The zone and week start a write is dated in, read from the account itself. */
+async function storedPeriodOptions(userId: string) {
+	const [row] = await db
+		.select({ timeZone: users.timeZone, weekStartsOn: users.weekStartsOn })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	return { timeZone: row?.timeZone ?? 'UTC', weekStartsOn: row?.weekStartsOn ?? 1 };
+}
+
+/**
+ * Write a schedule change for a goal already known to be this user's.
+ *
+ * `scheduleChange()` decides the span: from tomorrow for an edit, from today
+ * for a launch, nothing when the schedule already says this. Pending spans from
+ * that instant on are replaced, so two edits in a day leave one.
+ */
+async function saveSchedule(
+	userId: string,
+	goalId: string,
+	restDays: number,
+	now: Date,
+	launching: boolean
+): Promise<void> {
+	const options = await storedPeriodOptions(userId);
+	const existing = launching ? [] : ((await restSchedulesFor([goalId])).get(goalId) ?? []);
+	const change = scheduleChange(existing, restDays, now, { ...options, launching });
+
+	db.transaction((tx) => {
+		tx.delete(goalSchedules)
+			.where(and(eq(goalSchedules.goalId, goalId), gte(goalSchedules.from, change.from)))
+			.run();
+		if (change.insert) {
+			tx.insert(goalSchedules)
+				.values({ id: newId(), goalId, ...change.insert })
+				.run();
+		}
+	});
+}
+
+/**
  * What a write refused, when it refused one.
  *
  * `parent` carries the reason the edge was rejected — see
@@ -481,6 +591,7 @@ export async function createGoal(userId: string, input: GoalInput): Promise<Goal
 		parentId: input.parentId
 	};
 	await db.insert(goals).values(row);
+	if (input.restDays) await saveSchedule(userId, row.id, input.restDays, row.createdAt, true);
 	return { ok: true, goal: toGoal(row) };
 }
 
@@ -511,6 +622,8 @@ export async function updateGoal(
 		})
 		.where(and(eq(goals.id, goalId), eq(goals.userId, userId)));
 	if (result.changes === 0) return { ok: false, missing: true };
+	if (input.restDays !== null)
+		await saveSchedule(userId, goalId, input.restDays, new Date(), false);
 
 	return {
 		ok: true,

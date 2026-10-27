@@ -65,9 +65,9 @@ Routes parse forms and render; they do not build queries.
   `logEntry()`, which re-reads the goal under the user's id before inserting. Keep
   new services doing the same so every caller gets the guarantee.
 - **Compute snapshots through `src/lib/server/goals.ts`**, never by calling
-  `snapshotGoal()` directly from a route. It needs `dormantWindows` passed or
-  streaks silently break across spans the goal spent archived; the service loads
-  them for you.
+  `snapshotGoal()` directly from a route. It needs `dormantWindows` and
+  `restSchedules` passed or streaks silently break across spans the goal spent
+  archived or days it was scheduled to rest; the service loads both for you.
 - **Migrations are committed and immutable.** Change `schema.ts`, run
   `pnpm db:generate`, commit the generated SQL. Never edit one that has shipped.
 - **A goal with children is derived.** Its orbit counts closed child orbits, it

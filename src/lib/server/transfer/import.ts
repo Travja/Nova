@@ -11,7 +11,14 @@ import {
 	type TransferTable
 } from '$domain/transfer';
 import { db } from '$lib/server/db';
-import { asteroids, entries, goalArchiveWindows, goals, orbitNotes } from '$lib/server/db/schema';
+import {
+	asteroids,
+	entries,
+	goalArchiveWindows,
+	goalSchedules,
+	goals,
+	orbitNotes
+} from '$lib/server/db/schema';
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 
@@ -81,6 +88,12 @@ export async function loadAccountShape(userId: string): Promise<AccountShape> {
 		.innerJoin(goals, eq(goalArchiveWindows.goalId, goals.id))
 		.where(eq(goals.userId, userId));
 
+	const scheduleRows = await db
+		.select({ id: goalSchedules.id })
+		.from(goalSchedules)
+		.innerJoin(goals, eq(goalSchedules.goalId, goals.id))
+		.where(eq(goals.userId, userId));
+
 	// Only the pair the unique index is on; the rest of an entry says nothing
 	// about whether this one is already here.
 	const entryRows = await db
@@ -103,6 +116,7 @@ export async function loadAccountShape(userId: string): Promise<AccountShape> {
 	const counts: Record<TransferTable, number> = {
 		goals: goalRows.length,
 		goalArchiveWindows: windowRows.length,
+		goalSchedules: scheduleRows.length,
 		entries: entryRows.length,
 		asteroids: asteroidRows.length,
 		orbitNotes: noteRows.length
@@ -111,6 +125,7 @@ export async function loadAccountShape(userId: string): Promise<AccountShape> {
 	return {
 		goalIds: new Set(goalRows.map((goal) => goal.id)),
 		archiveWindowIds: new Set(windowRows.map((window) => window.id)),
+		scheduleIds: new Set(scheduleRows.map((schedule) => schedule.id)),
 		entryKeys: new Set(
 			entryRows
 				.filter((entry) => entry.clientId !== null)
@@ -174,7 +189,7 @@ export async function applyImport(
 			// can write, not the account around it. Asteroids go first because they
 			// point at goals, and dropping the rows rather than letting `set null`
 			// run is one less thing for the delete of the goals to do. Everything
-			// under a goal — archive windows, entries, notes — goes with the goal,
+			// under a goal — archive windows, schedules, entries, notes — goes with the goal,
 			// by cascade.
 			tx.delete(asteroids).where(eq(asteroids.userId, userId)).run();
 			tx.delete(goals).where(eq(goals.userId, userId)).run();
@@ -191,6 +206,10 @@ export async function applyImport(
 
 		for (const window of plan.archiveWindows) {
 			tx.insert(goalArchiveWindows).values(window).onConflictDoNothing().run();
+		}
+
+		for (const schedule of plan.schedules) {
+			tx.insert(goalSchedules).values(schedule).onConflictDoNothing().run();
 		}
 
 		for (const entry of plan.entries) {

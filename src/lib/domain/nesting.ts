@@ -1,7 +1,7 @@
 import { periodFor, recentPeriods, type Period, type PeriodOptions } from './period';
 import {
-	buildOrbit,
 	isDormant,
+	orbitFor,
 	snapshotGoal,
 	streakFrom,
 	type ChildStanding,
@@ -9,7 +9,8 @@ import {
 	type GoalSnapshot,
 	type SnapshotOptions
 } from './progress';
-import { cadenceOf, isLongerCadence, type Tier } from './tiers';
+import { latestSchedule, restDayUnder, type RestSchedule } from './schedule';
+import { CADENCE_LABEL, cadenceOf, isLongerCadence, type Tier } from './tiers';
 import type { Goal, MetricDefinition, ProgressEntry } from './types';
 
 /**
@@ -60,6 +61,12 @@ export interface ChildInput {
 	entries: readonly EntryLike[];
 	/** Spans this goal spent archived. A period inside one never closed. */
 	dormantWindows?: readonly DormantWindow[];
+	/**
+	 * This goal's rest-day schedule. It changes nothing a parent counts — a rest
+	 * day that closed is a closed orbit like any other — but the child's own
+	 * body on the parent's dial sleeps on its rest days.
+	 */
+	restSchedules?: readonly RestSchedule[];
 	/** This goal's own direct children, when it has any. */
 	children?: readonly ChildInput[];
 }
@@ -151,7 +158,8 @@ function periodTotals(node: ChildInput, options: PeriodOptions): Map<string, Per
  * A period the goal spent archived is dropped here rather than counted and
  * subtracted later — `Orbit.dormant` from the archive work is the one notion of
  * asleep, and a dormant period contributes nothing to a parent without
- * breaking anything.
+ * breaking anything. A rest day is not dropped: one that closed was flown
+ * anyway, and one that did not close never reaches this filter.
  */
 export function closedPeriods(node: ChildInput, options: PeriodOptions): Period[] {
 	if (node.goal.target <= 0) return [];
@@ -193,8 +201,15 @@ export function snapshotDerivedGoal(
 	children: readonly ChildInput[],
 	options: SnapshotOptions
 ): GoalSnapshot {
-	const { historyLength = 12, now = new Date(), dormantWindows = [], ...periodOptions } = options;
+	const {
+		historyLength = 12,
+		now = new Date(),
+		dormantWindows = [],
+		restSchedules = [],
+		...periodOptions
+	} = options;
 	const cadence = cadenceOf(parent.tier);
+	const dormancy = { dormantWindows, restSchedules, timeZone: periodOptions.timeZone };
 
 	/** Closures per parent period, and the same again per child for the dial. */
 	const total = new Map<string, number>();
@@ -207,7 +222,7 @@ export function snapshotDerivedGoal(
 	}
 
 	const history = recentPeriods(now, cadence, historyLength, periodOptions).map((period) =>
-		buildOrbit(period, total.get(period.key) ?? 0, parent.target, isDormant(period, dormantWindows))
+		orbitFor(period, total.get(period.key) ?? 0, parent.target, dormancy)
 	);
 
 	let totalOrbits = 0;
@@ -249,12 +264,11 @@ function standingFor(
 		title: child.goal.title,
 		tier: child.goal.tier,
 		color: child.goal.color,
-		current: buildOrbit(
-			period,
-			logged,
-			child.goal.target,
-			isDormant(period, child.dormantWindows ?? [])
-		),
+		current: orbitFor(period, logged, child.goal.target, {
+			dormantWindows: child.dormantWindows,
+			restSchedules: child.restSchedules,
+			timeZone: options.timeZone
+		}),
 		closed
 	};
 }
@@ -375,4 +389,63 @@ export function childrenOf<T extends { parentId: string | null }>(
 	goals: readonly T[]
 ): T[] {
 	return goals.filter((goal) => goal.parentId === goalId);
+}
+
+/**
+ * How many orbits a parent's children can close in its current period without
+ * flying on a rest day — or null when no child has a rest day to fly on.
+ *
+ * A rest day that closes still counts (#66, decision 3), so a target above this
+ * is never unreachable, only reachable the hard way. That is why the parent's
+ * form warns rather than refusing: a weekly goal fed by a five-day satellite
+ * asking for seven is a plan to fly the weekend, which might be the point.
+ *
+ * Each child is read under the schedule it will fly the rest of the period on —
+ * its latest span — and children without a schedule count every period. Only
+ * child periods whose last instant falls in the parent period count, the same
+ * rule `parentPeriodFor` files closures by.
+ */
+export function restDayCapacity(
+	parent: Pick<Goal, 'tier'>,
+	children: readonly Pick<ChildInput, 'goal' | 'restSchedules'>[],
+	now: Date,
+	options: PeriodOptions
+): number | null {
+	const parentPeriod = periodFor(now, cadenceOf(parent.tier), options);
+	let capacity = 0;
+	let anyRest = false;
+
+	for (const child of children) {
+		const cadence = cadenceOf(child.goal.tier);
+		const latest = latestSchedule(child.restSchedules ?? []);
+		const schedules = latest ? [latest] : [];
+		let period = periodFor(parentPeriod.start, cadence, options);
+		while (period.start.getTime() < parentPeriod.end.getTime()) {
+			const home = parentPeriodFor(period, parentPeriod.cadence, options);
+			if (home.key === parentPeriod.key) {
+				if (restDayUnder(period, schedules, options.timeZone)) anyRest = true;
+				else capacity += 1;
+			}
+			period = periodFor(period.end, cadence, options);
+		}
+	}
+
+	return anyRest ? capacity : null;
+}
+
+/**
+ * What the parent's form says when its target is above `restDayCapacity`, or
+ * null when there is nothing to say.
+ */
+export function restDayWarning(
+	parent: Pick<Goal, 'tier' | 'target'>,
+	capacity: number | null
+): string | null {
+	if (capacity === null || parent.target <= capacity) return null;
+	const orbits = capacity === 1 ? 'orbit' : 'orbits';
+	return (
+		`The goals feeding this one have rest days, so ${CADENCE_LABEL[cadenceOf(parent.tier)]} ` +
+		`they can close ${capacity} ${orbits} without flying one. A target of ${parent.target} ` +
+		'needs some rest days flown anyway — that still counts, so this is only a heads-up.'
+	);
 }

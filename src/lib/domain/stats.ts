@@ -6,6 +6,7 @@ import {
 	zonedParts,
 	type PeriodOptions
 } from './period';
+import { restDayUnder, type RestSchedule } from './schedule';
 import type { Cadence, Tier } from './tiers';
 import { TIERS } from './tiers';
 import type { ProgressEntry } from './types';
@@ -212,6 +213,8 @@ export interface MomentumInput {
 	createdAt: Date;
 	entries: readonly EntryLike[];
 	dormantWindows: readonly DormantWindow[];
+	/** The goal's rest-day schedule, whose rest days are no baseline for a flying one. */
+	restSchedules?: readonly RestSchedule[];
 }
 
 export interface Momentum {
@@ -248,6 +251,10 @@ function sumBetween(entries: readonly EntryLike[], start: number, end: number): 
  * `MOMENTUM_LOOKBACK` of them — the same window `snapshotGoal` defaults its
  * own history to. A goal with no such period yet gets `ratio: null` rather
  * than a divide-by-zero or a comparison against nothing.
+ *
+ * Rest days are left out of the baseline whether or not they closed. A rest
+ * day flown anyway is a bonus, and averaging it in would make every ordinary
+ * flying day read as behind.
  */
 export function momentumFor(
 	input: MomentumInput,
@@ -265,7 +272,10 @@ export function momentumFor(
 		const previous = previousPeriod(period, options);
 		if (previous.start.getTime() < input.createdAt.getTime()) break;
 		period = previous;
-		if (!isDormant(period, input.dormantWindows)) {
+		if (
+			!isDormant(period, input.dormantWindows) &&
+			!restDayUnder(period, input.restSchedules ?? [], options.timeZone)
+		) {
 			const cutoff =
 				period.start.getTime() + elapsed * (period.end.getTime() - period.start.getTime());
 			samples.push(sumBetween(input.entries, period.start.getTime(), cutoff));

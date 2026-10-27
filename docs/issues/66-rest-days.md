@@ -48,7 +48,7 @@ recommendation unless it says otherwise.
    _d_ set for weekday _d_ (0 = Sunday, the numbering `zonedDayOfWeek` returns).
    No row means "flies every day", so every existing goal needs nothing. The
    service loads schedules beside `dormantWindows`; `restDayUnder()` in
-   `$domain/progress` picks the span in force at a period's start. A goal's
+   `$domain/schedule` picks the span in force at a period's start. A goal's
    first schedule starts at the start of the day it was launched; an edit
    starts at the start of tomorrow, so today and the past keep the schedule
    they were flown under. Editing twice in one day replaces tomorrow's pending
@@ -65,7 +65,9 @@ timeZone)`. A period's start is local midnight, so this is the local weekday
    count. `streakFrom` already handled a closed orbit beside dormant ones; a
    test pins it. Because closing a rest day flips `dormant`, anything that
    rebuilds an orbit with a new amount (the offline overlay) goes through
-   `relogOrbit()`, which keeps the reasons and recomputes the flag.
+   `relogOrbit()`, which keeps the reasons and recomputes the flag. Momentum is
+   the one exception: it leaves every rest day out of its baseline, closed or
+   not, so a flown rest day does not make ordinary days read as behind.
 4. **Satellites only.** `restDayUnder()` answers false for any cadence but a
    day, and validation stores a zero mask for every other tier, so moving a
    goal off Satellite starts a "flies every day" span from tomorrow.
@@ -73,7 +75,7 @@ timeZone)`. A period's start is local midnight, so this is the local weekday
    points at archiving.
 6. **Nesting warns, never blocks.** With decision 3, a target is never strictly
    unreachable — a child can always fly on its rest days — so the warning says
-   the target needs rest days flown. `restDayShortfall()` in `$domain/nesting`
+   the target needs rest days flown. `restDayCapacity()` in `$domain/nesting`
    counts how many orbits the children's current schedules allow in the
    parent's current period; the parent's edit form shows the warning when the
    target is above it. The derived maths does not change.

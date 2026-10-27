@@ -13,6 +13,7 @@ import {
 	orbitNoteBundleSchema,
 	planImport,
 	readBundle,
+	scheduleBundleSchema,
 	TRANSFER_SCHEMA_VERSION,
 	EMPTY_ACCOUNT,
 	type AccountShape,
@@ -34,6 +35,7 @@ function bundle(patch: Partial<Bundle> = {}): Bundle {
 		exportedAt: T0,
 		goals: [],
 		goalArchiveWindows: [],
+		goalSchedules: [],
 		entries: [],
 		asteroids: [],
 		orbitNotes: [],
@@ -101,6 +103,7 @@ function accountAfter(applied: ImportPlan): AccountShape {
 	return {
 		goalIds: new Set(applied.goals.map((row) => row.id)),
 		archiveWindowIds: new Set(applied.archiveWindows.map((row) => row.id)),
+		scheduleIds: new Set(applied.schedules.map((row) => row.id)),
 		entryKeys: new Set(applied.entries.map((row) => entryKey(row.goalId, row.clientId))),
 		asteroidIds: new Set(applied.asteroids.map((row) => row.id)),
 		noteKeys: new Set(applied.orbitNotes.map((row) => noteKey(row.goalId, row.periodKey))),
@@ -108,6 +111,7 @@ function accountAfter(applied: ImportPlan): AccountShape {
 		counts: {
 			goals: applied.goals.length,
 			goalArchiveWindows: applied.archiveWindows.length,
+			goalSchedules: applied.schedules.length,
 			entries: applied.entries.length,
 			asteroids: applied.asteroids.length,
 			orbitNotes: applied.orbitNotes.length
@@ -144,6 +148,7 @@ describe('the exported shape', () => {
 			'parentId'
 		],
 		goalArchiveWindows: ['id', 'goalId', 'archivedAt', 'restoredAt'],
+		goalSchedules: ['id', 'goalId', 'restDays', 'from'],
 		entries: ['id', 'goalId', 'amount', 'note', 'occurredAt', 'createdAt', 'clientId'],
 		asteroids: [
 			'id',
@@ -162,6 +167,7 @@ describe('the exported shape', () => {
 	const shapes: Record<string, { shape: Record<string, unknown> }> = {
 		goals: goalBundleSchema,
 		goalArchiveWindows: archiveWindowBundleSchema,
+		goalSchedules: scheduleBundleSchema,
 		entries: entryBundleSchema,
 		asteroids: asteroidBundleSchema,
 		orbitNotes: orbitNoteBundleSchema
@@ -316,6 +322,50 @@ describe('readBundle', () => {
 		if (!read.ok) expect(importProblemMessage(read.problem)).toContain('not a Nova export');
 	});
 
+	/**
+	 * A file exported before rest days existed, verbatim in shape: format 1, no
+	 * `goalSchedules` key at all. It has to keep importing, and its goals fly
+	 * every day — which is what they did when it was written.
+	 */
+	it('still reads a format 1 file, which has no schedules', () => {
+		const v1 = {
+			schemaVersion: 1,
+			exportedAt: T0,
+			goals: [goal({ tier: 'satellite', metricKind: 'checkin', metricUnit: '', target: 1 })],
+			goalArchiveWindows: [],
+			entries: [entry()],
+			asteroids: [],
+			orbitNotes: []
+		};
+		const read = readBundle(JSON.stringify(v1));
+		expect(read.ok).toBe(true);
+		if (!read.ok) return;
+		expect(read.bundle.goalSchedules).toEqual([]);
+
+		const applied = plan(read.bundle);
+		expect(applied.goals).toHaveLength(1);
+		expect(applied.entries).toHaveLength(1);
+		expect(applied.schedules).toEqual([]);
+	});
+
+	it('writes the current format, which this build also reads', () => {
+		expect(TRANSFER_SCHEMA_VERSION).toBe(2);
+		expect(readBundle(JSON.stringify(bundle())).ok).toBe(true);
+	});
+
+	it('refuses a schedule that rests every day', () => {
+		const read = readBundle(
+			JSON.stringify(
+				bundle({
+					goals: [goal()],
+					goalSchedules: [{ id: 's-1', goalId: 'goal-1', restDays: 0b111_1111, from: T0 }]
+				})
+			)
+		);
+		expect(read.ok).toBe(false);
+		if (!read.ok) expect(read.problem.kind).toBe('schema');
+	});
+
 	it('names the row a bad value is in', () => {
 		const source = JSON.stringify(
 			bundle({ goals: [goal(), goal({ id: 'goal-2', color: 'javascript:alert(1)' })] })
@@ -401,6 +451,37 @@ describe('planImport remaps every id', () => {
 		);
 		const order = applied.goals.map((row) => row.id);
 		expect(order.indexOf('new-goals-parent')).toBeLessThan(order.indexOf('new-goals-child'));
+	});
+
+	it('carries schedules onto the remapped goal, keeping their own from', () => {
+		const applied = plan(
+			bundle({
+				goals: [goal({ tier: 'satellite' })],
+				goalSchedules: [
+					{ id: 's-1', goalId: 'goal-1', restDays: 0b100_0001, from: T0 - 30 * DAY },
+					{ id: 's-2', goalId: 'missing', restDays: 0b100_0001, from: T0 }
+				]
+			})
+		);
+		expect(applied.schedules).toEqual([
+			{
+				id: 'new-goalSchedules-s-1',
+				goalId: 'new-goals-goal-1',
+				restDays: 0b100_0001,
+				from: new Date(T0 - 30 * DAY)
+			}
+		]);
+		expect(applied.summary.tables.goalSchedules).toMatchObject({ added: 1, orphaned: 1 });
+	});
+
+	it('adds no schedule twice when the same file is merged again', () => {
+		const source = bundle({
+			goals: [goal({ tier: 'satellite' })],
+			goalSchedules: [{ id: 's-1', goalId: 'goal-1', restDays: 0b100_0001, from: T0 }]
+		});
+		const again = plan(source, accountAfter(plan(source)));
+		expect(again.schedules).toEqual([]);
+		expect(again.summary.tables.goalSchedules.duplicate).toBe(1);
 	});
 
 	it('drops a parent that is not in the file rather than inventing one', () => {
@@ -630,6 +711,7 @@ describe('merge never edits what is already there', () => {
 					'goals',
 					'mode',
 					'orbitNotes',
+					'schedules',
 					'summary',
 					'wipeFirst'
 				].sort()
@@ -655,7 +737,14 @@ describe('replace', () => {
 	const account: AccountShape = {
 		...EMPTY_ACCOUNT,
 		highestSortOrder: 9,
-		counts: { goals: 3, goalArchiveWindows: 1, entries: 40, asteroids: 2, orbitNotes: 5 }
+		counts: {
+			goals: 3,
+			goalArchiveWindows: 1,
+			goalSchedules: 2,
+			entries: 40,
+			asteroids: 2,
+			orbitNotes: 5
+		}
 	};
 
 	it('says what it would delete before it deletes it', () => {

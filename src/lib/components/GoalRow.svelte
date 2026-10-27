@@ -86,7 +86,9 @@
 	<span class="body">
 		<span class="title">{goal.title}</span>
 		<span class="status muted">
-			{#if snapshot.current.complete}
+			{#if snapshot.current.dormant && snapshot.current.rest}
+				Rest day — nothing owed
+			{:else if snapshot.current.complete}
 				Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]}
 				<span aria-hidden="true">✦</span>
 			{:else}

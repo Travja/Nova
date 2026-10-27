@@ -61,7 +61,8 @@
 					cadence: TIER_DEFINITIONS[leaf.goal.tier].cadence,
 					createdAt: leaf.goal.createdAt,
 					entries: leaf.entries,
-					dormantWindows: leaf.dormantWindows
+					dormantWindows: leaf.dormantWindows,
+					restSchedules: leaf.restSchedules
 				},
 				options,
 				data.now
