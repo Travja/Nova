@@ -26,7 +26,7 @@ async function signInElsewhere(browser: Browser, email: string, password = PASSW
 	await hydrated(page);
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByRole('link', { name: 'New goal' })).toBeVisible();
 	return { context, page };
 }
@@ -139,7 +139,7 @@ test('repeated wrong passwords are throttled', async ({ page }) => {
 		await page.goto('/login');
 		await page.getByLabel('Email').fill(email);
 		await page.getByLabel('Password').fill('wrong-password');
-		await page.getByRole('button', { name: 'Sign in' }).click();
+		await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 		await expect(page.getByText('That email and password combination did not work.')).toBeVisible();
 	}
 
@@ -147,11 +147,11 @@ test('repeated wrong passwords are throttled', async ({ page }) => {
 	// password, which is the point: the throttle is on the account, not the guess.
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill('wrong-password');
-	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByText(/Too many sign-in attempts/)).toBeVisible();
 
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(PASSWORD);
-	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByText(/Too many sign-in attempts/)).toBeVisible();
 });

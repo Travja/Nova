@@ -208,6 +208,9 @@ describe('what never reaches the file', () => {
 		'sessions',
 		'sessionToken',
 		'passwordResetTokens',
+		'passkeys',
+		'publicKey',
+		'webauthnChallenges',
 		'pushSubscriptions',
 		'endpoint',
 		'p256dh',
@@ -252,7 +255,9 @@ describe('what never reaches the file', () => {
 		reminderSettings: { enabled: true, quietFrom: 1320, quietUntil: 420, lastSentAt: T0 },
 		sessions: [{ id: 'abc', userId: 'user-1', expiresAt: T0 }],
 		passwordResetTokens: [{ id: 'def', userId: 'user-1', usedAt: null }],
-		pushSubscriptions: [{ id: 'ghi', endpoint: 'https://push.example/x', p256dh: 'k', auth: 's' }]
+		pushSubscriptions: [{ id: 'ghi', endpoint: 'https://push.example/x', p256dh: 'k', auth: 's' }],
+		passkeys: [{ id: 'jkl', userId: 'user-1', publicKey: 'pQECAyYgASFYIA', counter: 3 }],
+		webauthnChallenges: [{ id: 'mno', challenge: 'c2lnbi1pbg', purpose: 'authenticate' }]
 	};
 
 	const serialised = JSON.stringify(bundleSchema.parse(contaminated));

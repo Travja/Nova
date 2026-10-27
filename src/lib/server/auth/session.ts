@@ -163,6 +163,20 @@ export async function revokeOtherSessions(
 	return result.changes;
 }
 
+/**
+ * When this user's session was signed in, or null if the token is not one of
+ * theirs. A session's `created_at` is its sign-in: renewal moves the expiry and
+ * nothing else, so a thirty-day-old cookie never reads as a fresh sign-in.
+ */
+export async function sessionSignedInAt(userId: string, token: string): Promise<Date | null> {
+	const [row] = await db
+		.select({ createdAt: sessions.createdAt })
+		.from(sessions)
+		.where(and(eq(sessions.id, tokenToId(token)), eq(sessions.userId, userId)))
+		.limit(1);
+	return row?.createdAt ?? null;
+}
+
 export async function invalidateSession(token: string): Promise<void> {
 	await db.delete(sessions).where(eq(sessions.id, tokenToId(token)));
 }

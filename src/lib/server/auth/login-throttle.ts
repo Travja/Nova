@@ -1,4 +1,5 @@
 import {
+	ALLOWED,
 	InProcessLimiter,
 	type AttemptLimiter,
 	type AttemptVerdict,
@@ -96,6 +97,22 @@ export class LoginThrottle {
 		const account = await this.#accounts.recordFailure(accountKey(attempt.email), now);
 		if (!attempt.address) return account;
 		return worse(account, await this.#addresses.recordFailure(attempt.address, now));
+	}
+
+	/**
+	 * A passkey sign-in (#69) names no account until it has succeeded, so it is
+	 * throttled per address only. Keying the account half on the credential id
+	 * would hand anyone who has seen one a way to lock its owner out.
+	 */
+	async checkAddress(address: string | null, now?: number): Promise<AttemptVerdict> {
+		if (!address) return ALLOWED;
+		return this.#addresses.check(address, now);
+	}
+
+	/** Count a passkey assertion that did not verify, in the same bucket a wrong password fills. */
+	async recordAddressFailure(address: string | null, now?: number): Promise<AttemptVerdict> {
+		if (!address) return ALLOWED;
+		return this.#addresses.recordFailure(address, now);
 	}
 
 	/**

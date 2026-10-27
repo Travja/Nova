@@ -129,8 +129,8 @@ export async function changePassword(
  * One `delete` on `users` is the whole operation. `PRAGMA foreign_keys` is on
  * for the connection, and every table that belongs to an account references it
  * with `on delete cascade` — directly for goals, asteroids, sessions, reset
- * tokens, push subscriptions and reminder settings, and through `goals` for
- * archive windows, entries and orbit notes. Signing every device out is part
+ * tokens, passkeys and their ceremonies, push subscriptions and reminder
+ * settings, and through `goals` for archive windows, entries and orbit notes. Signing every device out is part
  * of the same statement, since the sessions go with the user row.
  */
 export async function deleteAccount(userId: string, confirmation: string): Promise<boolean> {

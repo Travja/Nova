@@ -1,10 +1,18 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { applyAction, enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import FieldError from '$components/FieldError.svelte';
 	import { describedBy } from '$domain/validation';
 	import { focusTarget } from '$lib/focus';
-	import { tick } from 'svelte';
+	import { postAction } from '$lib/passkeys';
+	import {
+		browserSupportsWebAuthn,
+		startRegistration,
+		WebAuthnError,
+		type PublicKeyCredentialCreationOptionsJSON
+	} from '@simplewebauthn/browser';
+	import { onMount, tick } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { PageProps } from './$types';
 
@@ -33,6 +41,83 @@
 		};
 	};
 
+	/**
+	 * Passkeys (#69). Adding one is two posts with the authenticator in between,
+	 * so it is a button rather than a form; renaming and removing are forms.
+	 *
+	 * Both adding and removing need a sign-in from the last ten minutes or the
+	 * password again. The password field is shown only when the server says it
+	 * will be needed, and one field serves every passkey form on the page — the
+	 * remove forms carry its value in a hidden input.
+	 */
+	let passkeyList: HTMLUListElement | null = $state(null);
+	let supported = $state(false);
+	let adding = $state(false);
+	let confirmPassword = $state('');
+	/** A failure on the browser's side, before the server saw anything. */
+	let problem = $state('');
+
+	const passkeys = $derived(data.passkeys);
+	const needsPassword = $derived(
+		!data.recentSignIn || (form !== null && 'reauthenticate' in form && form.reauthenticate)
+	);
+	/** Which passkey a rename error belongs to. */
+	const renaming = $derived(form && 'renaming' in form ? form.renaming : null);
+
+	onMount(() => {
+		supported = browserSupportsWebAuthn();
+	});
+
+	async function addPasskey() {
+		if (adding) return;
+		adding = true;
+		problem = '';
+		try {
+			const begun = await postAction(
+				'passkeyOptions',
+				confirmPassword ? { password: confirmPassword } : {}
+			);
+			if (begun.type !== 'success' || !begun.data?.passkeyOptions) {
+				await applyAction(begun);
+				return;
+			}
+
+			let response;
+			try {
+				response = await startRegistration({
+					optionsJSON: begun.data.passkeyOptions as PublicKeyCredentialCreationOptionsJSON
+				});
+			} catch (error) {
+				problem =
+					error instanceof WebAuthnError &&
+					error.code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED'
+						? 'This device already holds a passkey for this account.'
+						: 'No passkey was added.';
+				return;
+			}
+
+			const finished = await postAction('addPasskey', { response: JSON.stringify(response) });
+			await applyAction(finished);
+			if (finished.type === 'success') {
+				confirmPassword = '';
+				await invalidateAll();
+				await tick();
+				focusTarget(passkeyList);
+			}
+		} finally {
+			adding = false;
+		}
+	}
+
+	const removing: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			await update();
+			if (result.type === 'success') confirmPassword = '';
+			await tick();
+			focusTarget(passkeyList);
+		};
+	};
+
 	const sessions = $derived(data.sessions);
 	const others = $derived(sessions.filter((session) => !session.current).length);
 
@@ -57,6 +142,9 @@
 
 	/** What the last action did, as one line for the live region. */
 	const announcement = $derived.by(() => {
+		if (form?.passkeyAdded) return `Passkey added: ${form.passkeyAdded}.`;
+		if (form?.passkeyRenamed) return `Passkey renamed to ${form.passkeyRenamed}.`;
+		if (form?.passkeyRemoved) return 'Passkey removed. It can no longer sign in.';
 		if (form?.passwordChanged) {
 			const revoked = form.revoked ?? 0;
 			return revoked > 0
@@ -90,6 +178,7 @@
 	<p class="live" role="status">{announcement}</p>
 
 	{#if form?.errors?.form}<p class="error">{form.errors.form}</p>{/if}
+	{#if problem}<p class="error">{problem}</p>{/if}
 
 	<form class="panel form" method="POST" action="?/password">
 		<h2>Password</h2>
@@ -141,6 +230,97 @@
 
 		<button class="button" type="submit">Change password</button>
 	</form>
+
+	{#if data.passkeysAvailable}
+		<div class="panel form">
+			<h2>Passkeys</h2>
+			<p class="muted">
+				Sign in with Face ID, Touch ID, your device's screen lock or a security key instead of
+				typing your password. Your password keeps working, and it is the way back in if every
+				passkey is lost.
+			</p>
+
+			{#if passkeys.length > 0}
+				<!-- Focus lands here after an add or a remove; never in the tab order. -->
+				<ul bind:this={passkeyList} class="sessions" tabindex="-1" aria-label="Passkeys">
+					{#each passkeys as passkey, index (passkey.id)}
+						<li class="session passkey">
+							<div class="session__what">
+								<span class="session__device">{passkey.name}</span>
+								<span class="muted session__when">
+									Added on {passkey.createdOn}, {day.format(passkey.createdAt)} ·
+									{passkey.lastUsedAt
+										? `last used ${stamp.format(passkey.lastUsedAt)}`
+										: 'not used yet'}
+								</span>
+							</div>
+
+							<div class="passkey__actions">
+								<form class="rename" method="POST" action="?/renamePasskey" use:enhance>
+									<input type="hidden" name="id" value={passkey.id} />
+									<label class="visually-hidden" for="passkey-name-{index}">
+										New name for {passkey.name}
+									</label>
+									<input
+										id="passkey-name-{index}"
+										name="name"
+										maxlength="60"
+										required
+										defaultValue={passkey.name}
+										{...describedBy(
+											renaming === passkey.id ? form?.errors?.name : undefined,
+											`passkey-name-${index}`
+										)}
+									/>
+									<button class="button button--ghost" type="submit">
+										Rename <span class="visually-hidden">{passkey.name}</span>
+									</button>
+								</form>
+
+								<form method="POST" action="?/removePasskey" use:enhance={removing}>
+									<input type="hidden" name="id" value={passkey.id} />
+									<input type="hidden" name="password" value={confirmPassword} />
+									<button class="button button--danger" type="submit">
+										Remove <span class="visually-hidden">{passkey.name}</span>
+									</button>
+								</form>
+							</div>
+							{#if renaming === passkey.id}
+								<FieldError id="passkey-name-{index}" message={form?.errors?.name} />
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="muted">No passkeys yet.</p>
+			{/if}
+
+			{#if needsPassword}
+				<div class="field">
+					<label for="passkeyPassword">Your password</label>
+					<input
+						id="passkeyPassword"
+						type="password"
+						autocomplete="current-password"
+						bind:value={confirmPassword}
+						{...describedBy(form?.errors?.password, 'passkeyPassword')}
+					/>
+					<FieldError id="passkeyPassword" message={form?.errors?.password} />
+					<p class="muted hint">
+						You signed in a while ago, so adding or removing a passkey needs your password again.
+					</p>
+				</div>
+			{/if}
+
+			{#if supported}
+				<button class="button" type="button" disabled={adding} onclick={addPasskey}>
+					Add a passkey
+				</button>
+			{:else}
+				<p class="muted">This browser cannot create passkeys.</p>
+			{/if}
+		</div>
+	{/if}
 
 	<div class="panel form">
 		<h2>Active sessions</h2>
@@ -252,6 +432,27 @@
 		gap: 0.75rem;
 		justify-content: space-between;
 		padding: 0.85rem 1rem;
+	}
+
+	.passkey__actions {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.rename {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.rename input {
+		max-width: 12rem;
+	}
+
+	.hint {
+		font-size: 0.85rem;
+		margin: 0;
 	}
 
 	.session--current {

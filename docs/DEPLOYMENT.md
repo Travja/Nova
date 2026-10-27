@@ -186,6 +186,8 @@ Things that catch people out:
 - A trailing slash: `https://nova.example.com/` is not the same string.
 - Changing `.env` without recreating the container. `docker compose up -d`
   applies it; `docker compose restart` does not re-read the environment.
+- Moving to another hostname. Passwords keep working; passkeys do not — see
+  step 10 before you change the host in `ORIGIN`.
 
 Check what the container actually has:
 
@@ -398,6 +400,38 @@ Nothing is sent to a third party beyond the browser's own push service (Apple's,
 Google's, Mozilla's — whichever the device uses), and what reaches it is
 encrypted to that device's keys.
 
+## 10. Passkeys are bound to the domain
+
+Accounts can add passkeys under **Settings → Security** and then sign in with
+Face ID, Touch ID, the device's screen lock or a security key. There is nothing
+to configure: passkeys are on whenever `ORIGIN` is set, and absent when it is
+not.
+
+A passkey belongs to a domain, and Nova's domain is the hostname in `ORIGIN` —
+never the request's `Host` header, which whoever sent the request wrote. The
+browser and the authenticator enforce this between them: a passkey made for
+`nova.example.com` cannot be used anywhere else, which is the reason it cannot
+be phished. It also means:
+
+- **Changing the hostname in `ORIGIN` leaves every existing passkey unusable.**
+  Moving from `nova.example.com` to `goals.example.com`, or from an IP address
+  to a name, is a new domain as far as passkeys are concerned. Nothing is lost:
+  **passwords keep working**, the old passkeys can be removed from Settings →
+  Security, and each person adds a new one on the new domain.
+- Changing only the scheme or the port keeps the hostname, so the passkeys keep
+  working — but sign-in is checked against the exact `ORIGIN`, so it has to be
+  right, as in step 4.
+- Reaching the same instance two ways (a name and an IP address) works for
+  passkeys only on the one in `ORIGIN`, as it does for every form.
+- Browsers only offer passkeys on a secure origin: HTTPS, or `localhost` while
+  developing. Over plain HTTP on a LAN address the button simply does not
+  appear.
+
+Passwords are the recovery path and stay that way: a passkey is a way in, never
+the only one. Changing or resetting a password, or signing other sessions out,
+leaves passkeys alone; deleting the account removes them; an export never
+includes them.
+
 ## Troubleshooting
 
 | Symptom                                                                                               | Cause                                                             | Fix                                                                                        |
@@ -413,4 +447,5 @@ encrypted to that device's keys.
 | Reset links point at `localhost`                                                                      | `ORIGIN` unset or wrong                                           | Set `ORIGIN` to the browsed origin, as in step 4                                           |
 | Reminders screen says "not set up on this server"                                                     | `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` unset or malformed         | Generate a pair as in step 9; `docker compose logs nova \| grep 'VAPID'`                   |
 | Reminders on, but nothing arrives                                                                     | No device subscribed, quiet hours, or the day's one is spent      | `docker compose logs nova \| grep 'reminder'`; check Settings → Reminders on that device   |
+| Passkey sign-in fails for everyone after a move                                                       | The hostname in `ORIGIN` changed; passkeys belong to the old one  | Expected — sign in with the password, remove the old passkey, add a new one (step 10)      |
 | No notification option on an iPhone                                                                   | Nova is open in a tab rather than installed                       | Share → Add to Home Screen, open Nova from there                                           |

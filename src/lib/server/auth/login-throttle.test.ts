@@ -142,3 +142,40 @@ describe('LoginThrottle', () => {
 		expect(RESET_ACCOUNT_POLICY.baseDelayMs).toBeGreaterThan(ACCOUNT_POLICY.baseDelayMs);
 	});
 });
+
+/**
+ * Passkeys (#69): a failed assertion names no account, so it spends the
+ * address budget a wrong password spends, and only that.
+ */
+describe('passkey failures', () => {
+	const address = '10.0.0.9';
+
+	it('fill the same address bucket a wrong password does', async () => {
+		const t = throttle();
+		for (let i = 0; i < addressPolicy.freeAttempts; i++) {
+			await t.recordAddressFailure(address, 0);
+		}
+		// One wrong password on top of the passkey failures tips it over.
+		await t.recordFailure({ email: 'pilot@example.com', address }, 0);
+		expect((await t.checkAddress(address, 0)).allowed).toBe(false);
+		expect((await t.check({ email: 'someone@example.com', address }, 0)).allowed).toBe(false);
+	});
+
+	it('block passkey sign-ins from an address once its budget is spent', async () => {
+		const t = throttle();
+		for (let i = 0; i <= addressPolicy.freeAttempts; i++) {
+			await t.recordAddressFailure(address, 0);
+		}
+		const verdict = await t.checkAddress(address, 0);
+		expect(verdict.allowed).toBe(false);
+		expect(verdict.retryAfterMs).toBe(addressPolicy.baseDelayMs);
+		// Another client is unaffected.
+		expect((await t.checkAddress('10.0.0.10', 0)).allowed).toBe(true);
+	});
+
+	it('never touch an account bucket', async () => {
+		const t = throttle();
+		for (let i = 0; i < 20; i++) await t.recordAddressFailure(address, 0);
+		expect((await t.check({ email: 'pilot@example.com', address: null }, 0)).allowed).toBe(true);
+	});
+});

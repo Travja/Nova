@@ -1,4 +1,5 @@
 import {
+	blob,
 	index,
 	integer,
 	real,
@@ -78,6 +79,71 @@ export const passwordResetTokens = sqliteTable(
 		usedAt: timestamp('used_at')
 	},
 	(table) => [index('password_reset_tokens_user_idx').on(table.userId)]
+);
+
+/**
+ * One row per passkey (#69) — a WebAuthn credential that signs in instead of
+ * the password, never in place of it: the password stays the recovery path.
+ *
+ * Nothing here is secret. The private key never leaves the authenticator; this
+ * is the public half and the bookkeeping `@simplewebauthn/server` needs to
+ * check a signature against it. It is still a credential, so it is never
+ * exported and goes with the account through the cascade.
+ */
+export const passkeys = sqliteTable(
+	'passkeys',
+	{
+		/** The credential id, base64url, as the authenticator chose it. */
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		/** The COSE-encoded public key, exactly as registration returned it. */
+		publicKey: blob('public_key', { mode: 'buffer' }).notNull(),
+		/**
+		 * The signature counter at the last sign-in. Zero for authenticators that
+		 * do not keep one, which is most synced passkeys; a counter that has ever
+		 * moved must keep moving forwards.
+		 */
+		counter: integer('counter').notNull().default(0),
+		/** The transports the authenticator reported, as a JSON array of strings. */
+		transports: text('transports'),
+		/** What the user calls it. Defaults to the device it was added from. */
+		name: text('name').notNull(),
+		/** `describeDevice()` of the browser that added it, kept when it is renamed. */
+		createdOn: text('created_on').notNull(),
+		createdAt: timestamp('created_at').notNull(),
+		/** Null until it has been used to sign in. */
+		lastUsedAt: timestamp('last_used_at')
+	},
+	(table) => [index('passkeys_user_id_idx').on(table.userId)]
+);
+
+/**
+ * One row per WebAuthn ceremony in flight: the challenge a browser was handed
+ * and what it was handed for.
+ *
+ * The browser holds a random token in an `httpOnly` cookie and this holds its
+ * SHA-256, the session pattern again. A row is deleted the moment a response
+ * is checked against it, whatever the outcome, so no challenge is ever
+ * accepted twice; one past `expires_at` is as good as gone.
+ */
+export const webauthnChallenges = sqliteTable(
+	'webauthn_challenges',
+	{
+		/** SHA-256 of the ceremony token in the browser's cookie. */
+		id: text('id').primaryKey(),
+		challenge: text('challenge').notNull(),
+		/** `register` or `authenticate`; a challenge only finishes the ceremony it began. */
+		purpose: text('purpose').notNull(),
+		/** Who is adding a passkey. Null for a sign-in, where nobody is known yet. */
+		userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+		/** The session that passed the recent-sign-in check, for a registration. */
+		sessionId: text('session_id'),
+		expiresAt: timestamp('expires_at').notNull(),
+		createdAt: timestamp('created_at').notNull()
+	},
+	(table) => [index('webauthn_challenges_expires_idx').on(table.expiresAt)]
 );
 
 export const goals = sqliteTable(
@@ -368,3 +434,5 @@ export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 export type ReminderSettingsRow = typeof reminderSettings.$inferSelect;
 export type OrbitNoteRow = typeof orbitNotes.$inferSelect;
+export type PasskeyRow = typeof passkeys.$inferSelect;
+export type WebauthnChallengeRow = typeof webauthnChallenges.$inferSelect;

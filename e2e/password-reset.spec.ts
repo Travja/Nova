@@ -25,7 +25,7 @@ async function signInElsewhere(browser: Browser, email: string, password: string
 	await hydrated(page);
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(password);
-	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByRole('link', { name: 'New goal' })).toBeVisible();
 	return { context, page };
 }
@@ -70,12 +70,12 @@ test('a forgotten password can be reset from the mailed link', async ({ browser,
 	// The old password is dead, the new one works.
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(PASSWORD);
-	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByText('That email and password combination did not work.')).toBeVisible();
 
 	await page.getByLabel('Email').fill(email);
 	await page.getByLabel('Password').fill(next);
-	await page.getByRole('button', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(page.getByRole('link', { name: 'New goal' })).toBeVisible();
 
 	// And the device that was signed in the whole time has been evicted.
