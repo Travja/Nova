@@ -6,6 +6,7 @@ import {
 	type AsteroidResolution,
 	type CaptureOffer
 } from '$domain/asteroids';
+import type { PeriodOptions } from '$domain/period';
 import type { AsteroidInput, GoalInput } from '$domain/validation';
 import { db } from '$lib/server/db';
 import { asteroids, type AsteroidRow } from '$lib/server/db/schema';
@@ -225,7 +226,8 @@ export async function dismissCaptureOffer(
 export async function captureAsteroid(
 	userId: string,
 	id: string,
-	input: GoalInput
+	input: GoalInput,
+	options: PeriodOptions
 ): Promise<GoalWriteResult> {
 	const existing = await getAsteroid(userId, id);
 	if (!existing) return { ok: false, missing: true };
@@ -233,7 +235,7 @@ export async function captureAsteroid(
 		return { ok: false, missing: true };
 	}
 
-	const created = await createGoal(userId, input);
+	const created = await createGoal(userId, input, options);
 	if (!created.ok) return created;
 
 	await db

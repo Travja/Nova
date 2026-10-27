@@ -27,6 +27,12 @@ export interface Goal {
 	createdAt: Date;
 	archivedAt: Date | null;
 	/**
+	 * The exclusive end of the last period this goal flies, or null for a goal
+	 * that never ends. A UTC instant, worked out when the goal was saved — see
+	 * `$domain/ending`, which is also where "finished" is read from it.
+	 */
+	endsAt: Date | null;
+	/**
 	 * The goal this one feeds, in a strictly longer tier, or null for a goal
 	 * that stands alone. A parent counts the closed orbits of its direct
 	 * children rather than anything logged against it — see `$domain/nesting`.

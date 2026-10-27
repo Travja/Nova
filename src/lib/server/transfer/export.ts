@@ -75,6 +75,7 @@ export async function exportBundle(
 			sortOrder: goals.sortOrder,
 			createdAt: goals.createdAt,
 			archivedAt: goals.archivedAt,
+			endsAt: goals.endsAt,
 			parentId: goals.parentId
 		})
 		.from(goals)
@@ -140,7 +141,8 @@ export async function exportBundle(
 		goals: goalRows.map((goal) => ({
 			...goal,
 			createdAt: at(goal.createdAt),
-			archivedAt: atOrNull(goal.archivedAt)
+			archivedAt: atOrNull(goal.archivedAt),
+			endsAt: atOrNull(goal.endsAt)
 		})),
 		goalArchiveWindows: windowRows.map((window) => ({
 			...window,

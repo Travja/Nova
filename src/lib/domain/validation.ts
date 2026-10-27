@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { END_CHOICES } from './ending';
 import { DEFAULT_COLOR, isPaletteColor } from './palette';
 import { parseLocalDateTime, periodFor, periodLabel, type PeriodOptions } from './period';
 import { cadenceOf, TIERS, type Tier } from './tiers';
@@ -66,7 +67,18 @@ export const goalSchema = z
 		parentId: z.preprocess(
 			(value) => (value === '' || value === null || value === undefined ? null : value),
 			z.string().trim().max(64).nullable().default(null)
-		)
+		),
+		/*
+		 * When the goal ends, as the form said it — never the instant itself. The
+		 * instant depends on the pilot's zone and on what is in flight now, so
+		 * `resolveEnd()` in `$domain/ending` turns this into one where both are
+		 * known. Left out, a goal never ends, which is every goal from before #67.
+		 */
+		ends: z.enum(END_CHOICES).default(''),
+		/** The last day, from a date field, when `ends` is `date`. */
+		endsOn: z.string().trim().max(10).optional(),
+		/** What a parent being given an end does with its children: end them too, or let them go. */
+		childEnding: z.enum(['end', 'detach']).default('end')
 	})
 	.transform((value) => ({
 		...value,

@@ -186,7 +186,8 @@
 
 	<p class="live" role="status">
 		{#if closed}
-			{closed.title} closed its orbit <span aria-hidden="true">✦</span>
+			{closed.title} closed its {closed.final ? 'final orbit' : 'orbit'}
+			<span aria-hidden="true">✦</span>
 		{:else if form?.logged}
 			Logged.
 		{/if}

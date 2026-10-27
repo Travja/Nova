@@ -1,0 +1,1 @@
+ALTER TABLE `goals` ADD `ends_at` integer;

@@ -1,3 +1,4 @@
+import { END_PROBLEM_MESSAGE } from '$domain/ending';
 import { PARENT_PROBLEM_MESSAGE, TIER_PROBLEM_MESSAGE } from '$domain/nesting';
 import { formError, type FormErrors } from '$domain/validation';
 import type { GoalWriteResult } from '$lib/server/goals';
@@ -13,5 +14,6 @@ import type { GoalWriteResult } from '$lib/server/goals';
 export function goalWriteErrors(result: Extract<GoalWriteResult, { ok: false }>): FormErrors {
 	if (result.missing) return formError('That goal is not in orbit.');
 	if (result.problem.kind === 'tier') return { tier: TIER_PROBLEM_MESSAGE };
+	if (result.problem.kind === 'end') return { endsOn: END_PROBLEM_MESSAGE[result.problem.problem] };
 	return { parentId: PARENT_PROBLEM_MESSAGE[result.problem.problem] };
 }

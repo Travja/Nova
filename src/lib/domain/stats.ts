@@ -1,4 +1,10 @@
-import { periodElapsed, isDormant, type DormantWindow, type Orbit } from './progress';
+import {
+	periodElapsed,
+	isDormant,
+	type DormantWindow,
+	type GoalSnapshot,
+	type Orbit
+} from './progress';
 import {
 	periodFor,
 	previousPeriod,
@@ -386,5 +392,31 @@ export function loggingRhythm(
 		byPartOfDay,
 		peakWeekday: peakWeekdayIndex >= 0 ? WEEKDAY_LABELS[peakWeekdayIndex] : null,
 		peakPart: peakPartEntry && peakPartEntry.count > 0 ? peakPartEntry.part : null
+	};
+}
+
+/** What a finished goal has to show for itself (#67). */
+export interface FinalRecord {
+	/** Orbits closed across the whole flight. */
+	closed: number;
+	/** Periods it actually flew — the ones it spent archived are not in it. */
+	flown: number;
+	/** The longest run it ever had. */
+	best: number;
+	/** The run standing when it landed, its final orbit included or not. */
+	endedOn: number;
+}
+
+/**
+ * A finished goal's record, from a snapshot read back from its last instant
+ * with its whole flight as history — `snapshot.streak` is already settled
+ * there, so the final orbit is judged rather than excused.
+ */
+export function finalRecord(snapshot: GoalSnapshot): FinalRecord {
+	return {
+		closed: snapshot.totalOrbits,
+		flown: snapshot.history.filter((orbit) => !orbit.dormant).length,
+		best: bestStreak(snapshot.history),
+		endedOn: snapshot.streak
 	};
 }

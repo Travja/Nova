@@ -58,10 +58,13 @@ otherwise; the code lives in `$domain/ending` unless it names somewhere else.
    whether its children end with it (each on the end of its own period that
    holds the parent's last instant) or carry on, detached as on delete. A
    detached child's closures leave the parent's record with it, which the form
-   says. A live goal can't be given a finished parent (`parentProblem` →
-   `finished`), `eligibleParents` never offers one, and `universeTree` drops
-   finished snapshots before it builds anything, so neither ever sees a
-   finished goal as a parent of something flying.
+   says. At write time a goal can't feed a parent it would outlive
+   (`parentProblem` → `ends`, read by `outlives()` from where the child's last
+   period starts, so a child ended with its parent never trips it). The picker
+   never offers a finished goal, except the parent a goal already has — so
+   correcting a finished child's title doesn't detach it — and `universeTree`
+   drops finished snapshots before it builds anything. Neither ever sees a
+   finished goal as the parent of something flying.
 5. **They share `/goals/archived`, renamed the Hangar.** Two sections,
    Finished then Archived: the mental model is "goals that aren't flying". The
    route keeps its path so nothing that links to it breaks.
@@ -73,8 +76,10 @@ otherwise; the code lives in `$domain/ending` unless it names somewhere else.
    about the pace now.
 7. **`endsAt` travels in the bundle.** `goalBundleSchema.endsAt` is nullable
    and defaults to null, so a bundle exported before this imports unchanged;
-   the schema version stays 1. An imported goal that would fly under a
-   finished parent is detached, the same rule as at write time.
+   the schema version stays 1. The zone doesn't travel, so an import can't
+   run `outlives()`; it detaches the one case that needs no zone — a child
+   with no end under a parent with one — as the app would have when that
+   parent's end was saved.
 
 **The moment** reuses #9 whole. A last orbit that closes raises the ordinary
 celebration with `final` set, and the copy says it was the last one. A finished

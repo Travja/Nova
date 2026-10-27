@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { celebrationShape, isFreshClosing, rayAngles, type OrbitMark } from './celebration';
+import {
+	LANDINGS_REMEMBERED,
+	celebrationShape,
+	isFreshClosing,
+	isFreshLanding,
+	rayAngles,
+	rememberLanding,
+	type OrbitMark
+} from './celebration';
 import { TIERS } from './tiers';
 
 function mark(overrides: Partial<OrbitMark> = {}): OrbitMark {
@@ -63,5 +71,22 @@ describe('celebrationShape', () => {
 describe('rayAngles', () => {
 	it('spreads the rays evenly round the body', () => {
 		expect(rayAngles(4)).toEqual([0, 90, 180, 270]);
+	});
+});
+
+describe('landing a finished goal (#67)', () => {
+	it('is fresh until this browser has shown it', () => {
+		expect(isFreshLanding([], 'goal-1')).toBe(true);
+		expect(isFreshLanding(rememberLanding([], 'goal-1'), 'goal-1')).toBe(false);
+	});
+
+	it('remembers a bounded number, dropping the oldest', () => {
+		let seen: string[] = [];
+		for (let index = 0; index <= LANDINGS_REMEMBERED; index += 1) {
+			seen = rememberLanding(seen, `goal-${index}`);
+		}
+		expect(seen).toHaveLength(LANDINGS_REMEMBERED);
+		expect(isFreshLanding(seen, 'goal-0')).toBe(true);
+		expect(isFreshLanding(seen, `goal-${LANDINGS_REMEMBERED}`)).toBe(false);
 	});
 });

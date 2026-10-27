@@ -9,6 +9,16 @@
 	import { resolve } from '$app/paths';
 	import { periodFor } from '$domain/period';
 	import { describedBy, type FormErrors } from '$domain/validation';
+	import {
+		END_PRESET_LABEL,
+		END_PRESETS,
+		formatLocalDate,
+		isFinished,
+		lastInstant,
+		localDateOf,
+		type EndChoice
+	} from '$domain/ending';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		goal?: Goal | null;
@@ -35,6 +45,8 @@
 		 * every other link in the app.
 		 */
 		cancelTo?: '/today' | null;
+		/** The pilot's zone, which a stored end's last day is read back in. */
+		timeZone?: string;
 	}
 
 	let {
@@ -44,7 +56,8 @@
 		goals = [],
 		children = [],
 		seed = null,
-		cancelTo = null
+		cancelTo = null,
+		timeZone = 'UTC'
 	}: Props = $props();
 
 	// Form fields seed from the goal once; the props never change under this
@@ -63,6 +76,33 @@
 	let color = $state(goal?.color ?? DEFAULT_COLOR);
 	/* svelte-ignore state_referenced_locally */
 	let parentId = $state(goal?.parentId ?? '');
+	/* svelte-ignore state_referenced_locally */
+	let ends = $state<EndChoice>(goal?.endsAt ? 'keep' : '');
+	let childEnding = $state<'end' | 'detach'>('end');
+
+	/**
+	 * The date field is for "On a date" only, but a form has to work before
+	 * JavaScript arrives: the server render shows it, and it tucks itself away
+	 * once hydrated unless that choice is made. The children's question the same.
+	 */
+	let hydrated = $state(false);
+	onMount(() => (hydrated = true));
+
+	/** The last day a stored end covers, as the pilot reads it in their own zone. */
+	const lastDay = $derived(
+		goal?.endsAt ? formatLocalDate(localDateOf(lastInstant(goal.endsAt), timeZone)) : ''
+	);
+	const lastDayLabel = $derived(
+		goal?.endsAt
+			? new Intl.DateTimeFormat('en-GB', {
+					timeZone,
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric'
+				}).format(lastInstant(goal.endsAt))
+			: ''
+	);
+	const finished = $derived(goal ? isFinished(goal, new Date()) : false);
 
 	const tierDef = $derived(TIER_LIST.find((entry) => entry.id === tier) ?? TIER_LIST[1]);
 	/**
@@ -74,7 +114,9 @@
 	const nested = $derived(children.length > 0);
 	const previewMetric = $derived(nested ? ORBIT_METRIC : { kind: metricKind, unit: metricUnit });
 	/** Recomputed as the tier changes: a Satellite can feed more than a Galaxy can. */
-	const parents = $derived(eligibleParents({ id: goal?.id ?? null, tier }, goals));
+	const parents = $derived(
+		eligibleParents({ id: goal?.id ?? null, tier, parentId: goal?.parentId ?? null }, goals)
+	);
 	/** A parent that stops being eligible — the tier moved — is quietly dropped. */
 	const parentChoice = $derived(
 		parents.some((candidate) => candidate.id === parentId) ? parentId : ''
@@ -244,6 +286,66 @@
 			</p>
 		</div>
 
+		<div class="field">
+			<label for="ends">Ends</label>
+			<select id="ends" name="ends" bind:value={ends} {...describedBy(errors?.ends, 'ends')}>
+				<option value="">Never — it flies until you stop it</option>
+				{#if goal?.endsAt}
+					<option value="keep"
+						>{finished ? 'Finished' : 'Last day'} {lastDayLabel} (as it is)</option
+					>
+				{/if}
+				{#each END_PRESETS as preset (preset)}
+					<option value={preset}>{END_PRESET_LABEL[preset]}</option>
+				{/each}
+				<option value="date">On a date…</option>
+			</select>
+			<FieldError id="ends" message={errors?.ends} />
+			<p class="muted note">
+				{#if finished}
+					This goal has finished. A later last day brings it back, and the periods since it landed
+					count as missed.
+				{:else}
+					A goal with an end finishes after the last {tierDef.cadence} that holds its last day, and keeps
+					its record.
+				{/if}
+			</p>
+		</div>
+
+		{#if !hydrated || ends === 'date'}
+			<div class="field">
+				<label for="endsOn">Last day <span class="muted">(for “On a date”)</span></label>
+				<input
+					id="endsOn"
+					name="endsOn"
+					type="date"
+					defaultValue={lastDay}
+					{...describedBy(errors?.endsOn, 'endsOn')}
+				/>
+				<FieldError id="endsOn" message={errors?.endsOn} />
+			</div>
+		{:else if errors?.endsOn}
+			<FieldError id="endsOn" message={errors.endsOn} />
+		{/if}
+
+		{#if nested && (!hydrated || ends !== '')}
+			<fieldset class="field">
+				<legend>When it ends, the goals feeding it</legend>
+				<label class="choice">
+					<input type="radio" name="childEnding" value="end" bind:group={childEnding} />
+					End with it
+				</label>
+				<label class="choice">
+					<input type="radio" name="childEnding" value="detach" bind:group={childEnding} />
+					Carry on alone
+				</label>
+				<p class="muted note">
+					A goal that carries on stops feeding this one, and the orbits it closed leave this one's
+					record with it — the same as when a parent is deleted.
+				</p>
+			</fieldset>
+		{/if}
+
 		<fieldset class="field">
 			<legend>Colour</legend>
 			<div class="swatches">
@@ -398,6 +500,13 @@
 		border-radius: 50%;
 		height: 0.6rem;
 		width: 0.6rem;
+	}
+
+	.choice {
+		align-items: center;
+		display: flex;
+		gap: 0.5rem;
+		min-height: var(--tap-min);
 	}
 
 	.swatches {

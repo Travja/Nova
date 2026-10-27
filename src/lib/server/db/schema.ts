@@ -166,6 +166,13 @@ export const goals = sqliteTable(
 		createdAt: timestamp('created_at').notNull(),
 		archivedAt: timestamp('archived_at'),
 		/**
+		 * The exclusive end of the last period the goal flies, or null for a goal
+		 * that never ends (#67). Worked out from a last day in the pilot's zone
+		 * when the goal is saved, and stored as the instant, so a later change of
+		 * zone moves nothing. Finished is read from it, not stored beside it.
+		 */
+		endsAt: timestamp('ends_at'),
+		/**
 		 * The goal this one feeds, in a strictly longer tier — see
 		 * `$domain/nesting`. Null for a goal that stands alone, which is every
 		 * goal that existed before nesting did.

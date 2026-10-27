@@ -39,6 +39,7 @@ function goal(
 		sortOrder: options.sortOrder ?? 0,
 		createdAt: new Date('2025-01-01T00:00:00Z'),
 		archivedAt: null,
+		endsAt: null,
 		parentId: options.parentId ?? null
 	};
 	return {

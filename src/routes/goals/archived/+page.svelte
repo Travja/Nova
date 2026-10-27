@@ -5,29 +5,40 @@
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import { formatAmount } from '$domain/progress';
 	import { metricFor } from '$domain/nesting';
+	import { lastInstant } from '$domain/ending';
 	import { TIER_DEFINITIONS } from '$domain/tiers';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 
-	const snapshots = $derived(data.snapshots);
+	const snapshots = $derived(data.archived);
+	const finished = $derived(data.finished);
 
 	const archivedOn = new Intl.DateTimeFormat('en-GB', {
 		day: 'numeric',
 		month: 'short',
 		year: 'numeric'
 	});
+	/** A last day is read in the pilot's zone: it is the day they named. */
+	const landedOn = $derived(
+		new Intl.DateTimeFormat('en-GB', {
+			timeZone: data.timeZone,
+			day: 'numeric',
+			month: 'short',
+			year: 'numeric'
+		})
+	);
 </script>
 
-<svelte:head><title>Archived goals · Nova</title></svelte:head>
+<svelte:head><title>Hangar · Nova</title></svelte:head>
 
 <section class="archive">
 	<header class="head">
 		<div>
-			<h1>Archived goals</h1>
+			<h1>Hangar</h1>
 			<p class="muted">
-				Nothing here is counted on the dashboard, and no orbit is expected while a goal is archived.
-				Everything logged is still here, and a streak picks up where it froze.
+				Goals that aren't flying. Finished ones have landed and keep their record; archived ones are
+				parked, with a streak that picks up where it froze.
 			</p>
 		</div>
 		<a class="button button--ghost" href={resolve('/')}>Back to orbit</a>
@@ -39,15 +50,74 @@
 		{form?.restored ? `${form.restored} is back in orbit.` : ''}
 	</p>
 
-	{#if snapshots.length === 0}
+	{#if finished.length > 0}
+		<h2 class="section">Finished goals</h2>
+		<ul class="list">
+			{#each finished as { snapshot, record } (snapshot.goal.id)}
+				{@const goal = snapshot.goal}
+				{@const metric = metricFor(snapshot)}
+				<li class="card card--landed panel">
+					<OrbitDial
+						orbit={snapshot.current}
+						tier={goal.tier}
+						color={goal.color}
+						goalId={goal.id}
+						size={120}
+						satellites={snapshot.derived?.children ?? []}
+						caption="{formatAmount(snapshot.current.logged, metric)} / {formatAmount(
+							goal.target,
+							metric
+						)}"
+					/>
+
+					<div class="body">
+						<div class="heading">
+							<h3>
+								<a href={resolve('/goals/[id]', { id: goal.id })}>{goal.title}</a>
+							</h3>
+							<p class="muted" style="color: {TIER_DEFINITIONS[goal.tier].accent}">
+								{TIER_DEFINITIONS[goal.tier].label}
+								{#if goal.endsAt}
+									<span class="muted">· landed {landedOn.format(lastInstant(goal.endsAt))}</span>
+								{/if}
+							</p>
+						</div>
+
+						<dl class="stats">
+							<div>
+								<dt>Orbits closed</dt>
+								<dd>{record.closed} of {record.flown}</dd>
+							</div>
+							<div>
+								<dt>Best streak</dt>
+								<dd>{record.best}</dd>
+							</div>
+							<div>
+								<dt>Ended on</dt>
+								<dd>{record.endedOn}</dd>
+							</div>
+						</dl>
+					</div>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+
+	{#if finished.length > 0 || snapshots.length > 0}
+		<h2 class="section">Archived goals</h2>
+	{/if}
+
+	{#if snapshots.length === 0 && finished.length === 0}
 		<div class="empty panel">
 			<Astronaut size={150} />
-			<h2>Nothing archived</h2>
+			<h2>Nothing in the hangar</h2>
 			<p class="muted">
-				Archiving a goal parks it here with its history intact, for when a season ends but the
-				record still matters.
+				A goal with an end lands here when its last period is over, with its record. Archiving a
+				goal parks it here with its history intact, for a season that may come round again.
 			</p>
 		</div>
+	{:else if snapshots.length === 0}
+		<p class="muted">Nothing archived.</p>
 	{:else}
 		<ul class="list">
 			{#each snapshots as snapshot (snapshot.goal.id)}
@@ -69,9 +139,9 @@
 
 					<div class="body">
 						<div class="heading">
-							<h2>
+							<h3>
 								<a href={resolve('/goals/[id]', { id: goal.id })}>{goal.title}</a>
-							</h2>
+							</h3>
 							<p class="muted" style="color: {TIER_DEFINITIONS[goal.tier].accent}">
 								{TIER_DEFINITIONS[goal.tier].label}
 								{#if goal.archivedAt}
@@ -172,11 +242,20 @@
 		min-width: 0;
 	}
 
-	.heading h2 {
+	.section {
+		font-size: 1.15rem;
+	}
+
+	.heading h3 {
 		font-size: 1.1rem;
 	}
 
-	.heading h2 a {
+	/* A landed goal has nothing to restore, so its card closes on the record. */
+	.card--landed {
+		grid-template-columns: auto 1fr;
+	}
+
+	.heading h3 a {
 		color: var(--text-bright);
 	}
 
