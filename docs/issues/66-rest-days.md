@@ -1,6 +1,6 @@
 ---
 title: 'Rest days: satellites that fly only on the days you choose'
-labels: [enhancement, backend, frontend, needs-design]
+labels: [enhancement, backend, frontend]
 milestone: 'M5 — The long haul'
 ---
 
@@ -38,46 +38,55 @@ from archiving. If `buildOrbit` marks rest days dormant, almost everything above
 works without changes. What's left is where the schedule is stored, how it
 changes over time, and the wording.
 
-## Decisions for the design session
+## Decided
 
-Each has a recommendation. The design session confirms or overturns them, writes
-down the outcome, and adds tests, especially the DST test `CLAUDE.md` requires.
+Settled in the design session before any code. Each one took the
+recommendation unless it says otherwise.
 
-1. **Where it lives — recommend spans, not a column.** A plain `rest_days` mask
-   on `goals` would apply a schedule change to the whole history. Marking past
-   Saturdays as rest days would bring a broken streak back, and the orbit stops
-   being honest. Store schedules the way archive windows are stored: a
-   `goal_schedules` table of `(goal_id, rest_days mask, from)`. The service loads
-   them alongside `dormantWindows`; the domain asks whether a period starts on a
-   rest day under the schedule in force at its start. A change takes effect from
-   the next day, never the current one or earlier.
-2. **Which day of the week — recommend the user's zone at the period's start.**
-   Use `zonedDayOfWeek(period.start, timeZone)`, the same zone rule as
-   everything else. Test it around a DST transition in `America/Denver`.
-3. **Logging on a rest day — recommend: allowed, and it counts if it closes.**
-   A rest day you flew anyway should be a reward, not invisible. A rest day is
-   dormant only if its orbit did **not** close. A closed one counts as an
-   ordinary closed orbit: it adds to the streak, lifetime orbits and a parent's
-   count. An unclosed one is transparent. Check that `streakFrom` handles a
-   closed orbit next to dormant ones.
-4. **Satellites only — recommend yes.** Rest weeks for planets or rest months
-   for star systems are archiving by another name. Leave them out.
-5. **At least one flying day — recommend required.** A schedule with all seven
-   days off is archiving. Validate it in `$domain/validation`, with a message
-   that suggests archiving.
-6. **Nesting — recommend a warning, not a block.** A weekly parent fed by a
-   five-day satellite can't reach a target of 7. When a child's schedule makes
-   the parent's target unreachable, the parent form says so; it doesn't refuse
-   to save. The derived maths itself doesn't change, because closed child orbits
-   are still closed orbits.
-7. **Wording.** `orbitStanding()` currently says "archived for this period, no
-   orbit expected" for every dormant orbit. Rest days need their own phrase, such
-   as "rest day, no orbit expected". So the orbit, or the snapshot, has to carry
-   why it is dormant, and not just that it is.
-8. **Export and import.** Schedules go into the bundle like archive windows. A
-   bundle without them imports as "flies every day". Decide whether that means
-   bumping `TRANSFER_SCHEMA_VERSION` or adding an optional array with a
-   default, and test that an existing v1 bundle still imports.
+1. **Spans, not a column.** A `goal_schedules` table of
+   `(goal_id, rest_days, from)`, where `rest_days` is a seven-bit mask with bit
+   _d_ set for weekday _d_ (0 = Sunday, the numbering `zonedDayOfWeek` returns).
+   No row means "flies every day", so every existing goal needs nothing. The
+   service loads schedules beside `dormantWindows`; `restDayUnder()` in
+   `$domain/progress` picks the span in force at a period's start. A goal's
+   first schedule starts at the start of the day it was launched; an edit
+   starts at the start of tomorrow, so today and the past keep the schedule
+   they were flown under. Editing twice in one day replaces tomorrow's pending
+   span rather than stacking two.
+2. **The user's zone at the period's start.** `zonedDayOfWeek(period.start,
+timeZone)`. A period's start is local midnight, so this is the local weekday
+   by construction. Tested across the `America/Denver` spring-forward Sunday
+   (8 March 2026, a 23-hour day), and in `Pacific/Auckland`, where local
+   midnight falls on the previous UTC day, so a UTC weekday would be wrong.
+3. **Logging on a rest day is allowed, and it counts if it closes.** The orbit
+   carries `rest` (a rest day under the schedule, and not archived), and
+   `dormant` becomes `archived || (rest && !complete)`. A closed rest day is an
+   ordinary closed orbit for the streak, lifetime orbits, stats and a parent's
+   count. `streakFrom` already handled a closed orbit beside dormant ones; a
+   test pins it. Because closing a rest day flips `dormant`, anything that
+   rebuilds an orbit with a new amount (the offline overlay) goes through
+   `relogOrbit()`, which keeps the reasons and recomputes the flag.
+4. **Satellites only.** `restDayUnder()` answers false for any cadence but a
+   day, and validation stores a zero mask for every other tier, so moving a
+   goal off Satellite starts a "flies every day" span from tomorrow.
+5. **At least one flying day.** Refused in `goalSchema`, with a message that
+   points at archiving.
+6. **Nesting warns, never blocks.** With decision 3, a target is never strictly
+   unreachable — a child can always fly on its rest days — so the warning says
+   the target needs rest days flown. `restDayShortfall()` in `$domain/nesting`
+   counts how many orbits the children's current schedules allow in the
+   parent's current period; the parent's edit form shows the warning when the
+   target is above it. The derived maths does not change.
+7. **Wording.** `orbitStanding()` says "rest day, no orbit expected" for an
+   unclosed rest day, "orbit closed on a rest day, N% of target logged" for a
+   closed one, and keeps the archived wording otherwise. Archived wins when a
+   rest day falls inside an archive window, which is why `rest` is false there.
+8. **Export and import: bump to format 2.** Bundles gain `goalSchedules`. An
+   older Nova strips unknown keys, so an optional array would let it import a
+   new file silently minus its schedules, turning every rest day into a missed
+   one. Bumping makes it refuse with "update Nova" instead. This Nova reads
+   format 1 and 2; a format 1 bundle has no schedules and imports as "flies
+   every day". A test imports a fixed format-1 bundle.
 
 ## The form
 
