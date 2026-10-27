@@ -39,7 +39,7 @@ export interface AttemptLimiter {
 	clear(key: string): Promise<void>;
 }
 
-const ALLOWED: AttemptVerdict = { allowed: true, retryAfterMs: 0 };
+export const ALLOWED: AttemptVerdict = { allowed: true, retryAfterMs: 0 };
 
 /**
  * The wait earned by `failures` consecutive failures: nothing while they are

@@ -15,11 +15,11 @@ import { eq } from 'drizzle-orm';
  *
  * Note what this file does not query. There is no select against `users`
  * beyond checking the account still exists, and none at all against
- * `sessions`, `password_reset_tokens`, `push_subscriptions` or
- * `reminder_settings`. An export says what the goals were, never whose they
- * were, so the tables that could leak an account are not read in the first
- * place — which is a stronger guarantee than reading them and remembering to
- * drop the wrong columns.
+ * `sessions`, `password_reset_tokens`, `passkeys`, `webauthn_challenges`,
+ * `push_subscriptions` or `reminder_settings`. An export says what the goals
+ * were, never whose they were, so the tables that could leak an account are
+ * not read in the first place — which is a stronger guarantee than reading
+ * them and remembering to drop the wrong columns.
  *
  * What is left names its columns anyway. `select *` minus a deny-list ships
  * whatever column is added next, and the file lands in a Downloads folder and
