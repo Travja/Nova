@@ -1,7 +1,13 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
+import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
+
+// Baked in at build time rather than read from `package.json` at runtime, so
+// `/health` can report a version without the runtime image needing the file
+// at all. See `src/app.d.ts` for the ambient declaration.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 /**
  * The universe view's renderer (#11): `src/lib/universe/` and three.js with it.
@@ -38,6 +44,9 @@ function universeChunkName(): Plugin {
 }
 
 export default defineConfig({
+	define: {
+		__APP_VERSION__: JSON.stringify(pkg.version)
+	},
 	plugins: [
 		sveltekit(),
 		universeChunkName(),

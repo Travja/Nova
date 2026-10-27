@@ -1,6 +1,9 @@
 services:
   nova:
-    build: .
+    # A tagged release from GHCR by default. Building from source instead —
+    # for a platform that isn't published, or a local change — means
+    # replacing this line with `build: .`; see DEPLOYMENT.md §7.
+    image: ghcr.io/travja/nova:${NOVA_VERSION:-latest}
     restart: unless-stopped
     ports:
       - '${PORT:-3000}:3000'

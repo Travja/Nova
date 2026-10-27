@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches package.json
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json's version ($pkg)"
+            exit 1
+          fi
+          echo "version=$pkg" >> "$GITHUB_OUTPUT"
+
+  build:
+    runs-on: ubuntu-latest
+    needs: verify-version
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: tags
+        run: |
+          version="${{ needs.verify-version.outputs.version }}"
+          echo "major_minor=${version%.*}" >> "$GITHUB_OUTPUT"
+
+      # amd64 only. better-sqlite3 compiles a native addon, and cross-compiling
+      # that under QEMU's arm64 emulation was not worth the release time —
+      # the issue's own ~15-minute budget — so self-hosters on arm64 (a
+      # Raspberry Pi, say) build from source for now, as the README already
+      # documents as the alternative to pulling the image.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/travja/nova:${{ needs.verify-version.outputs.version }}
+            ghcr.io/travja/nova:${{ steps.tags.outputs.major_minor }}
+            ghcr.io/travja/nova:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [verify-version, build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+
+  restore-drill:
+    runs-on: ubuntu-latest
+    needs: [verify-version, build]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Once there is a release before this one, prove the exact upgrade path:
+      # a snapshot taken by the previous tag's image, restored into this one.
+      # The very first release has nothing to compare against, so this is
+      # skipped rather than failed.
+      - name: Find the previous release
+        id: previous
+        run: |
+          mapfile -t tags < <(git tag --list 'v*.*.*' --sort=-v:refname)
+          found=false
+          previous=""
+          for t in "${tags[@]}"; do
+            if [ "$found" = true ]; then
+              previous="$t"
+              break
+            fi
+            if [ "$t" = "${{ github.ref_name }}" ]; then
+              found=true
+            fi
+          done
+          echo "previous=${previous#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.previous.outputs.previous != ''
+        with:
+          node-version: 22
+
+      - uses: docker/login-action@v3
+        if: steps.previous.outputs.previous != ''
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull the previous and new images
+        if: steps.previous.outputs.previous != ''
+        run: |
+          docker pull ghcr.io/travja/nova:${{ steps.previous.outputs.previous }}
+          docker pull ghcr.io/travja/nova:${{ needs.verify-version.outputs.version }}
+
+      - name: Restore the previous tag's snapshot into the new image
+        if: steps.previous.outputs.previous != ''
+        run: |
+          node scripts/restore-drill.mjs \
+            ghcr.io/travja/nova:${{ steps.previous.outputs.previous }} \
+            ghcr.io/travja/nova:${{ needs.verify-version.outputs.version }}
+
+      - name: No previous release to restore from
+        if: steps.previous.outputs.previous == ''
+        run: echo 'No previous v*.*.* tag — skipping the upgrade-path restore drill.'

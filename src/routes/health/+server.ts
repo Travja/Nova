@@ -14,6 +14,7 @@ export const GET: RequestHandler = async () => {
 	return json(
 		{
 			status: database.ok ? 'ok' : 'error',
+			version: __APP_VERSION__,
 			uptimeSeconds: Math.round(process.uptime()),
 			database
 		},

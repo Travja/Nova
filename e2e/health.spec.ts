@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import pkg from '../package.json' with { type: 'json' };
 
 /**
  * The endpoint the container healthcheck polls. It has to answer without a
@@ -10,6 +11,7 @@ test('the health endpoint reports the database', async ({ request }) => {
 	expect(response.status()).toBe(200);
 	expect(await response.json()).toMatchObject({
 		status: 'ok',
+		version: pkg.version,
 		database: { ok: true }
 	});
 	// Every response carries the id its log line is written under.

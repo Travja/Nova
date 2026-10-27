@@ -1,11 +1,18 @@
 # Deploying Nova
 
-`docker compose up -d --build` gets you a running server. This is everything
-after that: TLS in front of it, the settings the Node adapter needs behind a
-proxy, upgrades, and what to do when form posts start failing.
+`docker compose up -d` gets you a running server, pulling a tagged release
+from GHCR. This is everything after that: TLS in front of it, the settings
+the Node adapter needs behind a proxy, upgrades, and what to do when form
+posts start failing.
 
 Nova is a single container plus a volume. There is no separate backend, no
 queue, no cache to run.
+
+Dependabot keeps dependencies, GitHub Actions and the base image moving
+(`.github/dependabot.yml`), but Dependabot security updates — the ones that
+fire outside the weekly schedule the moment a GitHub advisory lands — are a
+repository setting, not a file: turn them on under the repo's **Settings →
+Code security → Dependabot security updates**.
 
 ## What you need
 
@@ -14,12 +21,6 @@ queue, no cache to run.
   storing the session cookie both require it on anything other than `localhost`.
 - Ports 80 and 443 open, so the proxy can get a certificate.
 
-Dependabot keeps dependencies, GitHub Actions and the base image moving
-(`.github/dependabot.yml`), but Dependabot security updates — the ones that
-fire outside the weekly schedule the moment a GitHub advisory lands — are a
-repository setting, not a file: turn them on under the repo's **Settings →
-Code security → Dependabot security updates**.
-
 ## 1. Configure Nova
 
 Create a `.env` next to `compose.yaml`:
@@ -27,7 +28,14 @@ Create a `.env` next to `compose.yaml`:
 ```bash
 ORIGIN=https://nova.example.com
 PORT=3000
+NOVA_VERSION=0.1.0
 ```
+
+`NOVA_VERSION` picks the tag `compose.yaml` pulls — `0.1.0`, `0.1` for the
+latest patch of that minor, or leave it unset for `latest`. Building from
+source instead (a platform GHCR doesn't publish, or a local change) means
+replacing `image:` in `compose.yaml` with `build: .` and running `docker
+compose up -d --build`.
 
 `compose.yaml` reads `ORIGIN` and publishes the container's port 3000 on the
 host. Behind a proxy you generally want that bound to localhost only — edit the
@@ -35,9 +43,9 @@ host. Behind a proxy you generally want that bound to localhost only — edit th
 through the proxy.
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 curl -s localhost:3000/health
-# {"status":"ok","uptimeSeconds":12,"database":{"ok":true,"latencyMs":0.4}}
+# {"status":"ok","version":"0.1.0","uptimeSeconds":12,"database":{"ok":true,"latencyMs":0.4}}
 ```
 
 ## 2. Put TLS in front of it
@@ -270,16 +278,25 @@ docker compose cp nova:/data/backups/nova-20260913T030000Z.db /tmp/check.db
 sqlite3 /tmp/check.db 'PRAGMA integrity_check; SELECT count(*) FROM goals;'
 ```
 
-The restore procedure is in the [README](../README.md#restoring).
+The restore procedure is in the [README](../README.md#restoring). CI runs it
+end to end on every PR — `scripts/restore-drill.mjs` builds the image, logs a
+real account, goal and entry through the app's own forms, waits for the
+backup schedule to take a snapshot, and follows the README's steps to restore
+it — so "verify one before you need it" is also verified before you need it.
 
 ## 7. Upgrading
 
 ```bash
-git pull
-docker compose up -d --build
+# .env
+NOVA_VERSION=0.2.0
 ```
 
-That rebuilds the image and recreates the container. **Migrations run
+```bash
+docker compose pull
+docker compose up -d
+```
+
+That pulls the new tag and recreates the container. **Migrations run
 automatically on start** — the container's command applies pending Drizzle
 migrations before the server listens, and skips the ones already applied. There
 is no separate migration step to run, and no window where the app is up against
@@ -291,10 +308,10 @@ Before a big upgrade, take a snapshot you can name:
 docker compose exec nova ls /data/backups | tail -1   # or just wait for today's
 ```
 
-If an upgrade goes wrong, restore that snapshot (README, _Restoring_) and
-`docker compose up -d --build` the previous commit. Migrations are immutable and
-only ever move forward, so rolling the **image** back is only safe alongside a
-snapshot from before the migration ran.
+If an upgrade goes wrong, restore that snapshot (README, _Restoring_) and set
+`NOVA_VERSION` back to the previous tag before `docker compose up -d`.
+Migrations are immutable and only ever move forward, so rolling the **image**
+back is only safe alongside a snapshot from before the migration ran.
 
 Watch it come back:
 
