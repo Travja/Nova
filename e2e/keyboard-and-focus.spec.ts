@@ -134,7 +134,7 @@ test('revoking a session lands focus somewhere deliberate', async ({ page, brows
 	await hydrated(otherPage);
 	await otherPage.getByLabel('Email').fill(email);
 	await otherPage.getByLabel('Password').fill('orbit-me-1234');
-	await otherPage.getByRole('button', { name: 'Sign in' }).click();
+	await otherPage.getByRole('button', { name: 'Sign in', exact: true }).click();
 	await expect(otherPage).not.toHaveURL(/login/);
 	await other.close();
 
