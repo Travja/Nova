@@ -239,9 +239,15 @@ async function main() {
 	if (inPlace) {
 		// README, "Restoring", verbatim: copy the snapshot over nova.db and drop
 		// the WAL sidecars, which belong to the database just replaced.
+		// --user 1000:1000 matters as much as the commands: root's cp would
+		// leave nova.db owned by root, and the container runs as the
+		// unprivileged `node` user (uid 1000 in every node:*-alpine image),
+		// which could then open it to read but not to write.
 		docker([
 			'run',
 			'--rm',
+			'--user',
+			'1000:1000',
 			'-v',
 			`${SOURCE_VOLUME}:/data`,
 			'alpine:3.20',
@@ -256,11 +262,14 @@ async function main() {
 		startContainer(TARGET_CONTAINER, targetImage, TARGET_VOLUME, PORT);
 	} else {
 		// The release workflow's stronger drill: the previous tag's snapshot,
-		// restored into the new tag's image on a volume of its own.
+		// restored into the new tag's image on a volume of its own. Same
+		// ownership concern as above.
 		docker(['volume', 'create', TARGET_VOLUME]);
 		docker([
 			'run',
 			'--rm',
+			'--user',
+			'1000:1000',
 			'-v',
 			`${SOURCE_VOLUME}:/from`,
 			'-v',

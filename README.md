@@ -154,7 +154,11 @@ sidecar to remember and nothing to replay.
 docker compose down                       # stop the writer first
 docker volume ls                          # find the volume, e.g. nova_nova-data
 
-docker run --rm -v nova_nova-data:/data alpine sh -c '
+# --user 1000:1000 matters as much as the commands do: root's cp would leave
+# nova.db owned by root, and the container runs as the unprivileged `node`
+# user (uid 1000 in every node:*-alpine image), which could then open it to
+# read but not to write.
+docker run --rm --user 1000:1000 -v nova_nova-data:/data alpine sh -c '
   cp /data/nova.db /data/nova.db.before-restore 2>/dev/null;
   cp /data/backups/nova-20260913T030000Z.db /data/nova.db &&
   rm -f /data/nova.db-wal /data/nova.db-shm'
