@@ -108,6 +108,9 @@ function signedInRoutes(goalHref: string): string[] {
 		'/?reorder=1',
 		'/today',
 		'/stats',
+		// This year's review holds the goals launched above; 1999 is the kind empty one.
+		`/review/${new Date().getUTCFullYear()}`,
+		'/review/1999',
 		'/goals/new',
 		goalPath,
 		`${goalPath}?confirm=archive`,

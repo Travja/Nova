@@ -64,7 +64,9 @@
 					{formatAmount(cell.orbit.logged, metric)} / {formatAmount(cell.orbit.target, metric)}
 				</span>
 				<span class="orbits__status">
-					{#if cell.orbit.dormant}
+					{#if cell.orbit.dormant && cell.orbit.rest}
+						<span class="pill pill--dormant">Rest day</span>
+					{:else if cell.orbit.dormant}
 						<span class="pill pill--dormant">Dormant</span>
 					{:else if cell.orbit.complete}
 						<span class="pill pill--closed">Closed</span>

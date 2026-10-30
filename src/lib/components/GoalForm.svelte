@@ -9,6 +9,7 @@
 	import { resolve } from '$app/paths';
 	import { periodFor } from '$domain/period';
 	import { describedBy, type FormErrors } from '$domain/validation';
+	import { restsOn, WEEKDAY_NAMES, weekdaysInOrder } from '$domain/schedule';
 	import {
 		END_PRESET_LABEL,
 		END_PRESETS,
@@ -45,6 +46,15 @@
 		 * every other link in the app.
 		 */
 		cancelTo?: '/today' | null;
+		/** The rest-day mask the goal flies from here on — see `$domain/schedule`. */
+		restDays?: number;
+		/** Where the user's week starts, so the weekday toggles run in that order. */
+		weekStartsOn?: number;
+		/**
+		 * Set when this goal's children rest on days its target needs flown. A
+		 * warning, never a refusal: a rest day that closes still counts.
+		 */
+		restDayWarning?: string | null;
 		/** The pilot's zone, which a stored end's last day is read back in. */
 		timeZone?: string;
 	}
@@ -57,6 +67,9 @@
 		children = [],
 		seed = null,
 		cancelTo = null,
+		restDays = 0,
+		weekStartsOn = 1,
+		restDayWarning = null,
 		timeZone = 'UTC'
 	}: Props = $props();
 
@@ -76,6 +89,8 @@
 	let color = $state(goal?.color ?? DEFAULT_COLOR);
 	/* svelte-ignore state_referenced_locally */
 	let parentId = $state(goal?.parentId ?? '');
+	/* svelte-ignore state_referenced_locally */
+	const weekdays = weekdaysInOrder(weekStartsOn);
 	/* svelte-ignore state_referenced_locally */
 	let ends = $state<EndChoice>(goal?.endsAt ? 'keep' : '');
 	let childEnding = $state<'end' | 'detach'>('end');
@@ -204,6 +219,9 @@
 					{...describedBy(errors?.target, 'target')}
 				/>
 				<FieldError id="target" message={errors?.target} />
+				{#if restDayWarning}
+					<p class="warning note" data-testid="rest-day-warning">{restDayWarning}</p>
+				{/if}
 				<p class="muted note">
 					{children.length}
 					{children.length === 1 ? 'goal feeds' : 'goals feed'} this one, so its orbit counts how many
@@ -257,6 +275,36 @@
 			{:else}
 				<input type="hidden" name="metricUnit" value={metricKind === 'duration' ? 'minutes' : ''} />
 			{/if}
+		{/if}
+
+		{#if tier === 'satellite'}
+			<!-- Ticked days fly; the rest are rest days, which are never owed and
+			     never break the streak. `schedule` tells the server the choice was
+			     offered, so ticking nothing reads as an error rather than "unchanged". -->
+			<fieldset class="field" {...describedBy(errors?.flyingDays, 'flyingDays')}>
+				<legend>Flies on</legend>
+				<input type="hidden" name="schedule" value="1" />
+				<div class="weekdays">
+					{#each weekdays as day (day)}
+						<label class="weekday">
+							<input
+								type="checkbox"
+								name="flyingDays"
+								value={day}
+								checked={!restsOn(restDays, day)}
+							/>
+							<span>{WEEKDAY_NAMES[day]}</span>
+						</label>
+					{/each}
+				</div>
+				<FieldError id="flyingDays" message={errors?.flyingDays} />
+				<p class="muted note">
+					Days left unticked are rest days: nothing is owed and the streak waits. Log on one anyway
+					and it counts. Want N times a week rather than certain days? Make it a Planet with a
+					target of N.
+					{#if goal}A change starts tomorrow.{/if}
+				</p>
+			</fieldset>
 		{/if}
 
 		<div class="field">
@@ -446,6 +494,33 @@
 	.tiers {
 		display: grid;
 		gap: 0.5rem;
+	}
+
+	.weekdays {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+
+	.weekday {
+		align-items: center;
+		background: rgba(6, 9, 26, 0.55);
+		border: 1px solid var(--space-border);
+		border-radius: var(--radius);
+		cursor: pointer;
+		display: inline-flex;
+		gap: 0.4rem;
+		min-height: var(--tap-min);
+		padding: 0 0.7rem;
+	}
+
+	.weekday:has(input:checked) {
+		border-color: var(--space-border-bright);
+		color: var(--text-bright);
+	}
+
+	.warning {
+		color: var(--accent-warm);
 	}
 
 	.tier-option {

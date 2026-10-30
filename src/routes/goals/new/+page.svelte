@@ -31,6 +31,7 @@
 
 <GoalForm
 	goals={data.goals}
+	weekStartsOn={data.user?.weekStartsOn}
 	errors={form?.errors ?? null}
 	seed={capturing ? { title: capturing.title, description: capturing.note } : null}
 	submitLabel={capturing ? 'Capture into orbit' : 'Launch goal'}
