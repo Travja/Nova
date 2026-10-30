@@ -20,6 +20,7 @@
 	children={data.children}
 	errors={form?.errors ?? null}
 	submitLabel="Save changes"
+	timeZone={data.user?.timeZone}
 />
 
 <style>

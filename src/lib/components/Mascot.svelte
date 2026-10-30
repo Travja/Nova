@@ -100,7 +100,10 @@
 
 		<div class="copy">
 			{#if closing}
-				<h2>{closing.title} closed its orbit <span aria-hidden="true">✦</span></h2>
+				<h2>
+					{closing.title} closed its {closing.final ? 'final orbit' : 'orbit'}
+					<span aria-hidden="true">✦</span>
+				</h2>
 				<p class="muted">That is one more revolution on the board.</p>
 			{:else if pilot.mood === 'resting'}
 				<h2>{pilot.closed > 0 ? 'Nothing owed' : 'Nothing in flight'}</h2>

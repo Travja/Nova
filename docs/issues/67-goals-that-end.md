@@ -27,42 +27,64 @@ A goal can have an end. After its last period, it is **finished**:
   closes, it gets a closing card, reusing the #9 celebration shapes. It doesn't
   need a new animation system.
 
-## Decisions for the design session
+## Decided
 
-Each has a recommendation; the design session confirms or overturns them and
-writes the outcome here.
+Settled in the design session. Each took the recommendation unless it says
+otherwise; the code lives in `$domain/ending` unless it names somewhere else.
 
-1. **What is stored — recommend the end instant.** Store
-   `goals.ends_at`, nullable, in UTC ms: the `end` of the last period the goal
-   flies, computed when the goal is saved, in the user's zone. That follows
-   "nothing stores a local time". The form takes a date and presets ("30 days",
-   "12 weeks", "end of this quarter"), and the service turns it into a period
-   end. Say in the spec what happens if the user's zone changes later: the
-   instant stays fixed. Test it.
-2. **Finished and archived are separate states — recommend yes.** A finished
-   goal can't be archived; an archived goal can still have an end. If its end
-   passes while it is archived, it finishes when restored, or at once? Decide,
-   and test it.
-3. **Extending — recommend allowed.** Moving the end later brings a finished goal
-   back. The periods between the old end and now are **missed**, not dormant.
-   Its time away is part of the record, as it would be for any goal left alone.
-   Shortening the end can't put it before the current period.
-4. **Nesting — recommend: ending a parent asks about its children.**
-   - A finished child stops feeding its parent from the period after its end.
-     The parent's past counts stand.
-   - Ending a parent offers to end its children on the same date. Children that
-     carry on are detached (`parent_id` set to null, as when the parent is
-     deleted), so no live goal hangs off a finished one.
-   - `$domain/nesting` and `$domain/universe` must never see a finished goal as
-     a parent.
-5. **Where finished goals live.** Either a "Finished" section on
-   `/goals/archived` (renamed to something like "Hangar") or its own route.
-   Recommend the shared page with two sections: the mental model is "goals that
-   aren't flying".
-6. **Stats.** A finished goal's orbits count in `/stats` for the periods it flew,
-   and completion rates don't count the periods after its end.
-7. **Export and import.** `endsAt` goes in the goal bundle, defaulting to null
-   for existing bundles.
+1. **The end instant is stored.** `goals.ends_at`, nullable, UTC ms: the
+   exclusive `end` of the last period the goal flies, computed by
+   `endInstant()` when the goal is saved, from a last day read in the user's
+   zone. The form offers "after 30 days", "after 12 weeks", "at the end of this
+   quarter" and "on a date"; every one of them becomes a last day and then a
+   period end, so a weekly goal ending on a Wednesday flies that whole week. If
+   the user's zone changes later the instant stays put: the goal finishes at the
+   same moment, and its last orbit is whichever period in the new zone holds the
+   instant before it. `ending.test.ts` pins both, across a DST transition.
+2. **Finished is its own state, and it is time, not an action.** `goalStatus()`
+   reads `ends_at <= now` as finished before it reads `archived_at`, so a goal
+   whose end passes while it is archived **finishes at once** — no job has to
+   notice, and the hangar never offers to restore a goal that could not fly. A
+   finished goal cannot be archived. An archived goal can still be given an end.
+3. **Extending is allowed and brings the goal back.** Moving the end past now
+   makes it fly again; the periods between the old end and now are ordinary
+   periods with nothing in them — missed, not dormant. Extending a goal that
+   finished while archived also restores it, closing its archive window at the
+   old end so the gap still reads as missed. A new end can't land before the
+   current period ends; leaving a finished goal's end alone is always allowed.
+4. **Nesting: ending a parent asks about its children.** A finished child's
+   entries and closures stop at its end, so it stops feeding from the period
+   after; the parent's past counts stand. Saving an end on a parent asks
+   whether its children end with it (each on the end of its own period that
+   holds the parent's last instant) or carry on, detached as on delete. A
+   detached child's closures leave the parent's record with it, which the form
+   says. At write time a goal can't feed a parent it would outlive
+   (`parentProblem` → `ends`, read by `outlives()` from where the child's last
+   period starts, so a child ended with its parent never trips it). The picker
+   never offers a finished goal, except the parent a goal already has — so
+   correcting a finished child's title doesn't detach it — and `universeTree`
+   drops finished snapshots before it builds anything. Neither ever sees a
+   finished goal as the parent of something flying.
+5. **They share `/goals/archived`, renamed the Hangar.** Two sections,
+   Finished then Archived: the mental model is "goals that aren't flying". The
+   route keeps its path so nothing that links to it breaks.
+6. **Stats count what was flown.** `loadStatsInputs()` includes finished goals,
+   each snapshotted at its last instant with history sized to the periods it
+   flew, so completion never counts a period after the end. A finished goal's
+   last orbit is settled: it is over, so it gets no in-flight benefit of the
+   doubt. Momentum and the logging rhythm stay live goals only — they are
+   about the pace now.
+7. **`endsAt` travels in the bundle.** `goalBundleSchema.endsAt` is nullable
+   and defaults to null, so a bundle exported before this imports unchanged;
+   the schema version stays 1. The zone doesn't travel, so an import can't
+   run `outlives()`; it detaches the one case that needs no zone — a child
+   with no end under a parent with one — as the app would have when that
+   parent's end was saved.
+
+**The moment** reuses #9 whole. A last orbit that closes raises the ordinary
+celebration with `final` set, and the copy says it was the last one. A finished
+goal's page shows its final record in a closing card and, the first time this
+browser sees it finished, raises the same burst on its dial.
 
 ## Not in scope
 

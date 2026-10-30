@@ -1,13 +1,16 @@
+import { isFinished, outlives } from './ending';
 import { periodFor, recentPeriods, type Period, type PeriodOptions } from './period';
 import {
 	buildOrbit,
+	flightAnchor,
 	isDormant,
 	snapshotGoal,
 	streakFrom,
 	type ChildStanding,
 	type DormantWindow,
 	type GoalSnapshot,
-	type SnapshotOptions
+	type SnapshotOptions,
+	withinFlight
 } from './progress';
 import { cadenceOf, isLongerCadence, type Tier } from './tiers';
 import type { Goal, MetricDefinition, ProgressEntry } from './types';
@@ -130,14 +133,18 @@ function periodTotals(node: ChildInput, options: PeriodOptions): Map<string, Per
 	};
 
 	if (node.children && node.children.length > 0) {
+		const endsAt = node.goal.endsAt?.getTime() ?? Infinity;
 		for (const child of node.children) {
 			// One per closed child period however far past its target it went.
 			for (const closed of closedPeriods(child, options)) {
-				add(parentPeriodFor(closed, cadence, options), 1);
+				const period = parentPeriodFor(closed, cadence, options);
+				// A parent's record stops at its own end, whatever its children do after.
+				if (period.start.getTime() < endsAt) add(period, 1);
 			}
 		}
 	} else {
-		for (const entry of node.entries) {
+		// A finished child's entries stop at its end, so it feeds nothing after it.
+		for (const entry of withinFlight(node.goal, node.entries)) {
 			add(periodFor(entry.occurredAt, cadence, options), entry.amount);
 		}
 	}
@@ -166,16 +173,22 @@ export function closedPeriods(node: ChildInput, options: PeriodOptions): Period[
 /**
  * How many of this child's orbits closed in each of the parent's periods, keyed
  * by the parent period's key. The map counts periods, never amounts.
+ *
+ * `parentEndsAt` is the parent's own end, when it has one: a period after it is
+ * one the parent never flew, so nothing is filed there.
  */
 export function closuresByParentPeriod(
 	child: ChildInput,
 	parentCadence: Period['cadence'],
-	options: PeriodOptions
+	options: PeriodOptions,
+	parentEndsAt = Infinity
 ): Map<string, number> {
 	const counts = new Map<string, number>();
 	for (const period of closedPeriods(child, options)) {
-		const { key } = parentPeriodFor(period, parentCadence, options);
-		counts.set(key, (counts.get(key) ?? 0) + 1);
+		const parentPeriod = parentPeriodFor(period, parentCadence, options);
+		// Nothing counts toward a period the parent never flew.
+		if (parentPeriod.start.getTime() >= parentEndsAt) continue;
+		counts.set(parentPeriod.key, (counts.get(parentPeriod.key) ?? 0) + 1);
 	}
 	return counts;
 }
@@ -199,14 +212,16 @@ export function snapshotDerivedGoal(
 	/** Closures per parent period, and the same again per child for the dial. */
 	const total = new Map<string, number>();
 	const perChild = new Map<string, Map<string, number>>();
+	const endsAt = parent.endsAt?.getTime() ?? Infinity;
 
 	for (const child of children) {
-		const counts = closuresByParentPeriod(child, cadence, periodOptions);
+		const counts = closuresByParentPeriod(child, cadence, periodOptions, endsAt);
 		perChild.set(child.goal.id, counts);
 		for (const [key, count] of counts) total.set(key, (total.get(key) ?? 0) + count);
 	}
 
-	const history = recentPeriods(now, cadence, historyLength, periodOptions).map((period) =>
+	const { anchor, settled } = flightAnchor(parent, now);
+	const history = recentPeriods(anchor, cadence, historyLength, periodOptions).map((period) =>
 		buildOrbit(period, total.get(period.key) ?? 0, parent.target, isDormant(period, dormantWindows))
 	);
 
@@ -223,12 +238,12 @@ export function snapshotDerivedGoal(
 		goal: parent,
 		current: history[0],
 		history,
-		streak: streakFrom(history),
+		streak: streakFrom(history, settled),
 		totalOrbits,
 		lifetimeLogged,
 		derived: {
 			children: children.map((child) =>
-				standingFor(child, perChild.get(child.goal.id)?.get(currentKey) ?? 0, now, periodOptions)
+				standingFor(child, perChild.get(child.goal.id)?.get(currentKey) ?? 0, anchor, periodOptions)
 			)
 		}
 	};
@@ -281,17 +296,19 @@ export function snapshotWithChildren(
 /** Enough of a goal to judge whether it can be somebody's parent. */
 export type ParentCandidate = Pick<Goal, 'id' | 'title' | 'tier' | 'parentId'> & {
 	archivedAt?: Date | null;
+	endsAt?: Date | null;
 };
 
 /** Why a parent cannot be used. */
-export type ParentProblem = 'unknown' | 'self' | 'cadence' | 'cycle';
+export type ParentProblem = 'unknown' | 'self' | 'cadence' | 'cycle' | 'ends';
 
 export const PARENT_PROBLEM_MESSAGE: Record<ParentProblem, string> = {
 	unknown: 'That goal is not one of yours.',
 	self: 'A goal cannot orbit itself.',
 	cadence:
 		'A goal can only feed one with a longer cadence — a weekly Planet into a monthly Star System, never the other way round.',
-	cycle: 'That would close a loop: the goal you picked already feeds this one.'
+	cycle: 'That would close a loop: the goal you picked already feeds this one.',
+	ends: 'That goal ends before this one does, so this one would be left feeding nothing. End this one with it, or pick another.'
 };
 
 /**
@@ -303,11 +320,19 @@ export const PARENT_PROBLEM_MESSAGE: Record<ParentProblem, string> = {
  * somebody else is not a thing to discover while rendering: pass only the
  * caller's own goals and `unknown` covers both a goal that does not exist and
  * one that is not theirs, without the difference leaking.
+ *
+ * Pass the pilot's period options and a parent with an end is refused for a
+ * child that would outlive it (see `outlives()` in `$domain/ending`), so no
+ * live goal is ever left hanging off a finished one. That is a fact about the
+ * two ends, not about today, so a finished child keeps the finished parent it
+ * fed — the edge is part of both records. The form's picker calls this without
+ * options, because the child's end is not worked out until the server has it.
  */
 export function parentProblem(
-	child: { id?: string | null; tier: Tier },
+	child: { id?: string | null; tier: Tier; endsAt?: Date | null },
 	parentId: string | null | undefined,
-	goals: readonly ParentCandidate[]
+	goals: readonly ParentCandidate[],
+	options?: PeriodOptions
 ): ParentProblem | null {
 	if (!parentId) return null;
 	if (child.id && parentId === child.id) return 'self';
@@ -316,6 +341,7 @@ export function parentProblem(
 	const parent = byId.get(parentId);
 	if (!parent) return 'unknown';
 	if (!isLongerCadence(cadenceOf(parent.tier), cadenceOf(child.tier))) return 'cadence';
+	if (options && outlives(child, parent, options)) return 'ends';
 
 	// Walk up from the proposed parent. Reaching this goal means the edge would
 	// close a loop; `seen` guards the walk itself against data that already has
@@ -357,16 +383,32 @@ export function tierProblem(
 export const TIER_PROBLEM_MESSAGE =
 	'Another goal already feeds this one, and a goal has to keep a longer cadence than everything feeding it. Move the children first.';
 
+function finishedAt(goal: { endsAt?: Date | null }, now: Date): boolean {
+	return isFinished({ endsAt: goal.endsAt ?? null }, now);
+}
+
 /**
  * The goals this one could be given as a parent, in the order they were handed
  * over. An archived goal is left out — parking a goal is not the moment to
  * start feeding it — though a goal already parked keeps whatever parent it has.
+ *
+ * A finished goal is left out too, with one exception: the parent this goal
+ * already has. Correcting a finished child's title must not quietly detach it
+ * from the finished parent its orbits were counted toward; trying to fly it
+ * again under that parent is refused by `parentProblem` when it is saved.
+ * `nesting.test.ts` holds this to never offering a finished goal otherwise.
  */
 export function eligibleParents(
-	child: { id?: string | null; tier: Tier },
-	goals: readonly ParentCandidate[]
+	child: { id?: string | null; tier: Tier; parentId?: string | null },
+	goals: readonly ParentCandidate[],
+	now: Date = new Date()
 ): ParentCandidate[] {
-	return goals.filter((goal) => !goal.archivedAt && parentProblem(child, goal.id, goals) === null);
+	return goals.filter(
+		(goal) =>
+			!goal.archivedAt &&
+			(goal.id === child.parentId || !finishedAt(goal, now)) &&
+			parentProblem(child, goal.id, goals) === null
+	);
 }
 
 /** The direct children of `goalId` among goals already loaded. */

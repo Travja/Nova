@@ -83,3 +83,22 @@ export function celebrationShape(tier: Tier): CelebrationShape {
 export function rayAngles(count: number): number[] {
 	return Array.from({ length: count }, (_, index) => (index * 360) / count);
 }
+
+/** How many landings a browser remembers having shown. Old ones fall off the front. */
+export const LANDINGS_REMEMBERED = 200;
+
+/**
+ * Whether a finished goal's landing is still to be shown in this browser (#67).
+ *
+ * A goal finishes when its end passes, which nobody is watching, so the moment
+ * belongs to the first time it is next seen finished rather than to an instant
+ * in the past. `seen` is the ids this browser has already landed.
+ */
+export function isFreshLanding(seen: readonly string[], goalId: string): boolean {
+	return !seen.includes(goalId);
+}
+
+/** `seen` with `goalId` added, newest last and capped, so the list cannot grow with an account. */
+export function rememberLanding(seen: readonly string[], goalId: string): string[] {
+	return [...seen.filter((id) => id !== goalId), goalId].slice(-LANDINGS_REMEMBERED);
+}

@@ -1,3 +1,4 @@
+import { isFinished, lastInstant } from './ending';
 import { periodFor, recentPeriods, type Period, type PeriodOptions } from './period';
 import { cadenceOf, type Tier } from './tiers';
 import type { Goal, MetricDefinition, ProgressEntry } from './types';
@@ -143,9 +144,10 @@ export function snapshotGoal(
 ): GoalSnapshot {
 	const { historyLength = 12, now = new Date(), dormantWindows = [], ...periodOptions } = options;
 	const cadence = cadenceOf(goal.tier);
-	const totals = bucketByPeriod(entries, cadence, periodOptions);
+	const totals = bucketByPeriod(withinFlight(goal, entries), cadence, periodOptions);
+	const { anchor, settled } = flightAnchor(goal, now);
 
-	const history = recentPeriods(now, cadence, historyLength, periodOptions).map((period) =>
+	const history = recentPeriods(anchor, cadence, historyLength, periodOptions).map((period) =>
 		buildOrbit(period, totals.get(period.key) ?? 0, goal.target, isDormant(period, dormantWindows))
 	);
 
@@ -160,10 +162,41 @@ export function snapshotGoal(
 		goal,
 		current: history[0],
 		history,
-		streak: streakFrom(history),
+		streak: streakFrom(history, settled),
 		totalOrbits,
 		lifetimeLogged
 	};
+}
+
+/**
+ * Where a goal's history is read back from, and whether its last orbit is over.
+ *
+ * A finished goal is read from its last instant, so its history is the periods
+ * it flew and its newest orbit is its final one — and that orbit is settled: it
+ * is not in flight, so it gets none of the benefit of the doubt `streakFrom`
+ * gives an open period.
+ */
+export function flightAnchor(
+	goal: Pick<Goal, 'endsAt'>,
+	now: Date
+): { anchor: Date; settled: boolean } {
+	if (goal.endsAt && isFinished(goal, now)) {
+		return { anchor: lastInstant(goal.endsAt), settled: true };
+	}
+	return { anchor: now, settled: false };
+}
+
+/**
+ * Entries inside a goal's flight. Logging is refused once a goal finishes, so
+ * this only ever drops something an import brought in — but a record that an
+ * odd file could stretch past its own end is not a final one.
+ */
+export function withinFlight<T extends EntryLike>(
+	goal: Pick<Goal, 'endsAt'>,
+	entries: readonly T[]
+): readonly T[] {
+	const endsAt = goal.endsAt?.getTime();
+	return endsAt === undefined ? entries : entries.filter((e) => e.occurredAt.getTime() < endsAt);
 }
 
 /**
@@ -173,10 +206,14 @@ export function snapshotGoal(
  * is still open — you have not missed this week until the week is over. Orbits
  * the goal spent archived are stepped over entirely, so the newest orbit the
  * goal was actually flying gets that same benefit of the doubt.
+ *
+ * Pass `settled` for a finished goal, whose newest orbit is over rather than in
+ * flight: it counts if it closed and ends the streak if it did not.
  */
-export function streakFrom(history: readonly Orbit[]): number {
+export function streakFrom(history: readonly Orbit[], settled = false): number {
 	let streak = 0;
-	let sawLiveOrbit = false;
+	// A settled history has no orbit in flight to excuse — see `flightAnchor`.
+	let sawLiveOrbit = settled;
 	for (const orbit of history) {
 		if (orbit.dormant) continue;
 		if (orbit.complete) {
