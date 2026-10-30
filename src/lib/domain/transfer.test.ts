@@ -56,6 +56,7 @@ function goal(patch: Partial<Bundle['goals'][number]> = {}): Bundle['goals'][num
 		sortOrder: 0,
 		createdAt: T0 - 100 * DAY,
 		archivedAt: null,
+		endsAt: null,
 		parentId: null,
 		...patch
 	};
@@ -145,6 +146,7 @@ describe('the exported shape', () => {
 			'sortOrder',
 			'createdAt',
 			'archivedAt',
+			'endsAt',
 			'parentId'
 		],
 		goalArchiveWindows: ['id', 'goalId', 'archivedAt', 'restoredAt'],
@@ -807,5 +809,62 @@ describe('a file that repeats itself', () => {
 			bundle({ goals: [goal()], orbitNotes: [note, { ...note, id: 'note-2', body: 'two' }] })
 		);
 		expect(applied.orbitNotes).toHaveLength(1);
+	});
+});
+
+/* -------------------------------------------------------------------------- */
+/* Goals that end (#67)                                                        */
+/* -------------------------------------------------------------------------- */
+
+describe('a goal that ends', () => {
+	it('carries its end through the file and into the plan', () => {
+		const endsAt = T0 + 30 * DAY;
+		const read = readBundle(JSON.stringify(bundle({ goals: [goal({ endsAt })] })));
+		expect(read.ok).toBe(true);
+		if (!read.ok) return;
+		expect(read.bundle.goals[0].endsAt).toBe(endsAt);
+		expect(plan(read.bundle).goals[0].endsAt).toEqual(new Date(endsAt));
+	});
+
+	it('still imports a bundle exported before goals could end', () => {
+		// The key is missing entirely, not null — that is what an old file holds.
+		const { endsAt: _dropped, ...old } = goal();
+		void _dropped;
+		const read = readBundle(JSON.stringify({ ...bundle(), goals: [old] }));
+		expect(read.ok).toBe(true);
+		if (!read.ok) return;
+		expect(read.bundle.goals[0].endsAt).toBeNull();
+		expect(plan(read.bundle).goals[0].endsAt).toBeNull();
+	});
+
+	it('refuses an end that is not an instant', () => {
+		const read = readBundle(JSON.stringify(bundle({ goals: [goal({ endsAt: 1.5 })] })));
+		expect(read.ok).toBe(false);
+	});
+
+	it('detaches a child with no end from a parent that has one', () => {
+		const applied = plan(
+			bundle({
+				goals: [
+					goal({ id: 'child', tier: 'planet', parentId: 'parent' }),
+					goal({ id: 'parent', tier: 'starSystem', endsAt: T0 })
+				]
+			})
+		);
+		const child = applied.goals.find((row) => row.id === 'new-goals-child');
+		expect(child?.parentId).toBeNull();
+	});
+
+	it('keeps a child that ended with its parent attached', () => {
+		const applied = plan(
+			bundle({
+				goals: [
+					goal({ id: 'child', tier: 'planet', parentId: 'parent', endsAt: T0 }),
+					goal({ id: 'parent', tier: 'starSystem', endsAt: T0 })
+				]
+			})
+		);
+		const child = applied.goals.find((row) => row.id === 'new-goals-child');
+		expect(child?.parentId).toBe('new-goals-parent');
 	});
 });

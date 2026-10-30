@@ -2,9 +2,12 @@ import {
 	SWEEP_MS,
 	celebrationShape,
 	isFreshClosing,
+	isFreshLanding,
+	rememberLanding,
 	type CelebrationShape,
 	type OrbitMark
 } from '$domain/celebration';
+import { isFinalPeriod } from '$domain/ending';
 import type { GoalSnapshot } from '$domain/progress';
 import type { Tier } from '$domain/tiers';
 
@@ -27,6 +30,11 @@ export interface Celebration {
 	title: string;
 	tier: Tier;
 	shape: CelebrationShape;
+	/**
+	 * The goal's last orbit, or the goal itself landing (#67). The burst is the
+	 * same one — the copy around it is what says this was the end.
+	 */
+	final: boolean;
 	/** Tells one closing from the next, so a repeat restarts the animation. */
 	stamp: number;
 }
@@ -87,6 +95,7 @@ export function noteOrbits(snapshots: readonly GoalSnapshot[]): void {
 			title: snapshot.goal.title,
 			tier: snapshot.goal.tier,
 			shape,
+			final: isFinalPeriod(snapshot.goal, snapshot.current.period),
 			stamp: stamps
 		};
 
@@ -138,4 +147,49 @@ export function justClosed(snapshot: GoalSnapshot): boolean {
 		dormant: snapshot.current.dormant
 	};
 	return isFreshClosing(seen[snapshot.goal.id], mark);
+}
+
+/** Where this browser keeps the goals it has already shown landing. */
+const LANDINGS_KEY = 'nova:landings';
+
+function readLandings(): string[] {
+	try {
+		const parsed: unknown = JSON.parse(localStorage.getItem(LANDINGS_KEY) ?? '[]');
+		return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Mark a finished goal as seen, and raise its landing if this browser has not
+ * shown it yet.
+ *
+ * The same celebration a closing raises, at the size of the goal's own tier, so
+ * the dial's burst plays for it — #9's shapes, no second animation. There is no
+ * sweep to wait out: a finished goal's dial is drawn where it stopped. Storage
+ * that refuses (a private window) means the landing is shown again next time,
+ * which is the better way to be wrong.
+ */
+export function noteLanding(snapshot: GoalSnapshot): void {
+	const seen = readLandings();
+	if (!isFreshLanding(seen, snapshot.goal.id)) return;
+	try {
+		localStorage.setItem(LANDINGS_KEY, JSON.stringify(rememberLanding(seen, snapshot.goal.id)));
+	} catch {
+		// Nothing to fall back to; see above.
+	}
+
+	clearTimeout(arriving);
+	clearTimeout(clearing);
+	stamps += 1;
+	heldGoalId = snapshot.goal.id;
+	raise({
+		goalId: snapshot.goal.id,
+		title: snapshot.goal.title,
+		tier: snapshot.goal.tier,
+		shape: celebrationShape(snapshot.goal.tier),
+		final: true,
+		stamp: stamps
+	});
 }

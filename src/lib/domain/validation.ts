@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { END_CHOICES } from './ending';
 import { DEFAULT_COLOR, isPaletteColor } from './palette';
 import { parseLocalDateTime, periodFor, periodLabel, type PeriodOptions } from './period';
 import { maskFromFlyingDays } from './schedule';
@@ -74,7 +75,18 @@ export const goalSchema = z
 		 * `goalFormInput`. Absent means the form did not offer the choice, which
 		 * leaves a schedule as it was rather than resetting it.
 		 */
-		flyingDays: z.array(z.coerce.number().int().min(0).max(6)).optional()
+		flyingDays: z.array(z.coerce.number().int().min(0).max(6)).optional(),
+		/*
+		 * When the goal ends, as the form said it — never the instant itself. The
+		 * instant depends on the pilot's zone and on what is in flight now, so
+		 * `resolveEnd()` in `$domain/ending` turns this into one where both are
+		 * known. Left out, a goal never ends, which is every goal from before #67.
+		 */
+		ends: z.enum(END_CHOICES).default(''),
+		/** The last day, from a date field, when `ends` is `date`. */
+		endsOn: z.string().trim().max(10).optional(),
+		/** What a parent being given an end does with its children: end them too, or let them go. */
+		childEnding: z.enum(['end', 'detach']).default('end')
 	})
 	.superRefine((value, ctx) => {
 		if (value.tier === 'satellite' && value.flyingDays && value.flyingDays.length === 0) {

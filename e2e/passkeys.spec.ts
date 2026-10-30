@@ -23,6 +23,21 @@ async function register(page: Page, email: string) {
 }
 
 async function virtualAuthenticator(page: Page) {
+	/*
+	 * This journey signs in with the button. The login page also offers passkeys
+	 * from the email field's autofill (conditional mediation), and the virtual
+	 * authenticator answers that request by itself — something no real browser
+	 * does without the pilot picking a passkey — so left on, the autofill ceremony
+	 * races the click: it can sign in and navigate away while Playwright is still
+	 * clicking a button that is being torn down. Reporting no autofill support
+	 * leaves the button as the only way in, which is the thing being tested.
+	 */
+	await page.addInitScript(() => {
+		if (typeof PublicKeyCredential !== 'undefined') {
+			PublicKeyCredential.isConditionalMediationAvailable = async () => false;
+		}
+	});
+
 	const cdp = await page.context().newCDPSession(page);
 	await cdp.send('WebAuthn.enable');
 	const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {

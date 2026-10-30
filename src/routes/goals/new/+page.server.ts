@@ -47,9 +47,10 @@ export const actions: Actions = {
 		const id = url.searchParams.get(ASTEROID);
 		// `captureAsteroid` delegates to `createGoal`, so the nesting and tier
 		// rules are checked once, in the one place that knows them.
+		const options = { timeZone: locals.user.timeZone, weekStartsOn: locals.user.weekStartsOn };
 		const created = id
-			? await captureAsteroid(locals.user.id, id, parsed.data)
-			: await createGoal(locals.user.id, parsed.data);
+			? await captureAsteroid(locals.user.id, id, parsed.data, options)
+			: await createGoal(locals.user.id, parsed.data, options);
 		if (!created.ok) return fail(400, { errors: goalWriteErrors(created) });
 
 		redirect(303, `/goals/${created.goal.id}`);

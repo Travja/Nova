@@ -42,7 +42,10 @@ export const actions: Actions = {
 		const parsed = goalSchema.safeParse(goalFormInput(form));
 		if (!parsed.success) return fail(400, { errors: fieldErrors(parsed.error) });
 
-		const updated = await updateGoal(locals.user.id, params.id, parsed.data);
+		const updated = await updateGoal(locals.user.id, params.id, parsed.data, {
+			timeZone: locals.user.timeZone,
+			weekStartsOn: locals.user.weekStartsOn
+		});
 		if (!updated.ok) {
 			if (updated.missing) error(404, 'That goal is not in orbit.');
 			return fail(400, { errors: goalWriteErrors(updated) });

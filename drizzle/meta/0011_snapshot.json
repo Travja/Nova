@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "22ebb4ed-6235-4837-92a6-dab7d74ff045",
+  "id": "44646f13-faf8-4d8c-b239-2399190dd353",
   "prevId": "d683910d-e17a-4f8c-9cd8-e04e664d4f82",
   "tables": {
     "asteroids": {
@@ -269,66 +269,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "goal_schedules": {
-      "name": "goal_schedules",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "goal_id": {
-          "name": "goal_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rest_days": {
-          "name": "rest_days",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "from_at": {
-          "name": "from_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "goal_schedules_goal_idx": {
-          "name": "goal_schedules_goal_idx",
-          "columns": [
-            "goal_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "goal_schedules_goal_id_goals_id_fk": {
-          "name": "goal_schedules_goal_id_goals_id_fk",
-          "tableFrom": "goal_schedules",
-          "tableTo": "goals",
-          "columnsFrom": [
-            "goal_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "goals": {
       "name": "goals",
       "columns": {
@@ -413,6 +353,13 @@
         },
         "archived_at": {
           "name": "archived_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ends_at": {
+          "name": "ends_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

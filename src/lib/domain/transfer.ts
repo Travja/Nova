@@ -136,6 +136,9 @@ export const goalBundleSchema = z.object({
 	sortOrder: z.number().int().min(-1_000_000).max(1_000_000),
 	createdAt: epochMs,
 	archivedAt: nullableEpochMs,
+	// Added with #67. A file exported before it has no key at all, and a goal in
+	// it never ends — which is what every goal was then — so it still imports.
+	endsAt: nullableEpochMs.default(null),
 	parentId: rowId.nullable()
 });
 
@@ -472,6 +475,7 @@ export interface PlannedGoal {
 	sortOrder: number;
 	createdAt: Date;
 	archivedAt: Date | null;
+	endsAt: Date | null;
 	parentId: string | null;
 }
 
@@ -606,6 +610,8 @@ export function planImport(
 	/** Every goal in the file, old id to the id it will be written under. */
 	const goalIds = new Map<string, string>();
 	for (const goal of bundle.goals) goalIds.set(goal.id, mintId('goals', goal.id));
+	/** Each goal's end, by its id in the file. Absent for a parent not in it. */
+	const endsOf = new Map(bundle.goals.map((goal) => [goal.id, goal.endsAt]));
 
 	const goals: PlannedGoal[] = bundle.goals.map((goal) => ({
 		id: goalIds.get(goal.id) as string,
@@ -619,9 +625,17 @@ export function planImport(
 		sortOrder: goal.sortOrder + sortOrderOffset,
 		createdAt: new Date(goal.createdAt),
 		archivedAt: goal.archivedAt === null ? null : new Date(goal.archivedAt),
+		endsAt: goal.endsAt === null ? null : new Date(goal.endsAt),
 		// A parent that is not in the file is dropped rather than invented,
-		// exactly as `$domain/nesting` tolerates a goal that stands alone.
-		parentId: goal.parentId === null ? null : (goalIds.get(goal.parentId) ?? null)
+		// exactly as `$domain/nesting` tolerates a goal that stands alone. So is
+		// a parent with an end over a child with none: that child would be left
+		// flying under a finished goal, and the app detaches a child in exactly
+		// that position when its parent's end is saved.
+		parentId:
+			goal.parentId === null ||
+			(goal.endsAt === null && (endsOf.get(goal.parentId) ?? null) !== null)
+				? null
+				: (goalIds.get(goal.parentId) ?? null)
 	}));
 
 	// Same user, strictly longer cadence, acyclic. None of the three is a thing
@@ -634,7 +648,8 @@ export function planImport(
 		title: goal.title,
 		tier: goal.tier,
 		parentId: goal.parentId,
-		archivedAt: goal.archivedAt
+		archivedAt: goal.archivedAt,
+		endsAt: goal.endsAt
 	}));
 	for (const [index, goal] of goals.entries()) {
 		const problem = parentProblem(goal, goal.parentId, candidates);

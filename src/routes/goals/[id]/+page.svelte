@@ -6,7 +6,8 @@
 	import FieldError from '$components/FieldError.svelte';
 	import OrbitDial from '$components/OrbitDial.svelte';
 	import OrbitHistory from '$components/OrbitHistory.svelte';
-	import { celebrationFor, noteOrbits } from '$lib/celebration.svelte';
+	import { celebrationFor, noteLanding, noteOrbits } from '$lib/celebration.svelte';
+	import { isFinalPeriod, lastInstant } from '$domain/ending';
 	import { toLocalDateTime } from '$domain/period';
 	import { formatAmount, quickLogSteps } from '$domain/progress';
 	import { metricFor } from '$domain/nesting';
@@ -34,7 +35,25 @@
 	);
 	const goal = $derived(snapshot.goal);
 	const current = $derived(snapshot.current);
-	const archived = $derived(goal.archivedAt !== null);
+	/** Set once the goal has finished (#67): what it has to show for its flight. */
+	const record = $derived(data.record);
+	const finished = $derived(record !== null);
+	const archived = $derived(!finished && goal.archivedAt !== null);
+	/** Nothing is logged or edited on a goal that is parked or has landed. */
+	const grounded = $derived(archived || finished);
+	/** The orbit in flight is this goal's last one. */
+	const finalOrbit = $derived(!finished && isFinalPeriod(goal, current.period));
+	const lastDay = $derived(
+		goal.endsAt
+			? new Intl.DateTimeFormat('en-GB', {
+					timeZone: data.timeZone,
+					weekday: 'short',
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric'
+				}).format(lastInstant(goal.endsAt))
+			: ''
+	);
 	const tierDef = $derived(TIER_DEFINITIONS[goal.tier]);
 	/**
 	 * A goal with children counts closed child orbits, so every amount on this
@@ -82,7 +101,12 @@
 	 * comparing what the browser saw last. Effects do not run on the server, so a
 	 * closed orbit that arrives in the first render is history, not a moment.
 	 */
-	$effect(() => noteOrbits([snapshot]));
+	$effect(() => {
+		// A finished goal's moment is its landing, the first time this browser
+		// sees it finished; its orbits are history, not something to close.
+		if (finished) noteLanding(snapshot);
+		else noteOrbits([snapshot]);
+	});
 	const closing = $derived(celebrationFor(goal.id) !== null);
 
 	/**
@@ -152,6 +176,8 @@
 		<div class="hero__copy">
 			<p class="tier-tag" style="color: {tierDef.accent}">
 				{tierDef.label} · one orbit per {current.period.cadence}{nested ? ' · derived' : ''}
+				{#if goal.endsAt}<span class="muted">· {finished ? 'landed' : 'last day'} {lastDay}</span
+					>{/if}
 			</p>
 			<h1>{goal.title}</h1>
 			{#if goal.description}<p class="muted">{goal.description}</p>{/if}
@@ -167,7 +193,9 @@
 			{/if}
 
 			<p class="status">
-				{#if archived}
+				{#if finished}
+					Finished — this was its final orbit.
+				{:else if archived}
 					Archived — this is the orbit it stopped on.
 				{:else if current.dormant && current.rest}
 					Rest day — nothing is owed today. Anything you log still counts.
@@ -179,25 +207,48 @@
 				{:else}
 					{formatAmount(current.remaining, metric)} to go {CADENCE_LABEL[current.period.cadence]}.
 				{/if}
+				{#if finalOrbit}This is the last orbit it flies.{/if}
 			</p>
 
-			<dl class="stats">
-				<div>
-					<dt>{archived ? 'Streak when archived' : 'Streak'}</dt>
-					<dd class:dd--ticked={closing}>{snapshot.streak}</dd>
-				</div>
-				<div>
-					<dt>Orbits closed</dt>
-					<dd>{snapshot.totalOrbits}</dd>
-				</div>
-				<div>
-					<dt>{nested ? 'Orbits fed in' : 'Lifetime'}</dt>
-					<dd>{formatAmount(snapshot.lifetimeLogged, metric)}</dd>
-				</div>
-			</dl>
+			{#if record}
+				<dl class="stats">
+					<div>
+						<dt>Orbits closed</dt>
+						<dd>{record.closed} of {record.flown}</dd>
+					</div>
+					<div>
+						<dt>Best streak</dt>
+						<dd>{record.best}</dd>
+					</div>
+					<div>
+						<dt>Ended on</dt>
+						<dd>{record.endedOn}</dd>
+					</div>
+				</dl>
+			{:else}
+				<dl class="stats">
+					<div>
+						<dt>{archived ? 'Streak when archived' : 'Streak'}</dt>
+						<dd class:dd--ticked={closing}>{snapshot.streak}</dd>
+					</div>
+					<div>
+						<dt>Orbits closed</dt>
+						<dd>{snapshot.totalOrbits}</dd>
+					</div>
+					<div>
+						<dt>{nested ? 'Orbits fed in' : 'Lifetime'}</dt>
+						<dd>{formatAmount(snapshot.lifetimeLogged, metric)}</dd>
+					</div>
+				</dl>
+			{/if}
 
 			<div class="hero__actions">
-				{#if archived}
+				{#if finished}
+					<a class="button button--ghost" href={resolve('/goals/[id]/edit', { id: goal.id })}
+						>Extend</a
+					>
+					<a class="button button--ghost" href={resolve('/goals/archived')}>The hangar</a>
+				{:else if archived}
 					<form method="POST" action="?/archive" use:enhance>
 						<input type="hidden" name="archived" value="false" />
 						<button class="button" type="submit">Restore to orbit</button>
@@ -213,7 +264,23 @@
 		</div>
 	</header>
 
-	{#if archived}
+	{#if record}
+		<section class="notice panel landed" aria-labelledby="landed-heading">
+			<h2 id="landed-heading">
+				Landed <span aria-hidden="true">✦</span>
+			</h2>
+			<p>
+				{goal.title} flew {record.flown}
+				{record.flown === 1 ? 'orbit' : 'orbits'} and closed {record.closed} of them. Its best run was
+				{record.best}, and it landed on a streak of {record.endedOn}.
+			</p>
+			<p class="muted">
+				It is off the dashboard, Today and the universe, and nothing more is expected of it. Every
+				entry is still here. Give it a later end to fly it again — the time it spent landed counts
+				as missed.
+			</p>
+		</section>
+	{:else if archived}
 		<p class="notice panel">
 			This goal is parked. It is off the dashboard and no orbit is expected of it, but every entry
 			is still here.
@@ -266,7 +333,7 @@
 				</p>
 			{/if}
 		</section>
-	{:else if !archived}
+	{:else if !grounded}
 		<section class="panel block">
 			<h2>Log progress</h2>
 
@@ -359,7 +426,7 @@
 			<ul class="entries">
 				{#each data.recentEntries as entry (entry.id)}
 					<li class:entries__row--editing={editing === entry.id}>
-						{#if editing === entry.id && !archived && !nested}
+						{#if editing === entry.id && !grounded && !nested}
 							<form class="edit" method="POST" action="?/editEntry&edit={entry.id}" use:enhance>
 								<input type="hidden" name="entryId" value={entry.id} />
 								<div class="field">
@@ -403,7 +470,7 @@
 							<span class="entry__amount">{formatAmount(entry.amount, goal.metric)}</span>
 							<span class="muted entry__when">{dateFormatter.format(entry.occurredAt)}</span>
 							{#if entry.note}<span class="entry__note muted">{entry.note}</span>{/if}
-							{#if !archived && !nested}
+							{#if !grounded && !nested}
 								<span class="entry__actions">
 									<!-- Every row carried the same two names, so a screen reader read a
 									     list of "Edit, Remove, Edit, Remove" with nothing to say which
@@ -493,7 +560,8 @@
 		padding-left: 1.1rem;
 	}
 
-	.confirm h2 {
+	.confirm h2,
+	.landed h2 {
 		font-size: 1.05rem;
 	}
 

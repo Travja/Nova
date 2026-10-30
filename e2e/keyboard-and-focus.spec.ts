@@ -299,8 +299,9 @@ test('the goal form tabs in order, and both hidden radio groups show focus', asy
 	// whichever option is checked. `parentId` is the goal this one feeds (#12);
 	// it sits after the target because picking it is the last thing about what
 	// the goal measures. `metricUnit` is not a stop here: the metric defaults to
-	// time, which posts the unit as a hidden input.
-	const order = ['description', 'tier', 'metricKind', 'target', 'parentId', 'color'];
+	// time, which posts the unit as a hidden input. `ends` (#67) follows it; its
+	// date field only appears once "On a date" is picked.
+	const order = ['description', 'tier', 'metricKind', 'target', 'parentId', 'ends', 'color'];
 	const rings: Record<string, Awaited<ReturnType<typeof focusRing>>> = {};
 
 	for (const field of order) {

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SWEEP_MS, celebrationShape } from '$domain/celebration';
 import type { GoalSnapshot } from '$domain/progress';
-import { celebrationFor, heldGoal, justClosed, noteOrbits } from './celebration.svelte';
+import {
+	celebrationFor,
+	heldGoal,
+	justClosed,
+	noteLanding,
+	noteOrbits
+} from './celebration.svelte';
 
 /**
  * The store keeps one entry per goal for the life of the tab, so every test
@@ -16,10 +22,16 @@ function newGoal(): string {
 const PERIOD = 'day:2026-09-13';
 
 /** Only the handful of fields `noteOrbits` actually reads. */
-function look(id: string, complete: boolean, period = PERIOD): GoalSnapshot {
+function look(
+	id: string,
+	complete: boolean,
+	period = PERIOD,
+	endsAt: Date | null = null
+): GoalSnapshot {
+	const end = new Date('2026-09-14T06:00:00Z');
 	return {
-		goal: { id, title: `Goal ${id}`, tier: 'satellite' },
-		current: { period: { key: period }, complete, dormant: false }
+		goal: { id, title: `Goal ${id}`, tier: 'satellite', endsAt },
+		current: { period: { key: period, end }, complete, dormant: false }
 	} as unknown as GoalSnapshot;
 }
 
@@ -159,5 +171,65 @@ describe('holding a goal through its own celebration (#51)', () => {
 		vi.advanceTimersByTime(SWEEP_MS);
 		expect(celebrationFor(second)).not.toBeNull();
 		expect(heldGoal()).toBe(second);
+	});
+});
+
+describe('a goal that ends (#67)', () => {
+	it('says when the orbit that closed was the last one', () => {
+		const id = newGoal();
+		const endsAt = new Date('2026-09-14T06:00:00Z');
+		noteOrbits([look(id, false, PERIOD, endsAt)]);
+		noteOrbits([look(id, true, PERIOD, endsAt)]);
+		vi.advanceTimersByTime(SWEEP_MS);
+		expect(celebrationFor(id)?.final).toBe(true);
+	});
+
+	it('leaves an ordinary closing ordinary', () => {
+		const id = newGoal();
+		noteOrbits([look(id, false)]);
+		noteOrbits([look(id, true)]);
+		vi.advanceTimersByTime(SWEEP_MS);
+		expect(celebrationFor(id)?.final).toBe(false);
+	});
+
+	describe('landing', () => {
+		const store = new Map<string, string>();
+		beforeEach(() => {
+			store.clear();
+			vi.stubGlobal('localStorage', {
+				getItem: (key: string) => store.get(key) ?? null,
+				setItem: (key: string, value: string) => void store.set(key, value)
+			});
+		});
+		afterEach(() => vi.unstubAllGlobals());
+
+		it('is raised at once the first time a finished goal is seen, and never again', () => {
+			const id = newGoal();
+			const finished = look(id, true, PERIOD, new Date('2026-09-14T06:00:00Z'));
+
+			noteLanding(finished);
+			expect(celebrationFor(id)?.final).toBe(true);
+			expect(celebrationFor(id)?.shape).toEqual(SHAPE);
+
+			vi.advanceTimersByTime(SHAPE.ms + 120);
+			expect(celebrationFor(id)).toBeNull();
+
+			noteLanding(finished);
+			expect(celebrationFor(id)).toBeNull();
+		});
+
+		it('is shown again rather than lost when storage refuses', () => {
+			vi.stubGlobal('localStorage', {
+				getItem: () => {
+					throw new Error('denied');
+				},
+				setItem: () => {
+					throw new Error('denied');
+				}
+			});
+			const id = newGoal();
+			noteLanding(look(id, true));
+			expect(celebrationFor(id)).not.toBeNull();
+		});
 	});
 });
