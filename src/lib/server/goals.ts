@@ -438,6 +438,20 @@ export async function loadReviewInputs(user: SessionUser, now: Date): Promise<Re
 	return { goals: reviewGoals, notes: await notesForUser(user.id), firstLaunch };
 }
 
+/**
+ * When the account launched its first goal, archived and finished ones
+ * included, or null with none at all — which years the review (#68) has.
+ */
+export async function firstLaunch(userId: string): Promise<Date | null> {
+	const [row] = await db
+		.select({ createdAt: goals.createdAt })
+		.from(goals)
+		.where(eq(goals.userId, userId))
+		.orderBy(asc(goals.createdAt))
+		.limit(1);
+	return row?.createdAt ?? null;
+}
+
 export async function getGoal(userId: string, goalId: string): Promise<Goal | null> {
 	const [row] = await db
 		.select()

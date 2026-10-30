@@ -6,6 +6,7 @@ import {
 	daysOfYear,
 	inReviewSeason,
 	isPossible,
+	landedIn,
 	longestFlight,
 	notesInYear,
 	orbitsInYear,
@@ -210,6 +211,23 @@ describe('possible orbits', () => {
 			'day:2026-01-01',
 			'day:2026-02-28'
 		]);
+		// It landed on its last day, in this year and no other.
+		expect(review.goals[0].landed).toEqual(new Date('2026-02-28T23:59:59.999Z'));
+		expect(landedIn(g, 2025, 'UTC', now)).toBeNull();
+		// Not until its end has passed.
+		expect(landedIn(g, 2026, 'UTC', new Date('2026-02-20T12:00:00Z'))).toBeNull();
+	});
+
+	it('lands a goal in the year its last instant falls in, in the user zone', () => {
+		// The last day was 31 December in Denver, already 1 January in UTC.
+		const g = goal({ endsAt: at('America/Denver', 2027, 1, 1, 0) });
+		const now = at('America/Denver', 2027, 1, 10);
+		expect(landedIn(g, 2026, 'America/Denver', now)?.toISOString()).toBe(
+			'2027-01-01T06:59:59.999Z'
+		);
+		expect(landedIn(g, 2027, 'America/Denver', now)).toBeNull();
+		// A goal that never ends never lands.
+		expect(landedIn(goal(), 2026, 'UTC', now)).toBeNull();
 	});
 
 	it('leaves a dormant span out, and a flight carries across it', () => {
@@ -381,5 +399,7 @@ describe('the review season', () => {
 			2026, 2025, 2024
 		]);
 		expect(reviewYears(null, new Date(), 'UTC')).toEqual([]);
+		// Launched in January: last year is the review year, and it had nothing.
+		expect(reviewYears(at('UTC', 2027, 1, 5), at('UTC', 2027, 1, 20), 'UTC')).toEqual([]);
 	});
 });

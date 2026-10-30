@@ -1,9 +1,10 @@
 import { isTier } from '$domain/tiers';
 import { entrySchema, fieldErrors, formError } from '$domain/validation';
 import { mergePreferences } from '$domain/preferences';
-import { inReviewSeason, reviewYearFor } from '$domain/review';
+import { inReviewSeason, reviewYearFor, reviewYears } from '$domain/review';
 import { listAsteroids } from '$lib/server/asteroids';
 import {
+	firstLaunch,
 	listGoalSnapshots,
 	logEntry,
 	moveGoal,
@@ -22,11 +23,22 @@ import type { Actions, PageServerLoad } from './$types';
  */
 const REVIEW_DISMISSED = 'nova_review_dismissed';
 
-/** The year the dashboard invites you to look back on, or null outside the season. */
-function reviewInvite(now: Date, timeZone: string, dismissed: string | undefined): number | null {
+/**
+ * The year the dashboard invites you to look back on, or null outside the
+ * season — and null for an account with nothing in that year to look back on,
+ * such as one whose first goal launched in January.
+ */
+async function reviewInvite(
+	userId: string,
+	now: Date,
+	timeZone: string,
+	dismissed: string | undefined
+): Promise<number | null> {
 	if (!inReviewSeason(now, timeZone)) return null;
 	const year = reviewYearFor(now, timeZone);
-	return dismissed === String(year) ? null : year;
+	if (dismissed === String(year)) return null;
+	const years = reviewYears(await firstLaunch(userId), now, timeZone);
+	return years.includes(year) ? year : null;
 }
 
 export const load: PageServerLoad = async ({ locals, url, cookies }) => {
@@ -44,7 +56,12 @@ export const load: PageServerLoad = async ({ locals, url, cookies }) => {
 		reordering: url.searchParams.get('reorder') === '1',
 		asteroids: universe ? await listAsteroids(locals.user.id) : [],
 		/** The year in review card (#68), from 26 December to 31 January. */
-		review: reviewInvite(locals.now, locals.user.timeZone, cookies.get(REVIEW_DISMISSED)),
+		review: await reviewInvite(
+			locals.user.id,
+			locals.now,
+			locals.user.timeZone,
+			cookies.get(REVIEW_DISMISSED)
+		),
 		/** How far each rock has drifted is measured against the request's one clock. */
 		now: locals.now
 	};

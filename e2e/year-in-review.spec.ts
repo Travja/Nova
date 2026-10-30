@@ -197,3 +197,77 @@ test('outside the season the review is a link on stats, and an empty year says s
 	await expect(page.getByRole('heading', { name: 'Nothing flew in 2019' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'See 2026' })).toBeVisible();
 });
+
+/** A thirty-day challenge in June 2026, flown every day and finished (#67). */
+function seedFinishedChallenge(email: string) {
+	const db = new Database(DB_FILE);
+	try {
+		const { id: userId } = db.prepare('select id from users where email = ?').get(email) as {
+			id: string;
+		};
+		db.prepare('update users set time_zone = ?, week_starts_on = 1 where id = ?').run(
+			'UTC',
+			userId
+		);
+		const goalId = randomUUID();
+		db.prepare(
+			`insert into goals (id, user_id, title, tier, metric_kind, metric_unit, target, color, sort_order, created_at, ends_at)
+			 values (?, ?, 'Thirty-day stretch', 'satellite', 'checkin', '', 1, '#a78bfa', 0, ?, ?)`
+		).run(goalId, userId, utc('2026-06-01'), utc('2026-07-01'));
+		const insertEntry = db.prepare(
+			`insert into entries (id, goal_id, amount, occurred_at, created_at) values (?, ?, 1, ?, ?)`
+		);
+		for (let day = 0; day < 30; day += 1) {
+			const at = utc('2026-06-01') + day * DAY + 7 * 3_600_000;
+			insertEntry.run(randomUUID(), goalId, at, at);
+		}
+	} finally {
+		db.close();
+	}
+}
+
+test('an account whose goals have all finished is still invited to its year', async ({ page }) => {
+	const email = await register(page, 'Annie Cannon');
+	seedFinishedChallenge(email);
+	await pinClock(page, '2026-12-28T12:00');
+
+	// Nothing is flying, so the dashboard is the empty one — with the card beside it.
+	await page.goto('/');
+	await hydrated(page);
+	await expect(page.getByRole('heading', { name: 'Nothing in orbit yet' })).toBeVisible();
+	const card = page.getByRole('complementary', { name: 'Your 2026 in orbit' });
+	await card.getByRole('link', { name: 'Look back on 2026' }).click();
+	await expect(page).toHaveURL(/\/review\/2026$/);
+
+	await expect(page.getByText('30 orbits closed of 30.')).toBeVisible();
+	await expect(
+		page
+			.getByRole('region', { name: 'Goal by goal' })
+			.getByText('Satellite · 30 of 30 closed · best flight 30 · landed 30 June')
+	).toBeVisible();
+});
+
+test('an account with nothing in the review year is not invited to it', async ({ page }) => {
+	const email = await register(page, 'Cecilia Payne');
+	// Its first goal launched on 5 January 2027, so 2026 — the year under
+	// review all January — holds nothing of it.
+	const db = new Database(DB_FILE);
+	try {
+		const { id: userId } = db.prepare('select id from users where email = ?').get(email) as {
+			id: string;
+		};
+		db.prepare(
+			`insert into goals (id, user_id, title, tier, metric_kind, metric_unit, target, color, sort_order, created_at)
+			 values (?, ?, 'New year, new pages', 'satellite', 'checkin', '', 1, '#a78bfa', 0, ?)`
+		).run(randomUUID(), userId, utc('2027-01-05'));
+		db.prepare('update users set time_zone = ? where id = ?').run('UTC', userId);
+	} finally {
+		db.close();
+	}
+	await pinClock(page, '2027-01-15T12:00');
+
+	await page.goto('/');
+	await hydrated(page);
+	await expect(page.getByRole('heading', { name: /Good to see you/ })).toBeVisible();
+	await expect(page.getByRole('complementary', { name: /in orbit/ })).toHaveCount(0);
+});

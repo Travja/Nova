@@ -1,3 +1,4 @@
+import { isFinished, lastInstant as lastFlown } from './ending';
 import { dayGrid, type HistoryCell } from './history';
 import { fromZonedParts, periodFor, zonedParts, type Period, type PeriodOptions } from './period';
 import { buildOrbit, type Orbit } from './progress';
@@ -34,7 +35,7 @@ import type { Goal } from './types';
  */
 
 export interface ReviewGoalInput {
-	goal: Pick<Goal, 'id' | 'title' | 'tier' | 'color'>;
+	goal: Pick<Goal, 'id' | 'title' | 'tier' | 'color' | 'endsAt'>;
 	/** Newest first, back to launch — `GoalSnapshot.history` sized the way `/stats` sizes it. */
 	history: readonly Orbit[];
 }
@@ -153,6 +154,24 @@ export interface GoalYear extends Tally {
 	bestFlight: number;
 	/** Closed of possible, 0-1 — where the body sits on its ring at year's end. */
 	standing: number;
+	/**
+	 * The last instant of a goal that finished this year (#67), or null. A
+	 * challenge that ran its course reads as landed rather than as a goal that
+	 * simply went quiet.
+	 */
+	landed: Date | null;
+}
+
+/** When a goal landed, if it finished (#67) inside `year`. */
+export function landedIn(
+	goal: Pick<Goal, 'endsAt'>,
+	year: number,
+	timeZone: string,
+	now: Date
+): Date | null {
+	if (!goal.endsAt || !isFinished(goal, now)) return null;
+	const last = lastFlown(goal.endsAt);
+	return yearOf(last, timeZone) === year ? last : null;
 }
 
 /** A Universe goal's one orbit of the year, in a line. */
@@ -298,7 +317,8 @@ export function goalsInYear(
 				color: goal.color,
 				...counts,
 				bestFlight: longestFlight(orbits, now)?.length ?? 0,
-				standing: counts.closed / counts.possible
+				standing: counts.closed / counts.possible,
+				landed: landedIn(goal, year, timeZone, now)
 			}
 		];
 	});
@@ -465,10 +485,14 @@ export function reviewYearFor(now: Date, timeZone: string): number {
 	return month === 1 ? year - 1 : year;
 }
 
-/** Every year from the account's first launch to the current review year, newest first. */
+/**
+ * Every year from the account's first launch to the current review year,
+ * newest first. Empty before there is one: a first goal launched this January
+ * has no last year to look back on.
+ */
 export function reviewYears(firstLaunch: Date | null, now: Date, timeZone: string): number[] {
-	const latest = reviewYearFor(now, timeZone);
 	if (!firstLaunch) return [];
-	const earliest = Math.min(yearOf(firstLaunch, timeZone), latest);
-	return Array.from({ length: latest - earliest + 1 }, (_, index) => latest - index);
+	const latest = reviewYearFor(now, timeZone);
+	const earliest = yearOf(firstLaunch, timeZone);
+	return Array.from({ length: Math.max(0, latest - earliest + 1) }, (_, index) => latest - index);
 }

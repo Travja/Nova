@@ -179,9 +179,9 @@
 					{review.year} so far — the year is still in flight, so only periods that have ended or already
 					closed count.
 				{:else}
-					Every period you had a chance at, across every tier. Time spent archived doesn't count
-					against you.
+					Every period you had a chance at, across every tier.
 				{/if}
+				Time spent archived, and rest days you didn't fly, don't count against you.
 			</p>
 			{#if review.headline.byTier.length > 0}
 				<ul class="bars">
@@ -287,7 +287,8 @@
 									{[
 										TIER_DEFINITIONS[goal.tier].label,
 										`${goal.closed} of ${goal.possible} closed`,
-										goal.bestFlight > 1 ? `best flight ${goal.bestFlight}` : null
+										goal.bestFlight > 1 ? `best flight ${goal.bestFlight}` : null,
+										goal.landed ? `landed ${dayLabel(goal.landed)}` : null
 									]
 										.filter(Boolean)
 										.join(' · ')}
