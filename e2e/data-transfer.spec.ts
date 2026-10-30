@@ -226,7 +226,7 @@ test('a record survives export, deletion, a new account and import', async ({ pa
 	const exported = await downloadExport(page);
 
 	// What is in it.
-	expect(exported.text).toContain('"schemaVersion": 1');
+	expect(exported.text).toContain('"schemaVersion": 2');
 	expect(exported.text).toContain('Chapter a week');
 	expect(exported.text).toContain('Renew the passport');
 	expect(exported.text).toContain('Slow week, but it closed.');

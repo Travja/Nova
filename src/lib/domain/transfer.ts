@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { parentProblem, PARENT_PROBLEM_MESSAGE, type ParentCandidate } from './nesting';
 import { isPaletteColor } from './palette';
+import { EVERY_DAY } from './schedule';
 import { TIERS, type Tier } from './tiers';
 import type { MetricKind } from './types';
 
@@ -63,8 +64,22 @@ import type { MetricKind } from './types';
  * of the same file a no-op rather than a second copy.
  */
 
-/** The envelope's version. Bumped when the shape below stops being readable as it is. */
-export const TRANSFER_SCHEMA_VERSION = 1;
+/**
+ * The envelope's version. Bumped when the shape below stops being readable as it is.
+ *
+ * Format 2 added `goalSchedules` (#66). An older Nova strips keys it does not
+ * know, so without the bump it would import a new file minus its schedules and
+ * turn every rest day into a missed one; with it, that Nova refuses the file and
+ * says to update instead.
+ */
+export const TRANSFER_SCHEMA_VERSION = 2;
+
+/**
+ * Every format this build reads. A format 1 file predates rest days, so it has
+ * no `goalSchedules` and its goals import flying every day — which is exactly
+ * what they did when it was written.
+ */
+export const READABLE_SCHEMA_VERSIONS: readonly number[] = [1, 2];
 
 /**
  * How large an import may be, checked before anything is parsed.
@@ -132,6 +147,22 @@ export const archiveWindowBundleSchema = z.object({
 	goalId: rowId,
 	archivedAt: epochMs,
 	restoredAt: nullableEpochMs
+});
+
+export const scheduleBundleSchema = z.object({
+	id: rowId,
+	goalId: rowId,
+	/*
+	 * Bit d rests weekday d, 0 = Sunday — see `$domain/schedule`. Zero is a real
+	 * span ("flies every day from here"); all seven is archiving and is refused
+	 * here exactly as the goal form refuses it.
+	 */
+	restDays: z
+		.number()
+		.int()
+		.min(0)
+		.max(EVERY_DAY - 1, 'A schedule that rests every day is archiving, not a schedule.'),
+	from: epochMs
 });
 
 export const entryBundleSchema = z.object({
@@ -233,6 +264,8 @@ export const bundleSchema = z.object({
 	exportedAt: epochMs,
 	goals: uniqueList(goalBundleSchema),
 	goalArchiveWindows: uniqueList(archiveWindowBundleSchema),
+	// Absent from a format 1 file, which predates rest days.
+	goalSchedules: uniqueList(scheduleBundleSchema).default([]),
 	entries: uniqueList(entryBundleSchema),
 	asteroids: uniqueList(asteroidBundleSchema),
 	orbitNotes: uniqueList(orbitNoteBundleSchema)
@@ -243,6 +276,7 @@ export type BundleGoal = z.infer<typeof goalBundleSchema>;
 export type BundleEntry = z.infer<typeof entryBundleSchema>;
 export type BundleAsteroid = z.infer<typeof asteroidBundleSchema>;
 export type BundleArchiveWindow = z.infer<typeof archiveWindowBundleSchema>;
+export type BundleSchedule = z.infer<typeof scheduleBundleSchema>;
 export type BundleOrbitNote = z.infer<typeof orbitNoteBundleSchema>;
 
 /* -------------------------------------------------------------------------- */
@@ -320,7 +354,7 @@ export function readBundle(source: string): BundleRead {
 		typeof parsed === 'object' && parsed !== null
 			? (parsed as Record<string, unknown>).schemaVersion
 			: undefined;
-	if (version !== TRANSFER_SCHEMA_VERSION) {
+	if (typeof version !== 'number' || !READABLE_SCHEMA_VERSIONS.includes(version)) {
 		return { ok: false, problem: { kind: 'version', found: version } };
 	}
 
@@ -355,6 +389,7 @@ export type MintId = (table: TransferTable, bundleId: string) => string;
 export const TRANSFER_TABLES = [
 	'goals',
 	'goalArchiveWindows',
+	'goalSchedules',
 	'entries',
 	'asteroids',
 	'orbitNotes'
@@ -365,6 +400,7 @@ export type TransferTable = (typeof TRANSFER_TABLES)[number];
 export const TRANSFER_TABLE_LABEL: Record<TransferTable, string> = {
 	goals: 'Goals',
 	goalArchiveWindows: 'Archive windows',
+	goalSchedules: 'Rest-day schedules',
 	entries: 'Entries',
 	asteroids: 'Asteroids',
 	orbitNotes: 'Orbit notes'
@@ -375,6 +411,7 @@ export interface AccountShape {
 	/** Ids of goals this account owns, archived ones included. */
 	goalIds: ReadonlySet<string>;
 	archiveWindowIds: ReadonlySet<string>;
+	scheduleIds: ReadonlySet<string>;
 	/** `entryKey(goalId, clientId)` for every entry with a client id. */
 	entryKeys: ReadonlySet<string>;
 	asteroidIds: ReadonlySet<string>;
@@ -390,11 +427,19 @@ export interface AccountShape {
 export const EMPTY_ACCOUNT: AccountShape = {
 	goalIds: new Set(),
 	archiveWindowIds: new Set(),
+	scheduleIds: new Set(),
 	entryKeys: new Set(),
 	asteroidIds: new Set(),
 	noteKeys: new Set(),
 	highestSortOrder: -1,
-	counts: { goals: 0, goalArchiveWindows: 0, entries: 0, asteroids: 0, orbitNotes: 0 }
+	counts: {
+		goals: 0,
+		goalArchiveWindows: 0,
+		goalSchedules: 0,
+		entries: 0,
+		asteroids: 0,
+		orbitNotes: 0
+	}
 };
 
 export function entryKey(goalId: string, clientId: string): string {
@@ -439,6 +484,13 @@ export interface PlannedArchiveWindow {
 	goalId: string;
 	archivedAt: Date;
 	restoredAt: Date | null;
+}
+
+export interface PlannedSchedule {
+	id: string;
+	goalId: string;
+	restDays: number;
+	from: Date;
 }
 
 export interface PlannedEntry {
@@ -496,6 +548,7 @@ export interface ImportPlan {
 	/** Rows to insert, already remapped. Goals come parents-first. */
 	goals: PlannedGoal[];
 	archiveWindows: PlannedArchiveWindow[];
+	schedules: PlannedSchedule[];
 	entries: PlannedEntry[];
 	asteroids: PlannedAsteroid[];
 	orbitNotes: PlannedOrbitNote[];
@@ -543,6 +596,10 @@ export function planImport(
 			goalArchiveWindows: emptySummary(
 				bundle.goalArchiveWindows.length,
 				replacing ? account.counts.goalArchiveWindows : 0
+			),
+			goalSchedules: emptySummary(
+				bundle.goalSchedules.length,
+				replacing ? account.counts.goalSchedules : 0
 			),
 			entries: emptySummary(bundle.entries.length, replacing ? account.counts.entries : 0),
 			asteroids: emptySummary(bundle.asteroids.length, replacing ? account.counts.asteroids : 0),
@@ -649,6 +706,24 @@ export function planImport(
 	}
 	summary.tables.goalArchiveWindows.added = archiveWindows.length;
 
+	// Spans keep their own `from`, never one recomputed for this account's zone:
+	// a schedule is a fact about when it changed, like an archive window is.
+	const schedules: PlannedSchedule[] = [];
+	for (const schedule of bundle.goalSchedules) {
+		const goalId = goalFor(schedule.goalId);
+		if (!goalId) {
+			summary.tables.goalSchedules.orphaned += 1;
+			continue;
+		}
+		const id = mintId('goalSchedules', schedule.id);
+		if (target.scheduleIds.has(id)) {
+			summary.tables.goalSchedules.duplicate += 1;
+			continue;
+		}
+		schedules.push({ id, goalId, restDays: schedule.restDays, from: new Date(schedule.from) });
+	}
+	summary.tables.goalSchedules.added = schedules.length;
+
 	const entries: PlannedEntry[] = [];
 	/** Pairs this plan has already claimed, so one file cannot collide with itself. */
 	const claimedEntries = new Set<string>();
@@ -737,6 +812,7 @@ export function planImport(
 			mode,
 			goals: parentsFirst(goalWrites),
 			archiveWindows,
+			schedules,
 			entries,
 			asteroids,
 			orbitNotes,

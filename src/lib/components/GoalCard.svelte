@@ -84,7 +84,9 @@
 		<a class="heading" href={goalHref} aria-label={goal.title}>
 			<h3>{goal.title}</h3>
 			<p class="muted status">
-				{#if snapshot.current.complete}
+				{#if snapshot.current.dormant && snapshot.current.rest}
+					Rest day — nothing owed
+				{:else if snapshot.current.complete}
 					Orbit closed {CADENCE_LABEL[snapshot.current.period.cadence]}
 					<span aria-hidden="true">✦</span>
 				{:else}

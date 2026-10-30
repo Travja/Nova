@@ -1,9 +1,16 @@
-import { buildOrbit, type DormantWindow, type GoalSnapshot, type Orbit } from '$domain/progress';
+import {
+	buildOrbit,
+	flightAnchor,
+	type DormantWindow,
+	type GoalSnapshot,
+	type Orbit
+} from '$domain/progress';
 import {
 	childrenOf,
 	closedPeriods,
 	ORBIT_METRIC,
 	parentProblem,
+	restDayCapacity,
 	snapshotWithChildren,
 	tierProblem,
 	type ChildInput,
@@ -29,15 +36,17 @@ import {
 } from '$domain/history';
 import type { Goal, MetricDefinition, ProgressEntry } from '$domain/types';
 import type { GoalInput } from '$domain/validation';
-import { notesForGoal } from '$lib/server/orbit-notes';
+import { notesForGoal, notesForUser, type OrbitNote } from '$lib/server/orbit-notes';
 import { db } from '$lib/server/db';
 import {
 	entries,
 	goalArchiveWindows,
+	goalSchedules,
 	goals,
 	type EntryRow,
 	type GoalRow
 } from '$lib/server/db/schema';
+import { scheduleChange, type RestSchedule } from '$domain/schedule';
 import type { SessionUser } from '$lib/server/auth/session';
 import { newId } from '$lib/server/auth/session';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
@@ -97,6 +106,26 @@ async function dormantWindowsFor(goalIds: string[]): Promise<Map<string, Dormant
 	return byGoal;
 }
 
+/** Each of these goals' rest-day schedule spans, keyed by goal id. */
+async function restSchedulesFor(goalIds: string[]): Promise<Map<string, RestSchedule[]>> {
+	const byGoal = new Map<string, RestSchedule[]>();
+	if (goalIds.length === 0) return byGoal;
+
+	const rows = await db
+		.select()
+		.from(goalSchedules)
+		.where(inArray(goalSchedules.goalId, goalIds))
+		.orderBy(asc(goalSchedules.from));
+
+	for (const row of rows) {
+		const schedule = { from: row.from, restDays: row.restDays };
+		const bucket = byGoal.get(row.goalId);
+		if (bucket) bucket.push(schedule);
+		else byGoal.set(row.goalId, [schedule]);
+	}
+	return byGoal;
+}
+
 /**
  * Everything a user's goal trees are computed from, loaded once.
  *
@@ -110,6 +139,7 @@ interface Forest {
 	goals: Goal[];
 	entriesByGoal: Map<string, ProgressEntry[]>;
 	dormantByGoal: Map<string, DormantWindow[]>;
+	schedulesByGoal: Map<string, RestSchedule[]>;
 }
 
 function bucketEntries(rows: EntryRow[]): Map<string, ProgressEntry[]> {
@@ -123,11 +153,16 @@ function bucketEntries(rows: EntryRow[]): Map<string, ProgressEntry[]> {
 	return byGoal;
 }
 
-/** Every goal the user owns, with its entries and dormant windows. */
+/** Every goal the user owns, with its entries, dormant windows and rest-day schedules. */
 async function loadForest(userId: string): Promise<Forest> {
 	const all = await listGoals(userId, true);
 	if (all.length === 0) {
-		return { goals: [], entriesByGoal: new Map(), dormantByGoal: new Map() };
+		return {
+			goals: [],
+			entriesByGoal: new Map(),
+			dormantByGoal: new Map(),
+			schedulesByGoal: new Map()
+		};
 	}
 
 	const ids = all.map((goal) => goal.id);
@@ -136,7 +171,8 @@ async function loadForest(userId: string): Promise<Forest> {
 	return {
 		goals: all,
 		entriesByGoal: bucketEntries(rows),
-		dormantByGoal: await dormantWindowsFor(ids)
+		dormantByGoal: await dormantWindowsFor(ids),
+		schedulesByGoal: await restSchedulesFor(ids)
 	};
 }
 
@@ -155,6 +191,7 @@ function childInputs(goalId: string, forest: Forest, depth = 0): ChildInput[] {
 		goal: child,
 		entries: forest.entriesByGoal.get(child.id) ?? [],
 		dormantWindows: forest.dormantByGoal.get(child.id) ?? [],
+		restSchedules: forest.schedulesByGoal.get(child.id) ?? [],
 		children: childInputs(child.id, forest, depth + 1)
 	}));
 }
@@ -181,7 +218,8 @@ function snapshotFromForest(
 			...periodOptions(user),
 			now,
 			historyLength,
-			dormantWindows: forest.dormantByGoal.get(goal.id) ?? []
+			dormantWindows: forest.dormantByGoal.get(goal.id) ?? [],
+			restSchedules: forest.schedulesByGoal.get(goal.id) ?? []
 		}
 	);
 }
@@ -306,7 +344,12 @@ export interface StatsInputs {
 	 * which a derived goal does not carry: its number only moves when a child
 	 * orbit closes, not while its own period runs.
 	 */
-	leaves: { goal: Goal; entries: ProgressEntry[]; dormantWindows: DormantWindow[] }[];
+	leaves: {
+		goal: Goal;
+		entries: ProgressEntry[];
+		dormantWindows: DormantWindow[];
+		restSchedules: RestSchedule[];
+	}[];
 }
 
 /**
@@ -343,10 +386,70 @@ export async function loadStatsInputs(user: SessionUser, now = new Date()): Prom
 		.map((goal) => ({
 			goal,
 			entries: forest.entriesByGoal.get(goal.id) ?? [],
-			dormantWindows: forest.dormantByGoal.get(goal.id) ?? []
+			dormantWindows: forest.dormantByGoal.get(goal.id) ?? [],
+			restSchedules: forest.schedulesByGoal.get(goal.id) ?? []
 		}));
 
 	return { snapshots, leaves };
+}
+
+/** What the year in review (#68) computes from — see `$domain/review`. */
+export interface ReviewSources {
+	/** Every goal, archived ones included, with orbit history back to launch. */
+	goals: { goal: Goal; history: Orbit[] }[];
+	notes: OrbitNote[];
+	/** The earliest launch on the account, or null with no goals at all. */
+	firstLaunch: Date | null;
+}
+
+/**
+ * Everything the year in review reads, loaded once.
+ *
+ * Unlike `/stats`, archived goals are in: a goal parked in October still flew
+ * from January to September, and that belongs to the year. Its dormant
+ * windows are already on its orbits as `Orbit.dormant`, which is the only
+ * thing the review reads to decide what was possible — rest days (#66) arrive
+ * the same way and need nothing from here. Each history is sized to
+ * the goal's age, the same way `loadStatsInputs()` sizes it, and stops at its
+ * end when it has one.
+ */
+export async function loadReviewInputs(user: SessionUser, now: Date): Promise<ReviewSources> {
+	const forest = await loadForest(user.id);
+	const options = periodOptions(user);
+
+	const reviewGoals = forest.goals.map((goal) => {
+		// A finished goal's history is read back from its last instant (#67), so
+		// it is sized to the periods it flew: nothing after its end counts as
+		// possible, and nothing before its launch is reached for either. An
+		// archived goal is still read from now — its dormant orbits say so.
+		const { anchor } = flightAnchor(goal, now);
+		const historyLength = Math.min(
+			MAX_STATS_HISTORY,
+			periodsSinceLaunch(goal.createdAt, anchor, cadenceOf(goal.tier), options)
+		);
+		return { goal, history: snapshotFromForest(goal, forest, user, now, historyLength).history };
+	});
+
+	const firstLaunch = forest.goals.reduce<Date | null>(
+		(earliest, goal) => (!earliest || goal.createdAt < earliest ? goal.createdAt : earliest),
+		null
+	);
+
+	return { goals: reviewGoals, notes: await notesForUser(user.id), firstLaunch };
+}
+
+/**
+ * When the account launched its first goal, archived and finished ones
+ * included, or null with none at all — which years the review (#68) has.
+ */
+export async function firstLaunch(userId: string): Promise<Date | null> {
+	const [row] = await db
+		.select({ createdAt: goals.createdAt })
+		.from(goals)
+		.where(eq(goals.userId, userId))
+		.orderBy(asc(goals.createdAt))
+		.limit(1);
+	return row?.createdAt ?? null;
 }
 
 export async function getGoal(userId: string, goalId: string): Promise<Goal | null> {
@@ -496,6 +599,65 @@ export async function orbitAt(
 }
 
 /**
+ * A goal's rest-day schedule spans, oldest first, or null when the goal is not
+ * this user's. Read under the user's id like everything else here.
+ */
+export async function getGoalSchedule(
+	userId: string,
+	goalId: string
+): Promise<RestSchedule[] | null> {
+	const goal = await getGoal(userId, goalId);
+	if (!goal) return null;
+	return (await restSchedulesFor([goalId])).get(goalId) ?? [];
+}
+
+/**
+ * How many orbits this goal's children can close in its current period without
+ * flying a rest day, or null when none of them rests — see `restDayCapacity`.
+ * The parent's form warns when its target is above it.
+ */
+export async function childRestDayCapacity(
+	user: SessionUser,
+	goalId: string,
+	now: Date
+): Promise<number | null> {
+	const goal = await getGoal(user.id, goalId);
+	if (!goal) return null;
+	const forest = await loadForest(user.id);
+	const children = childInputs(goal.id, forest).filter((child) => child.goal.archivedAt === null);
+	if (children.length === 0) return null;
+	return restDayCapacity(goal, children, now, periodOptions(user));
+}
+
+/**
+ * Write a schedule change for a goal already known to be this user's.
+ *
+ * `scheduleChange()` decides the span: from tomorrow for an edit, from today
+ * for a launch, nothing when the schedule already says this. Pending spans from
+ * that instant on are replaced, so two edits in a day leave one.
+ */
+async function saveSchedule(
+	goalId: string,
+	restDays: number,
+	now: Date,
+	options: PeriodOptions & { launching: boolean }
+): Promise<void> {
+	const existing = options.launching ? [] : ((await restSchedulesFor([goalId])).get(goalId) ?? []);
+	const change = scheduleChange(existing, restDays, now, options);
+
+	db.transaction((tx) => {
+		tx.delete(goalSchedules)
+			.where(and(eq(goalSchedules.goalId, goalId), gte(goalSchedules.from, change.from)))
+			.run();
+		if (change.insert) {
+			tx.insert(goalSchedules)
+				.values({ id: newId(), goalId, ...change.insert })
+				.run();
+		}
+	});
+}
+
+/**
  * What a write refused, when it refused one.
  *
  * `parent` carries the reason the edge was rejected — see
@@ -587,6 +749,9 @@ export async function createGoal(
 		parentId: input.parentId
 	};
 	await db.insert(goals).values(row);
+	if (input.restDays) {
+		await saveSchedule(row.id, input.restDays, row.createdAt, { ...options, launching: true });
+	}
 	return { ok: true, goal: toGoal(row) };
 }
 
@@ -681,6 +846,9 @@ export async function updateGoal(
 		return true;
 	});
 	if (!changed) return { ok: false, missing: true };
+	if (input.restDays !== null) {
+		await saveSchedule(goalId, input.restDays, now, { ...options, launching: false });
+	}
 
 	return {
 		ok: true,
