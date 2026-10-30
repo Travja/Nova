@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- build -----------------------------------------------------------------
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app
 
 # better-sqlite3 compiles a native addon, so the build stage needs a toolchain.
@@ -15,7 +15,7 @@ COPY . .
 RUN pnpm build && pnpm prune --prod
 
 # --- runtime ---------------------------------------------------------------
-FROM node:22-alpine AS runtime
+FROM node:25-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
