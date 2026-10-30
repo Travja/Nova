@@ -1,0 +1,45 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    groups:
+      # three breaks things in minor releases (#11), so every update to it or
+      # its types lands in one PR, major or not, instead of folding into the
+      # ordinary minor/patch groups below.
+      three:
+        patterns:
+          - 'three'
+          - '@types/three'
+      production-minor-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'minor'
+          - 'patch'
+        exclude-patterns:
+          - 'three'
+          - '@types/three'
+      development-minor-patch:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+        exclude-patterns:
+          - 'three'
+          - '@types/three'
+    # Majors aren't listed in a group above, so Dependabot falls back to its
+    # default behavior for them: one PR per dependency.
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: 'docker'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5

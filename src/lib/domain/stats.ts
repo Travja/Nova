@@ -1,4 +1,10 @@
-import { periodElapsed, isDormant, type DormantWindow, type Orbit } from './progress';
+import {
+	periodElapsed,
+	isDormant,
+	type DormantWindow,
+	type GoalSnapshot,
+	type Orbit
+} from './progress';
 import {
 	periodFor,
 	previousPeriod,
@@ -6,6 +12,7 @@ import {
 	zonedParts,
 	type PeriodOptions
 } from './period';
+import { restDayUnder, type RestSchedule } from './schedule';
 import type { Cadence, Tier } from './tiers';
 import { TIERS } from './tiers';
 import type { ProgressEntry } from './types';
@@ -212,6 +219,8 @@ export interface MomentumInput {
 	createdAt: Date;
 	entries: readonly EntryLike[];
 	dormantWindows: readonly DormantWindow[];
+	/** The goal's rest-day schedule, whose rest days are no baseline for a flying one. */
+	restSchedules?: readonly RestSchedule[];
 }
 
 export interface Momentum {
@@ -248,6 +257,10 @@ function sumBetween(entries: readonly EntryLike[], start: number, end: number): 
  * `MOMENTUM_LOOKBACK` of them — the same window `snapshotGoal` defaults its
  * own history to. A goal with no such period yet gets `ratio: null` rather
  * than a divide-by-zero or a comparison against nothing.
+ *
+ * Rest days are left out of the baseline whether or not they closed. A rest
+ * day flown anyway is a bonus, and averaging it in would make every ordinary
+ * flying day read as behind.
  */
 export function momentumFor(
 	input: MomentumInput,
@@ -265,7 +278,10 @@ export function momentumFor(
 		const previous = previousPeriod(period, options);
 		if (previous.start.getTime() < input.createdAt.getTime()) break;
 		period = previous;
-		if (!isDormant(period, input.dormantWindows)) {
+		if (
+			!isDormant(period, input.dormantWindows) &&
+			!restDayUnder(period, input.restSchedules ?? [], options.timeZone)
+		) {
 			const cutoff =
 				period.start.getTime() + elapsed * (period.end.getTime() - period.start.getTime());
 			samples.push(sumBetween(input.entries, period.start.getTime(), cutoff));
@@ -386,5 +402,31 @@ export function loggingRhythm(
 		byPartOfDay,
 		peakWeekday: peakWeekdayIndex >= 0 ? WEEKDAY_LABELS[peakWeekdayIndex] : null,
 		peakPart: peakPartEntry && peakPartEntry.count > 0 ? peakPartEntry.part : null
+	};
+}
+
+/** What a finished goal has to show for itself (#67). */
+export interface FinalRecord {
+	/** Orbits closed across the whole flight. */
+	closed: number;
+	/** Periods it actually flew — the ones it spent archived are not in it. */
+	flown: number;
+	/** The longest run it ever had. */
+	best: number;
+	/** The run standing when it landed, its final orbit included or not. */
+	endedOn: number;
+}
+
+/**
+ * A finished goal's record, from a snapshot read back from its last instant
+ * with its whole flight as history — `snapshot.streak` is already settled
+ * there, so the final orbit is judged rather than excused.
+ */
+export function finalRecord(snapshot: GoalSnapshot): FinalRecord {
+	return {
+		closed: snapshot.totalOrbits,
+		flown: snapshot.history.filter((orbit) => !orbit.dormant).length,
+		best: bestStreak(snapshot.history),
+		endedOn: snapshot.streak
 	};
 }

@@ -166,6 +166,13 @@ export const goals = sqliteTable(
 		createdAt: timestamp('created_at').notNull(),
 		archivedAt: timestamp('archived_at'),
 		/**
+		 * The exclusive end of the last period the goal flies, or null for a goal
+		 * that never ends (#67). Worked out from a last day in the pilot's zone
+		 * when the goal is saved, and stored as the instant, so a later change of
+		 * zone moves nothing. Finished is read from it, not stored beside it.
+		 */
+		endsAt: timestamp('ends_at'),
+		/**
 		 * The goal this one feeds, in a strictly longer tier — see
 		 * `$domain/nesting`. Null for a goal that stands alone, which is every
 		 * goal that existed before nesting did.
@@ -209,6 +216,29 @@ export const goalArchiveWindows = sqliteTable(
 		restoredAt: timestamp('restored_at')
 	},
 	(table) => [index('goal_archive_windows_goal_idx').on(table.goalId)]
+);
+
+/**
+ * One span of a Satellite's rest-day schedule (#66), in force from `from` until
+ * the next span for the same goal starts.
+ *
+ * Spans rather than a column on `goals` for the same reason archive windows
+ * are: a schedule change applies from tomorrow, so last month's Saturdays are
+ * still judged under the schedule last month was flown under. `restDays` is a
+ * seven-bit mask, bit d for weekday d with 0 as Sunday — see
+ * `$domain/schedule`. A goal with no rows flies every day.
+ */
+export const goalSchedules = sqliteTable(
+	'goal_schedules',
+	{
+		id: text('id').primaryKey(),
+		goalId: text('goal_id')
+			.notNull()
+			.references(() => goals.id, { onDelete: 'cascade' }),
+		restDays: integer('rest_days').notNull(),
+		from: timestamp('from_at').notNull()
+	},
+	(table) => [index('goal_schedules_goal_idx').on(table.goalId)]
 );
 
 export const entries = sqliteTable(
@@ -429,6 +459,7 @@ export type GoalRow = typeof goals.$inferSelect;
 export type EntryRow = typeof entries.$inferSelect;
 export type AsteroidRow = typeof asteroids.$inferSelect;
 export type GoalArchiveWindowRow = typeof goalArchiveWindows.$inferSelect;
+export type GoalScheduleRow = typeof goalSchedules.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;

@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { END_CHOICES } from './ending';
 import { DEFAULT_COLOR, isPaletteColor } from './palette';
 import { parseLocalDateTime, periodFor, periodLabel, type PeriodOptions } from './period';
+import { maskFromFlyingDays } from './schedule';
 import { cadenceOf, TIERS, type Tier } from './tiers';
 
 /** Schemas shared by the form actions and by any future JSON API. */
@@ -66,13 +68,51 @@ export const goalSchema = z
 		parentId: z.preprocess(
 			(value) => (value === '' || value === null || value === undefined ? null : value),
 			z.string().trim().max(64).nullable().default(null)
-		)
+		),
+		/*
+		 * The weekdays a Satellite flies on, 0 = Sunday (#66). A form posts one
+		 * value per ticked day, so the route reads them with `getAll` — see
+		 * `goalFormInput`. Absent means the form did not offer the choice, which
+		 * leaves a schedule as it was rather than resetting it.
+		 */
+		flyingDays: z.array(z.coerce.number().int().min(0).max(6)).optional(),
+		/*
+		 * When the goal ends, as the form said it — never the instant itself. The
+		 * instant depends on the pilot's zone and on what is in flight now, so
+		 * `resolveEnd()` in `$domain/ending` turns this into one where both are
+		 * known. Left out, a goal never ends, which is every goal from before #67.
+		 */
+		ends: z.enum(END_CHOICES).default(''),
+		/** The last day, from a date field, when `ends` is `date`. */
+		endsOn: z.string().trim().max(10).optional(),
+		/** What a parent being given an end does with its children: end them too, or let them go. */
+		childEnding: z.enum(['end', 'detach']).default('end')
 	})
-	.transform((value) => ({
+	.superRefine((value, ctx) => {
+		if (value.tier === 'satellite' && value.flyingDays && value.flyingDays.length === 0) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['flyingDays'],
+				message: REST_EVERY_DAY_MESSAGE
+			});
+		}
+	})
+	.transform(({ flyingDays, ...value }) => ({
 		...value,
 		// A check-in goal counts closings, so its unit is implied.
-		metricUnit: value.metricKind === 'duration' ? 'minutes' : value.metricUnit
+		metricUnit: value.metricKind === 'duration' ? 'minutes' : value.metricUnit,
+		/*
+		 * The rest-day mask to save, or null to leave the schedule alone. Only a
+		 * Satellite rests, so every other tier saves "flies every day" — which is
+		 * what stops a goal moved back down to Satellite from resting on a
+		 * schedule it had a year ago.
+		 */
+		restDays: value.tier !== 'satellite' ? 0 : flyingDays ? maskFromFlyingDays(flyingDays) : null
 	}));
+
+/** Resting on every day is not a schedule, it is archiving. */
+export const REST_EVERY_DAY_MESSAGE =
+	'Pick at least one day to fly. To pause the goal altogether, archive it instead.';
 
 /**
  * An asteroid: a title and an optional note, and nothing else.

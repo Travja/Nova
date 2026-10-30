@@ -19,11 +19,12 @@ import type { Goal } from './types';
  *   year — to its own year rather than the next one its exclusive `end`
  *   points into.
  * - **Possible comes from `Orbit.dormant`**, never from archive windows read
- *   here. Anything that marks a period dormant — an archived span today, a
- *   rest day (#66) once it lands — drops out of "possible" with no change to
- *   this file.
- * - **Possible starts at launch,** because the history it is handed does. A
- *   goal launched in June had no chance at January.
+ *   here. Anything that marks a period dormant — an archived span, or a rest
+ *   day (#66) that did not close — drops out of "possible" with no change to
+ *   this file. A rest day flown anyway is not dormant, and counts.
+ * - **Possible starts at launch and stops at the end,** because the history it
+ *   is handed does. A goal launched in June had no chance at January, and a
+ *   goal that finished (#67) in March had none at April.
  * - **An undecided period is not a miss.** In the year still running, the
  *   orbit in flight counts once it closes and is left out until then, the
  *   same benefit of the doubt `streakFrom` gives it.

@@ -2,7 +2,7 @@ import { resolve } from '$app/paths';
 import { fieldErrors, goalSchema } from '$domain/validation';
 import { captureAsteroid, getAsteroid } from '$lib/server/asteroids';
 import { createGoal, listGoals } from '$lib/server/goals';
-import { goalWriteErrors } from '$lib/server/goal-form';
+import { goalFormInput, goalWriteErrors } from '$lib/server/goal-form';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -41,15 +41,16 @@ export const actions: Actions = {
 		if (!locals.user) redirect(303, '/login');
 
 		const form = await request.formData();
-		const parsed = goalSchema.safeParse(Object.fromEntries(form));
+		const parsed = goalSchema.safeParse(goalFormInput(form));
 		if (!parsed.success) return fail(400, { errors: fieldErrors(parsed.error) });
 
 		const id = url.searchParams.get(ASTEROID);
 		// `captureAsteroid` delegates to `createGoal`, so the nesting and tier
 		// rules are checked once, in the one place that knows them.
+		const options = { timeZone: locals.user.timeZone, weekStartsOn: locals.user.weekStartsOn };
 		const created = id
-			? await captureAsteroid(locals.user.id, id, parsed.data)
-			: await createGoal(locals.user.id, parsed.data);
+			? await captureAsteroid(locals.user.id, id, parsed.data, options)
+			: await createGoal(locals.user.id, parsed.data, options);
 		if (!created.ok) return fail(400, { errors: goalWriteErrors(created) });
 
 		redirect(303, `/goals/${created.goal.id}`);

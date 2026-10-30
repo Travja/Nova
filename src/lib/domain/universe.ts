@@ -1,5 +1,6 @@
 import { driftBand, driftFraction, sortBelt, type DriftBand, type DriftInput } from './asteroids';
 import { bodyVariant } from './bodies';
+import { isFinished } from './ending';
 import { hash } from './hash';
 import type { GoalSnapshot } from './progress';
 import { TIERS, type Tier } from './tiers';
@@ -300,12 +301,17 @@ export interface UniverseTree {
  * `snapshots` should already exclude archived goals — `listGoalSnapshots()`
  * does — so a goal whose parent was archived falls out of `nodes` and orbits
  * an anchor like any other loose goal, per decision 3.
+ *
+ * A finished goal is dropped here whatever the caller passed (#67): it has
+ * landed, so it is not in the sky, and a goal it used to host orbits an anchor
+ * instead. Nothing in the tree is ever hung off a finished goal.
  */
 export function universeTree(
-	snapshots: readonly GoalSnapshot[],
+	allSnapshots: readonly GoalSnapshot[],
 	asteroids: readonly (DriftInput & { id: string })[],
 	now: Date
 ): UniverseTree {
+	const snapshots = allSnapshots.filter((snapshot) => !isFinished(snapshot.goal, now));
 	const root = makeAnchor('multiverse', 0);
 	const nodes = new Map<string, Draft>();
 	for (const snapshot of snapshots) nodes.set(snapshot.goal.id, makeGoalNode(snapshot));

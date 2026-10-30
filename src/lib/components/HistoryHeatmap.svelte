@@ -67,6 +67,7 @@
 					class="cell"
 					class:is-complete={cell.orbit.complete}
 					class:is-dormant={cell.orbit.dormant}
+					class:is-rest={cell.orbit.rest}
 					class:is-selected={index === selected}
 					style="grid-row: {weekday + 1}; grid-column: {week + 1}; --fill: {cell.orbit.fraction}"
 					aria-label={cellLabel(cell)}
@@ -86,6 +87,7 @@
 						class="cell cell--wide"
 						class:is-complete={cell.orbit.complete}
 						class:is-dormant={cell.orbit.dormant}
+						class:is-rest={cell.orbit.rest}
 						class:is-selected={index === selected}
 						style="--color: {color}; --fill: {cell.orbit.fraction}"
 						aria-label={cellLabel(cell)}
@@ -111,6 +113,12 @@
 			<span class="swatch is-dormant" aria-hidden="true"></span>
 			<span class="muted">dormant — archived, no orbit expected</span>
 		</span>
+		{#if cells.some((cell) => cell.orbit.rest)}
+			<span class="legend__dormant">
+				<span class="swatch is-dormant is-rest" aria-hidden="true"></span>
+				<span class="muted">rest day — nothing owed</span>
+			</span>
+		{/if}
 	</div>
 
 	<div class="detail panel" aria-live="polite">
@@ -121,8 +129,12 @@
 					current.orbit.target,
 					metric
 				)}
-				{#if current.orbit.dormant}
+				{#if current.orbit.dormant && current.orbit.rest}
+					(rest day — no orbit expected)
+				{:else if current.orbit.dormant}
 					(archived — no orbit expected)
+				{:else if current.orbit.complete && current.orbit.rest}
+					(closed on a rest day)
 				{:else if current.orbit.complete}
 					(closed)
 				{/if}
@@ -202,6 +214,14 @@
 		);
 		border-style: dashed;
 		opacity: 0.7;
+	}
+
+	/* A rest day was planned, not slept through: a dot rather than the hatching,
+	   so it reads apart from an archived span and from a missed, empty day. */
+	.cell.is-dormant.is-rest,
+	.swatch.is-dormant.is-rest {
+		background-image: radial-gradient(circle, rgba(148, 163, 214, 0.55) 0 2px, transparent 2.5px);
+		border-style: dotted;
 	}
 
 	.cell.is-selected {

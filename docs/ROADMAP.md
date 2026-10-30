@@ -74,7 +74,7 @@ Turning a log into something you learn from.
 
 ## M4 — Reach and operations
 
-_6 of 7 done; #21 closed as not planned._
+_7 of 7 done; #21 closed as not planned._
 
 Making it dependable, and making it speak up.
 
@@ -87,19 +87,19 @@ Making it dependable, and making it speak up.
 | [#23](https://github.com/Travja/Nova/issues/23) ✓ | [Automated backups](issues/23-backups.md)             | Years of history in one file                               |
 | [#24](https://github.com/Travja/Nova/issues/24) ✓ | [Deployment guide](issues/24-deployment-guide.md)     | PWAs need HTTPS and an exact `ORIGIN`                      |
 | [#29](https://github.com/Travja/Nova/issues/29) ✓ | [Backup catch-up](issues/29-backup-catch-up.md)       | A rebooting host can miss every snapshot                   |
-| [#65](https://github.com/Travja/Nova/issues/65)   | [Operations](issues/65-operations.md)                 | CI never builds the image, and no backup has been restored |
+| [#65](https://github.com/Travja/Nova/issues/65) ✓ | [Operations](issues/65-operations.md)                 | CI never builds the image, and no backup has been restored |
 
 ## M5 — The long haul
 
-_2 of 4 done._
+_4 of 4 done._
 
 Living with Nova for years: schedules that fit, goals that finish, a look back,
 and an easier way in.
 
 | #                                                 | Issue                                         | Why it matters                                          |
 | ------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
-| [#66](https://github.com/Travja/Nova/issues/66)   | [Rest days](issues/66-rest-days.md)           | A weekday habit breaks its streak every weekend         |
-| [#67](https://github.com/Travja/Nova/issues/67)   | [Goals that end](issues/67-goals-that-end.md) | A finished challenge can only be archived, as if paused |
+| [#66](https://github.com/Travja/Nova/issues/66) ✓ | [Rest days](issues/66-rest-days.md)           | A weekday habit breaks its streak every weekend         |
+| [#67](https://github.com/Travja/Nova/issues/67) ✓ | [Goals that end](issues/67-goals-that-end.md) | A finished challenge can only be archived, as if paused |
 | [#68](https://github.com/Travja/Nova/issues/68) ✓ | [Year in review](issues/68-year-in-review.md) | A year of closed orbits is never shown in one place     |
 | [#69](https://github.com/Travja/Nova/issues/69) ✓ | [Passkeys](issues/69-passkeys.md)             | Typing a password on a phone to open a PWA              |
 

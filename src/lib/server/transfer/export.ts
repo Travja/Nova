@@ -4,6 +4,7 @@ import {
 	asteroids,
 	entries,
 	goalArchiveWindows,
+	goalSchedules,
 	goals,
 	orbitNotes,
 	users
@@ -30,7 +31,7 @@ import { eq } from 'drizzle-orm';
  * of these projections without being declared in `$domain/transfer` never
  * reaches the string that is written to disk.
  *
- * Ownership is checked in the queries themselves: the three goal-owned tables
+ * Ownership is checked in the queries themselves: the goal-owned tables
  * join back to `goals` and filter on the user, rather than trusting a list of
  * ids assembled somewhere else.
  */
@@ -75,6 +76,7 @@ export async function exportBundle(
 			sortOrder: goals.sortOrder,
 			createdAt: goals.createdAt,
 			archivedAt: goals.archivedAt,
+			endsAt: goals.endsAt,
 			parentId: goals.parentId
 		})
 		.from(goals)
@@ -89,6 +91,17 @@ export async function exportBundle(
 		})
 		.from(goalArchiveWindows)
 		.innerJoin(goals, eq(goalArchiveWindows.goalId, goals.id))
+		.where(eq(goals.userId, userId));
+
+	const scheduleRows = await db
+		.select({
+			id: goalSchedules.id,
+			goalId: goalSchedules.goalId,
+			restDays: goalSchedules.restDays,
+			from: goalSchedules.from
+		})
+		.from(goalSchedules)
+		.innerJoin(goals, eq(goalSchedules.goalId, goals.id))
 		.where(eq(goals.userId, userId));
 
 	const entryRows = await db
@@ -140,13 +153,15 @@ export async function exportBundle(
 		goals: goalRows.map((goal) => ({
 			...goal,
 			createdAt: at(goal.createdAt),
-			archivedAt: atOrNull(goal.archivedAt)
+			archivedAt: atOrNull(goal.archivedAt),
+			endsAt: atOrNull(goal.endsAt)
 		})),
 		goalArchiveWindows: windowRows.map((window) => ({
 			...window,
 			archivedAt: at(window.archivedAt),
 			restoredAt: atOrNull(window.restoredAt)
 		})),
+		goalSchedules: scheduleRows.map((schedule) => ({ ...schedule, from: at(schedule.from) })),
 		entries: entryRows.map((entry) => ({
 			...entry,
 			occurredAt: at(entry.occurredAt),

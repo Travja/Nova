@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fromZonedParts, periodFor, type PeriodOptions } from './period';
-import { buildOrbit, snapshotGoal, type DormantWindow } from './progress';
+import { buildOrbit, flightAnchor, snapshotGoal, type DormantWindow } from './progress';
+import type { RestSchedule } from './schedule';
 import {
 	daysOfYear,
 	inReviewSeason,
@@ -35,6 +36,7 @@ function goal(overrides: Partial<Goal> = {}): Goal {
 		sortOrder: 0,
 		createdAt: new Date('2025-01-01T00:00:00Z'),
 		archivedAt: null,
+		endsAt: null,
 		parentId: null,
 		...overrides
 	};
@@ -46,22 +48,25 @@ function at(timeZone: string, year: number, month: number, day: number, hour = 1
 }
 
 /**
- * A goal's orbits the way the service builds them for the review: through
- * `snapshotGoal`, sized back to launch. Building them any other way would test
- * a history no screen ever hands over.
+ * A goal's orbits the way `loadReviewInputs()` builds them: through
+ * `snapshotGoal`, sized from launch to the goal's flight anchor — now, or its
+ * last instant once it has finished. Building them any other way would test a
+ * history no screen ever hands over.
  */
 function flown(
 	g: Goal,
 	occurred: readonly Date[],
 	now: Date,
 	options: PeriodOptions,
-	dormantWindows: readonly DormantWindow[] = []
+	dormantWindows: readonly DormantWindow[] = [],
+	restSchedules: readonly RestSchedule[] = []
 ): ReviewGoalInput {
-	const historyLength = periodsSinceLaunch(g.createdAt, now, cadenceOf(g.tier), options);
+	const { anchor } = flightAnchor(g, now);
+	const historyLength = periodsSinceLaunch(g.createdAt, anchor, cadenceOf(g.tier), options);
 	const snapshot = snapshotGoal(
 		g,
 		occurred.map((occurredAt) => ({ amount: 1, occurredAt })),
-		{ ...options, now, historyLength, dormantWindows }
+		{ ...options, now, historyLength, dormantWindows, restSchedules }
 	);
 	return { goal: g, history: snapshot.history };
 }
@@ -171,6 +176,42 @@ describe('across daylight saving', () => {
 });
 
 describe('possible orbits', () => {
+	it('leaves a rest day out, and counts one flown anyway', () => {
+		// Monday 2 March 2026, resting on Saturdays and Sundays.
+		const g = goal({ createdAt: new Date('2026-03-02T00:00:00Z') });
+		const weekends: RestSchedule = { from: g.createdAt, restDays: (1 << 0) | (1 << 6) };
+		const now = new Date('2026-03-16T00:30:00Z');
+		const weekdays = ['02', '03', '04', '05', '06', '09', '10', '11', '12', '13'];
+		const closes = [...weekdays, '14'].map((day) => new Date(`2026-03-${day}T09:00:00Z`));
+		const flight = flown(g, closes, now, utc, [], [weekends]);
+
+		const review = yearReview(inputs([flight]), 2026, utc, now);
+		// Ten weekdays and the Saturday flown anyway; the other three weekend
+		// days were never asked for, and 16 March is still in flight.
+		expect(review.headline).toMatchObject({ closed: 11, possible: 11 });
+		expect(review.longest?.flight.length).toBe(11);
+		expect(review.sky.days.find((day) => day.key === 'day:2026-03-14')?.closed).toBe(1);
+	});
+
+	it('stops at the end of a goal that finished', () => {
+		// Flew January and February 2026, and ended there.
+		const g = goal({
+			createdAt: new Date('2026-01-01T00:00:00Z'),
+			endsAt: new Date('2026-03-01T00:00:00Z')
+		});
+		const now = new Date('2027-01-10T12:00:00Z');
+		const closes = ['2026-01-01', '2026-02-28'].map((day) => new Date(`${day}T09:00:00Z`));
+		const flight = flown(g, closes, now, utc);
+
+		const review = yearReview(inputs([flight]), 2026, utc, now);
+		// 31 + 28 days, the last of them its final orbit — decided, and closed.
+		expect(review.headline).toMatchObject({ closed: 2, possible: 59 });
+		expect(review.sky.days.filter((day) => day.closed > 0).map((day) => day.key)).toEqual([
+			'day:2026-01-01',
+			'day:2026-02-28'
+		]);
+	});
+
 	it('leaves a dormant span out, and a flight carries across it', () => {
 		const g = goal({ tier: 'planet', createdAt: new Date('2026-01-05T00:00:00Z') });
 		const now = new Date('2026-03-02T12:00:00Z');

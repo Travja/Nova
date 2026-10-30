@@ -340,8 +340,8 @@
 		<p class="archive-link muted">
 			<a href={resolve('/stats')}>Stats</a> pull streaks, completion and pace out of everything
 			above.
-			<a href={resolve('/goals/archived')}>Archived goals</a> keep their history without asking for an
-			orbit.
+			<a href={resolve('/goals/archived')}>The hangar</a> keeps finished and archived goals, with their
+			history, without asking for an orbit.
 		</p>
 
 		<GoalRowSheet snapshot={openSnapshot} onclose={() => (openGoalId = null)} />

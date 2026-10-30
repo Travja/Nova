@@ -1,11 +1,17 @@
 import { formError } from '$domain/validation';
-import { listArchivedSnapshots, setGoalArchived } from '$lib/server/goals';
+import { listHangar, setGoalArchived } from '$lib/server/goals';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
+/**
+ * The hangar: every goal that is not flying (#67). Finished goals have landed
+ * and keep their record; archived ones are parked and can be restored. The
+ * route keeps the path it had when it held only the second kind, so nothing
+ * that links here breaks.
+ */
 export const load: PageServerLoad = async ({ locals, url }) => {
 	if (!locals.user) redirect(303, `/login?next=${encodeURIComponent(url.pathname)}`);
-	return { snapshots: await listArchivedSnapshots(locals.user) };
+	return { ...(await listHangar(locals.user, locals.now)), timeZone: locals.user.timeZone };
 };
 
 export const actions: Actions = {

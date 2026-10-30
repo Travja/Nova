@@ -7,6 +7,12 @@ proxy, upgrades, and what to do when form posts start failing.
 Nova is a single container plus a volume. There is no separate backend, no
 queue, no cache to run.
 
+Dependabot keeps dependencies, GitHub Actions and the base image moving
+(`.github/dependabot.yml`), but Dependabot security updates — the ones that
+fire outside the weekly schedule the moment a GitHub advisory lands — are a
+repository setting, not a file: turn them on under the repo's **Settings →
+Code security → Dependabot security updates**.
+
 ## What you need
 
 - A host with Docker and the Compose plugin.
@@ -264,7 +270,11 @@ docker compose cp nova:/data/backups/nova-20260913T030000Z.db /tmp/check.db
 sqlite3 /tmp/check.db 'PRAGMA integrity_check; SELECT count(*) FROM goals;'
 ```
 
-The restore procedure is in the [README](../README.md#restoring).
+The restore procedure is in the [README](../README.md#restoring). CI runs it
+end to end on every PR — `scripts/restore-drill.mjs` builds the image, logs a
+real account, goal and entry through the app's own forms, waits for the
+backup schedule to take a snapshot, and follows the README's steps to restore
+it — so "verify one before you need it" is also verified before you need it.
 
 ## 7. Upgrading
 
