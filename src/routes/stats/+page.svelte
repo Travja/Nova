@@ -61,7 +61,8 @@
 					cadence: TIER_DEFINITIONS[leaf.goal.tier].cadence,
 					createdAt: leaf.goal.createdAt,
 					entries: leaf.entries,
-					dormantWindows: leaf.dormantWindows
+					dormantWindows: leaf.dormantWindows,
+					restSchedules: leaf.restSchedules
 				},
 				options,
 				data.now
@@ -260,6 +261,28 @@
 				</div>
 			{/if}
 		</section>
+
+		{#if data.reviewYears.length > 0}
+			<section class="tile panel" aria-labelledby="review-years">
+				<h2 id="review-years">Year in review</h2>
+				<p class="muted">
+					Each calendar year in one place: every orbit closed, the longest flight, and the notes you
+					wrote along the way.
+				</p>
+				<ul class="years">
+					{#each data.reviewYears as year (year)}
+						<li>
+							<a
+								class="button button--ghost"
+								href={resolve('/review/[year]', { year: String(year) })}
+							>
+								{year}
+							</a>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 	{/if}
 </section>
 
@@ -380,6 +403,15 @@
 		display: grid;
 		gap: 0.75rem;
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+	}
+
+	.years {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
 	}
 
 	.chart {
