@@ -6,12 +6,14 @@ import {
 	deleteGoal,
 	getGoal,
 	getGoalDetail,
+	getGoalSchedule,
 	logEntry,
 	orbitAt,
 	LOG_REFUSAL_MESSAGE,
 	setGoalArchived,
 	updateEntry
 } from '$lib/server/goals';
+import { describeRestDays, latestSchedule, scheduleAt } from '$domain/schedule';
 import type { SessionUser } from '$lib/server/auth/session';
 import type { Goal } from '$domain/types';
 import { error, fail, redirect } from '@sveltejs/kit';
@@ -40,6 +42,25 @@ async function orbitReport(user: SessionUser, goal: Goal, occurredAt: Date, now:
 	};
 }
 
+/**
+ * A Satellite's rest days in words: the ones in force now, and the ones an edit
+ * has queued for tomorrow when they differ. Null for every other tier.
+ */
+async function scheduleSummary(user: SessionUser, goal: Goal, now: Date) {
+	if (goal.tier !== 'satellite') return null;
+	const spans = (await getGoalSchedule(user.id, goal.id)) ?? [];
+	const inForce = scheduleAt(spans, now)?.restDays ?? 0;
+	const latest = latestSchedule(spans);
+	const pending =
+		latest && latest.from.getTime() > now.getTime() && latest.restDays !== inForce
+			? latest.restDays
+			: null;
+	return {
+		rests: describeRestDays(inForce, user.weekStartsOn),
+		pending: pending === null ? null : (describeRestDays(pending, user.weekStartsOn) ?? 'none')
+	};
+}
+
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	if (!locals.user) redirect(303, `/login?next=${encodeURIComponent(url.pathname)}`);
 
@@ -51,6 +72,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 
 	return {
 		...detail,
+		schedule: await scheduleSummary(locals.user, detail.snapshot.goal, now),
 		/** Which entry the list is editing, driven by the URL so it works without JS. */
 		editing: url.searchParams.get('edit'),
 		/** Archiving asks first, and the question lives in the URL for the same reason. */

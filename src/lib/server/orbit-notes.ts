@@ -60,6 +60,20 @@ export async function notesForGoal(
 	return new Map(rows.map((row) => [row.periodKey, toOrbitNote(row)]));
 }
 
+/**
+ * Every note across all of this user's goals, for the year in review (#68).
+ * Scoped by a join on the goal's owner rather than a goal id, so there is no
+ * id here for a caller to get wrong.
+ */
+export async function notesForUser(userId: string): Promise<OrbitNote[]> {
+	const rows = await db
+		.select({ note: orbitNotes })
+		.from(orbitNotes)
+		.innerJoin(goals, eq(goals.id, orbitNotes.goalId))
+		.where(eq(goals.userId, userId));
+	return rows.map((row) => toOrbitNote(row.note));
+}
+
 export type OrbitNoteResult = { ok: true; note: OrbitNote | null } | { ok: false; missing: true };
 
 /**

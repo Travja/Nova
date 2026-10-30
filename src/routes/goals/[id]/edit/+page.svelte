@@ -18,6 +18,9 @@
 	goal={data.goal}
 	goals={data.goals}
 	children={data.children}
+	restDays={data.restDays}
+	weekStartsOn={data.weekStartsOn}
+	restDayWarning={data.restDayWarning}
 	errors={form?.errors ?? null}
 	submitLabel="Save changes"
 	timeZone={data.user?.timeZone}

@@ -181,12 +181,24 @@
 			</p>
 			<h1>{goal.title}</h1>
 			{#if goal.description}<p class="muted">{goal.description}</p>{/if}
+			{#if data.schedule && (data.schedule.rests || data.schedule.pending)}
+				<p class="muted schedule" data-testid="rest-days">
+					{#if data.schedule.rests}Rests on {data.schedule.rests}.{:else}Flies every day.{/if}
+					{#if data.schedule.pending}
+						From tomorrow: {data.schedule.pending === 'none'
+							? 'flies every day'
+							: `rests on ${data.schedule.pending}`}.
+					{/if}
+				</p>
+			{/if}
 
 			<p class="status">
 				{#if finished}
 					Finished — this was its final orbit.
 				{:else if archived}
 					Archived — this is the orbit it stopped on.
+				{:else if current.dormant && current.rest}
+					Rest day — nothing is owed today. Anything you log still counts.
 				{:else if current.complete}
 					Orbit closed {CADENCE_LABEL[current.period.cadence]} — {formatAmount(
 						current.logged,
