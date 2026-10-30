@@ -1,4 +1,10 @@
-import { buildOrbit, type DormantWindow, type GoalSnapshot, type Orbit } from '$domain/progress';
+import {
+	buildOrbit,
+	flightAnchor,
+	type DormantWindow,
+	type GoalSnapshot,
+	type Orbit
+} from '$domain/progress';
 import {
 	childrenOf,
 	closedPeriods,
@@ -30,7 +36,7 @@ import {
 } from '$domain/history';
 import type { Goal, MetricDefinition, ProgressEntry } from '$domain/types';
 import type { GoalInput } from '$domain/validation';
-import { notesForGoal } from '$lib/server/orbit-notes';
+import { notesForGoal, notesForUser, type OrbitNote } from '$lib/server/orbit-notes';
 import { db } from '$lib/server/db';
 import {
 	entries,
@@ -385,6 +391,65 @@ export async function loadStatsInputs(user: SessionUser, now = new Date()): Prom
 		}));
 
 	return { snapshots, leaves };
+}
+
+/** What the year in review (#68) computes from — see `$domain/review`. */
+export interface ReviewSources {
+	/** Every goal, archived ones included, with orbit history back to launch. */
+	goals: { goal: Goal; history: Orbit[] }[];
+	notes: OrbitNote[];
+	/** The earliest launch on the account, or null with no goals at all. */
+	firstLaunch: Date | null;
+}
+
+/**
+ * Everything the year in review reads, loaded once.
+ *
+ * Unlike `/stats`, archived goals are in: a goal parked in October still flew
+ * from January to September, and that belongs to the year. Its dormant
+ * windows are already on its orbits as `Orbit.dormant`, which is the only
+ * thing the review reads to decide what was possible — rest days (#66) arrive
+ * the same way and need nothing from here. Each history is sized to
+ * the goal's age, the same way `loadStatsInputs()` sizes it, and stops at its
+ * end when it has one.
+ */
+export async function loadReviewInputs(user: SessionUser, now: Date): Promise<ReviewSources> {
+	const forest = await loadForest(user.id);
+	const options = periodOptions(user);
+
+	const reviewGoals = forest.goals.map((goal) => {
+		// A finished goal's history is read back from its last instant (#67), so
+		// it is sized to the periods it flew: nothing after its end counts as
+		// possible, and nothing before its launch is reached for either. An
+		// archived goal is still read from now — its dormant orbits say so.
+		const { anchor } = flightAnchor(goal, now);
+		const historyLength = Math.min(
+			MAX_STATS_HISTORY,
+			periodsSinceLaunch(goal.createdAt, anchor, cadenceOf(goal.tier), options)
+		);
+		return { goal, history: snapshotFromForest(goal, forest, user, now, historyLength).history };
+	});
+
+	const firstLaunch = forest.goals.reduce<Date | null>(
+		(earliest, goal) => (!earliest || goal.createdAt < earliest ? goal.createdAt : earliest),
+		null
+	);
+
+	return { goals: reviewGoals, notes: await notesForUser(user.id), firstLaunch };
+}
+
+/**
+ * When the account launched its first goal, archived and finished ones
+ * included, or null with none at all — which years the review (#68) has.
+ */
+export async function firstLaunch(userId: string): Promise<Date | null> {
+	const [row] = await db
+		.select({ createdAt: goals.createdAt })
+		.from(goals)
+		.where(eq(goals.userId, userId))
+		.orderBy(asc(goals.createdAt))
+		.limit(1);
+	return row?.createdAt ?? null;
 }
 
 export async function getGoal(userId: string, goalId: string): Promise<Goal | null> {

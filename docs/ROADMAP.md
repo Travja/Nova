@@ -91,7 +91,7 @@ Making it dependable, and making it speak up.
 
 ## M5 — The long haul
 
-_1 of 4 done._
+_4 of 4 done._
 
 Living with Nova for years: schedules that fit, goals that finish, a look back,
 and an easier way in.
@@ -100,7 +100,7 @@ and an easier way in.
 | ------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------- |
 | [#66](https://github.com/Travja/Nova/issues/66) ✓ | [Rest days](issues/66-rest-days.md)           | A weekday habit breaks its streak every weekend         |
 | [#67](https://github.com/Travja/Nova/issues/67) ✓ | [Goals that end](issues/67-goals-that-end.md) | A finished challenge can only be archived, as if paused |
-| [#68](https://github.com/Travja/Nova/issues/68)   | [Year in review](issues/68-year-in-review.md) | A year of closed orbits is never shown in one place     |
+| [#68](https://github.com/Travja/Nova/issues/68) ✓ | [Year in review](issues/68-year-in-review.md) | A year of closed orbits is never shown in one place     |
 | [#69](https://github.com/Travja/Nova/issues/69) ✓ | [Passkeys](issues/69-passkeys.md)             | Typing a password on a phone to open a PWA              |
 
 ## Deliberately not planned
