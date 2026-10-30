@@ -1,9 +1,6 @@
 import type { SessionUser } from '$lib/server/auth/session';
 
 declare global {
-	/** `package.json`'s `version` at build time — see `vite.config.ts`. */
-	const __APP_VERSION__: string;
-
 	namespace App {
 		interface Locals {
 			/** The signed-in user, or null for anonymous requests. */

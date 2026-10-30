@@ -98,13 +98,11 @@ Open http://localhost:5173, create an account, and launch your first goal.
 ## Self-hosting
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-Pulls a tagged release from `ghcr.io/travja/nova` — pin it with `NOVA_VERSION`
-in `.env`, or leave it unset for `latest`. The database lives on the
-`nova-data` volume at `/data/nova.db`, and migrations run automatically on
-every start.
+The database lives on the `nova-data` volume at `/data/nova.db`, and migrations
+run automatically on every start.
 
 Two environment variables matter in production:
 
