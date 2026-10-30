@@ -2,7 +2,7 @@ import { resolve } from '$app/paths';
 import { fieldErrors, goalSchema } from '$domain/validation';
 import { captureAsteroid, getAsteroid } from '$lib/server/asteroids';
 import { createGoal, listGoals } from '$lib/server/goals';
-import { goalWriteErrors } from '$lib/server/goal-form';
+import { goalFormInput, goalWriteErrors } from '$lib/server/goal-form';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -41,7 +41,7 @@ export const actions: Actions = {
 		if (!locals.user) redirect(303, '/login');
 
 		const form = await request.formData();
-		const parsed = goalSchema.safeParse(Object.fromEntries(form));
+		const parsed = goalSchema.safeParse(goalFormInput(form));
 		if (!parsed.success) return fail(400, { errors: fieldErrors(parsed.error) });
 
 		const id = url.searchParams.get(ASTEROID);
