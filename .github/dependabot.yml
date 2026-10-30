@@ -43,3 +43,10 @@ updates:
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 5
+    ignore:
+      # A Node major (to the next LTS) is a deliberate change made in CI, the
+      # Dockerfile and CLAUDE.md together, not a Dependabot patch to the base
+      # image alone — see #77.
+      - dependency-name: 'node'
+        update-types:
+          - 'version-update:semver-major'
