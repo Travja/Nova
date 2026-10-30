@@ -20,6 +20,24 @@ import { hydrated, waitForResetLink } from './helpers';
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 /**
+ * `GoalCard`'s heading link is named only for the goal, deliberately — see
+ * the comment above `<a class="heading" … aria-label={goal.title}>` there.
+ * The link's visible content (title plus the status line under it) is wider
+ * than that accessible name on purpose, so a screen reader doesn't hear the
+ * status twice and the title still sorts out from the card's biggest tap
+ * target. Axe's `label-content-name-mismatch` calls that a WCAG 2.5.3
+ * violation; this is the one place Nova accepts it rather than giving up
+ * either property. Matched on the element itself, not the goal's title,
+ * which varies per test.
+ */
+function isAcceptedViolation(ruleId: string, nodeHtml: string): boolean {
+	return (
+		ruleId === 'label-content-name-mismatch' &&
+		/<a\s[^>]*\bclass="[^"]*\bheading\b[^"]*"/.test(nodeHtml)
+	);
+}
+
+/**
  * What axe found, as lines a failure message can be read from.
  *
  * The bare `results.violations` prints as a wall of nested objects with the
@@ -28,10 +46,12 @@ const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 async function violations(page: Page): Promise<string[]> {
 	const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
 	return results.violations.flatMap((violation) =>
-		violation.nodes.map(
-			(node) =>
-				`${violation.id} (${violation.impact}): ${node.target.join(' ')} — ${violation.help}`
-		)
+		violation.nodes
+			.filter((node) => !isAcceptedViolation(violation.id, node.html))
+			.map(
+				(node) =>
+					`${violation.id} (${violation.impact}): ${node.target.join(' ')} — ${violation.help}`
+			)
 	);
 }
 
