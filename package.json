@@ -38,7 +38,7 @@
 		"@types/nodemailer": "^8.0.2",
 		"@types/three": "0.186.0",
 		"@types/web-push": "^3.6.4",
-		"@vite-pwa/sveltekit": "^1.1.0",
+		"@vite-pwa/sveltekit": "^2.0.0",
 		"@vitest/coverage-v8": "^5.0.5",
 		"drizzle-kit": "^0.31.11",
 		"eslint": "^10.13.0",
