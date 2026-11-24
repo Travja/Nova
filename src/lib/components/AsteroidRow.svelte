@@ -238,9 +238,9 @@
 				     sits at the start of an inline element, where ordinary whitespace
 				     is trimmed away and the dot ends up welded to the word before it. -->
 				<span class="meta muted">
-					{driftLabel(asteroid, now, 'short')}{#if adrift}<span class="edge"
-							>&nbsp;· at the edge</span
-						>{/if}{#if asteroid.note}<span class="note">&nbsp;· {asteroid.note}</span>{/if}
+					{driftLabel(asteroid, now, 'short')}{#if adrift}<span class="edge">
+							&nbsp;· at the edge
+						</span>{/if}{#if asteroid.note}<span class="note">&nbsp;· {asteroid.note}</span>{/if}
 				</span>
 			</summary>
 

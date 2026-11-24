@@ -299,8 +299,10 @@
 					{#each stops as stop, index (stop.id)}
 						<span
 							class:is-near={stop === nearestStop}
-							style="bottom: {(index / (stops.length - 1)) * 100}%">{stop.label}</span
+							style="bottom: {(index / (stops.length - 1)) * 100}%"
 						>
+							{stop.label}
+						</span>
 					{/each}
 				</div>
 				<input
