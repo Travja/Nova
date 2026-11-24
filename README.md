@@ -182,6 +182,7 @@ src/routes/                Pages and form actions
 e2e/                       Playwright journeys
 src/lib/offline/           The sync queue behind logging without a network
 src/lib/server/push/       Reminder subscriptions, VAPID config and the sweep
+src/sw.ts                  The service worker: precache, runtime caching, update prompt
 static/push-sw.js          The service worker's push and notification handlers
 scripts/                   Migration runner and the PWA icon generator
 ```
