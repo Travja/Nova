@@ -307,6 +307,40 @@ docker compose ps          # healthy, not just running
 docker compose logs -f nova
 ```
 
+### Releases
+
+Prebuilt images for `linux/amd64` and `linux/arm64` are published to
+`ghcr.io/travja/nova` by `.github/workflows/release.yml`. Merging to `main`
+publishes nothing; a release is a tag on a commit that is already on `main`:
+
+```bash
+git switch main && git pull
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, is not on `main`,
+or names a version that was already published. It then runs every CI job
+against the tagged commit, builds and smoke-tests both architectures, and
+pushes:
+
+- `ghcr.io/travja/nova:v1.2.3` — never overwritten.
+- `ghcr.io/travja/nova:stable` — moved to that image, but only when the tag is
+  the highest release on `main`. A patch to an older line does not move it.
+
+To run a published image instead of building, replace `build: .` in
+`compose.yaml` with `image: ghcr.io/travja/nova:v1.2.3` (or `:stable`) and
+`docker compose pull && docker compose up -d`. Going back a version is the same
+caveat as above: an image older than the newest migration needs the snapshot
+from before that migration.
+
+**Once, after the first release:** a package published from Actions starts out
+private, and GitHub has no API to change that. Open the package
+(`github.com/users/Travja/packages/container/package/nova`) → **Package
+settings** → **Danger Zone** → **Change visibility** → **Public**. Public cannot
+be undone. Optionally add a required reviewer to the `release` environment
+(**Settings → Environments → release**) so moving `stable` waits for a click.
+
 ## 8. Email, if you want password resets
 
 Nova sends exactly one kind of message — a password reset link — and only if you
