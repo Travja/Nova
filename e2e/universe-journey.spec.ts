@@ -69,6 +69,19 @@ async function frames(page: Page): Promise<number> {
 	return page.evaluate(() => window.__novaUniverse?.frames() ?? -1);
 }
 
+/**
+ * A frame drawn from here on. Which bodies are folded away is only worked out
+ * as a frame draws, and a tap picks from what was last drawn, so after a cut
+ * with no flight to wait out — a zoom key — this waits for the frame that
+ * draws it. A software GPU can take longer than `settled`'s pause for one.
+ */
+async function redrawn(page: Page) {
+	const before = await frames(page);
+	await expect
+		.poll(() => frames(page), { message: 'no frame drew after the zoom' })
+		.toBeGreaterThan(before);
+}
+
 async function tap(page: Page, id: string) {
 	const at = await page.evaluate((target) => window.__novaUniverse?.where(target), id);
 	expect(at, `${id} should be on screen`).toBeTruthy();
@@ -209,6 +222,7 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	await expect(zoom).toHaveAttribute('aria-valuetext', 'Multiverse');
 	await page.keyboard.press('Home');
 	await expect(zoom).toHaveAttribute('aria-valuetext', 'Home');
+	await redrawn(page);
 
 	// A rock opens the belt's own sheet, whose endings are Today's.
 	await settled(page);
@@ -227,6 +241,8 @@ test('switches to the universe, taps a body, logs from its sheet, zooms out and 
 	const weekly = (await weeklyRow.getAttribute('data-goal-id'))!;
 	await zoom.focus();
 	await page.keyboard.press('End');
+	await expect(zoom).toHaveAttribute('aria-valuetext', 'Multiverse');
+	await redrawn(page);
 	await settled(page);
 	expect(await page.evaluate((id) => window.__novaUniverse?.where(id), weekly)).toBeNull();
 	await weeklyRow.getByRole('link').first().focus();
