@@ -309,9 +309,11 @@ docker compose logs -f nova
 
 ### Releases
 
-Prebuilt images for `linux/amd64` and `linux/arm64` are published to
-`ghcr.io/travja/nova` by `.github/workflows/release.yml`. Merging to `main`
-publishes nothing; a release is a tag on a commit that is already on `main`:
+Prebuilt images for `linux/amd64` and `linux/arm64` are published by
+`.github/workflows/release.yml` to a self-hosted Docker registry (the stock
+`registry` image behind TLS, htpasswd auth), and optionally mirrored to
+`ghcr.io/travja/nova`. Merging to `main` publishes nothing. A release is a tag
+on a commit that is already on `main`:
 
 ```bash
 git switch main && git pull
@@ -321,25 +323,46 @@ git push origin v1.2.3
 
 The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, is not on `main`,
 or names a version that was already published. It then runs every CI job
-against the tagged commit, builds and smoke-tests both architectures, and
-pushes:
+against the tagged commit, builds and smoke-tests both architectures on native
+runners, and pushes:
 
-- `ghcr.io/travja/nova:v1.2.3` — never overwritten.
-- `ghcr.io/travja/nova:stable` — moved to that image, but only when the tag is
-  the highest release on `main`. A patch to an older line does not move it.
+- `<registry>/nova:v1.2.3`, which is never overwritten. Before pushing, the
+  workflow asks the registry API (`HEAD /v2/nova/manifests/v1.2.3`). Only a
+  404 counts as "new". A 200, an auth error or an unreachable registry fails
+  the release.
+- `<registry>/nova:stable`, moved to that image only when the tag is the highest
+  release on `main`. A patch to an older line does not move it.
 
-To run a published image instead of building, replace `build: .` in
-`compose.yaml` with `image: ghcr.io/travja/nova:v1.2.3` (or `:stable`) and
-`docker compose pull && docker compose up -d`. Going back a version is the same
-caveat as above: an image older than the newest migration needs the snapshot
-from before that migration.
+To run a published image instead of building, `docker login <registry>`, then
+replace `build: .` in `compose.yaml` with `image: <registry>/nova:v1.2.3` (or
+`:stable`) and run `docker compose pull && docker compose up -d`. Going back a
+version has the same caveat as above: an image older than the newest migration
+needs the snapshot from before that migration.
 
-**Once, after the first release:** a package published from Actions starts out
-private, and GitHub has no API to change that. Open the package
+**Setup, once.** Under **Settings → Secrets and variables → Actions**:
+
+| Kind     | Name                | Value                                           |
+| -------- | ------------------- | ----------------------------------------------- |
+| Variable | `REGISTRY_HOST`     | Bare hostname, e.g. `registry.example.com`      |
+| Secret   | `REGISTRY_USERNAME` | An htpasswd user that is used only for releases |
+| Secret   | `REGISTRY_PASSWORD` | Its password                                    |
+| Variable | `PUBLISH_GHCR`      | `true` to also mirror to GHCR (off when unset)  |
+
+The hostname stays out of the repository and is masked in the workflow logs.
+A tag pushed without `REGISTRY_HOST` set fails at the first job. Plain
+htpasswd auth has no per-user permissions: any registry user can push, pull
+and overwrite any repository. Give CI its own user anyway, so it can be revoked
+on its own. Optionally add a required reviewer to the `release` environment
+(**Settings → Environments → release**) so moving `stable` waits for a click.
+
+**GHCR mirror.** With `PUBLISH_GHCR=true`, each release is copied byte for byte
+(same digest) to `ghcr.io/travja/nova:v1.2.3`, and the mirror's `:stable`
+moves whenever the registry's does. A failed mirror never blocks the release.
+A package published from Actions starts out private, and GitHub has no API to
+change that. After the first mirrored release, open the package
 (`github.com/users/Travja/packages/container/package/nova`) → **Package
 settings** → **Danger Zone** → **Change visibility** → **Public**. Public cannot
-be undone. Optionally add a required reviewer to the `release` environment
-(**Settings → Environments → release**) so moving `stable` waits for a click.
+be undone.
 
 ## 8. Email, if you want password resets
 
