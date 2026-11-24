@@ -1,15 +1,10 @@
 /*
  * The service worker's half of reminders: showing one, and answering the tap.
  *
- * This is a separate file that the generated worker pulls in with
- * `importScripts` (see `workbox.importScripts` in vite.config.ts) rather than
- * a custom worker. That is deliberate. Nova's worker is Workbox's
- * `generateSW`, which already carries the precache, the Background Sync queue
- * the offline log flushes through, and the `SKIP_WAITING` message listener
- * that `UpdatePrompt.svelte` talks to. Swapping to `injectManifest` to add
- * twenty lines would mean owning all of that by hand, and the update prompt
- * would break silently — nothing fails loudly when a message listener goes
- * missing. Adding a script keeps every one of those untouched.
+ * This is a separate file that the service worker (`src/sw.ts`) pulls in
+ * with `importScripts`. It used to be added to Workbox's generated worker the
+ * same way; the worker is hand-written now, but the push handlers stay out of
+ * its bundle so they remain plain JavaScript the worker loads as-is.
  *
  * It is plain JavaScript, served as a static file: nothing here is bundled, so
  * it imports nothing and uses only what a worker already has.

@@ -217,11 +217,14 @@ rather than disappearing quietly.
 
 ### Reminders
 
-Push is the second thing the service worker does, and it was added by
-`importScripts`ing `static/push-sw.js` from the generated worker rather than by
-switching to `injectManifest`. A custom worker would mean owning the precache,
-the Background Sync queue above and the `SKIP_WAITING` listener `UpdatePrompt`
-posts to — and that last one fails silently when it is forgotten.
+Push is the second thing the service worker does, and it lives in
+`static/push-sw.js`, which the worker (`src/sw.ts`) pulls in with
+`importScripts`. That worker used to be Workbox's `generateSW` output, with the
+push file added through its `importScripts` option; `@vite-pwa/sveltekit` 2
+dropped that option, so the generated worker is now written out by hand — the
+precache, the Background Sync queue above and the `SKIP_WAITING` listener
+`UpdatePrompt` posts to. That last one fails silently when it is forgotten,
+which is why `src/sw.test.ts` checks every piece is still wired up.
 
 The split is the same as everywhere else:
 
