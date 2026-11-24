@@ -167,8 +167,8 @@
 				{#if overall.rate !== null}
 					<p class="headline">
 						{percent(overall.rate)}%<span class="muted">
-							overall, {overall.closed} of {overall.decided}</span
-						>
+							overall, {overall.closed} of {overall.decided}
+						</span>
 					</p>
 				{/if}
 				<ul class="bars">
@@ -245,9 +245,9 @@
 				<p class="muted">Nothing logged yet.</p>
 			{:else}
 				<p class="headline">
-					Mostly {rhythm.peakWeekday}s<span class="muted"
-						>, in the {rhythm.peakPart?.toLowerCase()}</span
-					>
+					Mostly {rhythm.peakWeekday}s<span class="muted">
+						, in the {rhythm.peakPart?.toLowerCase()}
+					</span>
 				</p>
 				<!-- Decorative: the count beside each bar carries the same numbers. -->
 				<div class="chart" role="img" aria-label="Entries logged by day of the week">

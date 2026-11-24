@@ -131,8 +131,10 @@
 		<p class="derived">
 			Fed by
 			{#each nested.children as child, index (child.goalId)}{index > 0 ? ', ' : ''}<a
-					href={resolve('/goals/[id]', { id: child.goalId })}>{child.title}</a
-				>{/each}.
+					href={resolve('/goals/[id]', { id: child.goalId })}
+				>
+					{child.title}
+				</a>{/each}.
 		</p>
 	{:else}
 		<form class="quick-log" method="POST" action={logAction} use:enhance={logSubmit}>

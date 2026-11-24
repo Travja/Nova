@@ -176,8 +176,10 @@
 		<div class="hero__copy">
 			<p class="tier-tag" style="color: {tierDef.accent}">
 				{tierDef.label} · one orbit per {current.period.cadence}{nested ? ' · derived' : ''}
-				{#if goal.endsAt}<span class="muted">· {finished ? 'landed' : 'last day'} {lastDay}</span
-					>{/if}
+				{#if goal.endsAt}<span class="muted">
+						· {finished ? 'landed' : 'last day'}
+						{lastDay}
+					</span>{/if}
 			</p>
 			<h1>{goal.title}</h1>
 			{#if goal.description}<p class="muted">{goal.description}</p>{/if}
@@ -244,9 +246,9 @@
 
 			<div class="hero__actions">
 				{#if finished}
-					<a class="button button--ghost" href={resolve('/goals/[id]/edit', { id: goal.id })}
-						>Extend</a
-					>
+					<a class="button button--ghost" href={resolve('/goals/[id]/edit', { id: goal.id })}>
+						Extend
+					</a>
 					<a class="button button--ghost" href={resolve('/goals/archived')}>The hangar</a>
 				{:else if archived}
 					<form method="POST" action="?/archive" use:enhance>
@@ -255,9 +257,9 @@
 					</form>
 					<a class="button button--ghost" href={resolve('/goals/archived')}>All archived goals</a>
 				{:else}
-					<a class="button button--ghost" href={resolve('/goals/[id]/edit', { id: goal.id })}
-						>Edit</a
-					>
+					<a class="button button--ghost" href={resolve('/goals/[id]/edit', { id: goal.id })}>
+						Edit
+					</a>
 					<a class="button button--ghost" href="{goalHref}?confirm=archive">Archive</a>
 				{/if}
 			</div>
@@ -411,9 +413,9 @@
 	<section class="panel block">
 		<div class="section-head">
 			<h2>Recent orbits</h2>
-			<a class="link-button tap" href={resolve('/goals/[id]/history', { id: goal.id })}
-				>Full history</a
-			>
+			<a class="link-button tap" href={resolve('/goals/[id]/history', { id: goal.id })}>
+				Full history
+			</a>
 		</div>
 		<OrbitHistory history={snapshot.history} tier={goal.tier} goalId={goal.id} color={goal.color} />
 	</section>

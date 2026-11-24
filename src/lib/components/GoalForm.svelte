@@ -339,9 +339,10 @@
 			<select id="ends" name="ends" bind:value={ends} {...describedBy(errors?.ends, 'ends')}>
 				<option value="">Never — it flies until you stop it</option>
 				{#if goal?.endsAt}
-					<option value="keep"
-						>{finished ? 'Finished' : 'Last day'} {lastDayLabel} (as it is)</option
-					>
+					<option value="keep">
+						{finished ? 'Finished' : 'Last day'}
+						{lastDayLabel} (as it is)
+					</option>
 				{/if}
 				{#each END_PRESETS as preset (preset)}
 					<option value={preset}>{END_PRESET_LABEL[preset]}</option>
