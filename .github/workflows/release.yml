@@ -1,8 +1,16 @@
 name: Release
 
-# Pushing a tag vMAJOR.MINOR.PATCH publishes ghcr.io/travja/nova:vX.Y.Z for
-# linux/amd64 and linux/arm64, then moves :stable to it if it is the highest
-# release on main. Nothing here reaches a host: hosts pull :stable themselves.
+# Pushing a tag vMAJOR.MINOR.PATCH publishes <registry>/nova:vX.Y.Z for
+# linux/amd64 and linux/arm64 to a self-hosted Docker registry, then moves
+# :stable to it if it is the highest release on main. Nothing here reaches a
+# host: hosts pull :stable themselves.
+#
+# Repository settings (Settings -> Secrets and variables -> Actions):
+#   variable REGISTRY_HOST        registry hostname, no scheme, e.g. registry.example.com
+#   secret   REGISTRY_USERNAME    htpasswd user allowed to push
+#   secret   REGISTRY_PASSWORD
+#   variable PUBLISH_GHCR=true    optional: also mirror each release to ghcr.io
+# The hostname is kept out of the source and masked in the logs.
 #
 # A pull request that touches the image's inputs runs the same build and smoke
 # test for both architectures with every push step skipped, so an arm64-only
@@ -34,8 +42,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  IMAGE: ghcr.io/travja/nova
+  REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
+  REPOSITORY: nova
+  IMAGE: ${{ vars.REGISTRY_HOST }}/nova
+  MIRROR: ghcr.io/travja/nova
   SOURCE: https://github.com/Travja/Nova
+  # Every manifest type the registry may hold; a HEAD without them can 404 on
+  # an index even though the tag exists.
+  MANIFEST_ACCEPT: >-
+    application/vnd.oci.image.index.v1+json,
+    application/vnd.docker.distribution.manifest.list.v2+json,
+    application/vnd.oci.image.manifest.v1+json,
+    application/vnd.docker.distribution.manifest.v2+json
 
 jobs:
   gate:
@@ -86,6 +104,10 @@ jobs:
 
           publish=true
           if [ "$REPO" != Travja/Nova ]; then publish=false; fi
+          if [ "$publish" = true ] && ! [[ "$REGISTRY_HOST" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
+            echo "::error::Repository variable REGISTRY_HOST is unset or not a bare hostname (no scheme, no path)."
+            exit 1
+          fi
 
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
@@ -110,10 +132,11 @@ jobs:
             arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-      packages: write
     steps:
+      - name: Mask the registry host
+        if: env.REGISTRY_HOST != ''
+        run: echo "::add-mask::$REGISTRY_HOST"
+
       - uses: actions/checkout@v7
 
       - uses: docker/setup-buildx-action@v4
@@ -155,13 +178,13 @@ jobs:
           docker logs nova-smoke
           exit 1
 
-      - name: Log in to GHCR
+      - name: Log in to the registry
         if: needs.gate.outputs.publish == 'true'
         uses: docker/login-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
 
       # Same build, so every layer comes from the builder's cache. Pushed by
       # digest only: the tags are put on the multi-arch index in `publish`.
@@ -200,12 +223,15 @@ jobs:
     needs: [gate, build]
     if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     outputs:
       digest: ${{ steps.index.outputs.digest }}
+    env:
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
     steps:
+      - name: Mask the registry host
+        run: echo "::add-mask::$REGISTRY_HOST"
+
       - uses: actions/download-artifact@v8
         with:
           pattern: digest-*
@@ -216,18 +242,27 @@ jobs:
 
       - uses: docker/login-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
 
+      # Asks the registry API directly (HEAD /v2/<name>/manifests/<tag>) so an
+      # outage or a bad password fails the release instead of reading as "not
+      # published yet". The registry uses plain htpasswd basic auth.
       - name: Refuse to overwrite a published version
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          if docker buildx imagetools inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
-            echo "::error::$IMAGE:$VERSION already exists. Versions are immutable; tag a new one."
-            exit 1
-          fi
+          auth=$(printf '%s:%s' "$REGISTRY_USERNAME" "$REGISTRY_PASSWORD" | base64 -w0)
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -I \
+            -H @<(printf 'Authorization: Basic %s\n' "$auth") \
+            -H "Accept: $MANIFEST_ACCEPT" \
+            "https://$REGISTRY_HOST/v2/$REPOSITORY/manifests/$VERSION") || code=000
+          case "$code" in
+            404) echo "$REPOSITORY:$VERSION is not published yet." ;;
+            200) echo "::error::$REPOSITORY:$VERSION already exists. Versions are immutable; tag a new one."; exit 1 ;;
+            *)   echo "::error::Registry answered HTTP $code for $REPOSITORY:$VERSION; cannot tell whether it exists."; exit 1 ;;
+          esac
 
       - name: Create the multi-arch index
         id: index
@@ -244,8 +279,14 @@ jobs:
             $(printf "$IMAGE@sha256:%s " *)
           docker buildx imagetools inspect "$IMAGE:$VERSION"
           digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
+          platforms=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --raw \
+            | jq -r '[.manifests[].platform | .os + "/" + .architecture] | sort | join(" ")')
+          if [ "$platforms" != "linux/amd64 linux/arm64" ]; then
+            echo "::error::$REPOSITORY:$VERSION covers '$platforms', expected linux/amd64 linux/arm64"
+            exit 1
+          fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
-          echo "Published \`$IMAGE:$VERSION\` = \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published \`$REPOSITORY:$VERSION\` = \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
 
   # Hosts follow :stable, so this is the step that deploys. The `release`
   # environment is where a required reviewer can be added (Settings ->
@@ -255,17 +296,17 @@ jobs:
     if: needs.gate.outputs.latest == 'true'
     runs-on: ubuntu-latest
     environment: release
-    permissions:
-      contents: read
-      packages: write
     steps:
+      - name: Mask the registry host
+        run: echo "::add-mask::$REGISTRY_HOST"
+
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Move stable
         env:
@@ -278,4 +319,68 @@ jobs:
             echo "::error::stable is $moved, expected $DIGEST"
             exit 1
           fi
-          echo "\`$IMAGE:stable\` -> $VERSION (\`$DIGEST\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$REPOSITORY:stable\` -> $VERSION (\`$DIGEST\`)" >> "$GITHUB_STEP_SUMMARY"
+
+  # Optional copy of the release on GHCR (repository variable PUBLISH_GHCR=true).
+  # It runs after the private registry is done and never blocks it: the
+  # version is copied whatever happened to promote, and the mirror's :stable
+  # only moves when the private :stable did.
+  mirror:
+    needs: [gate, publish, promote]
+    if: always() && needs.publish.result == 'success' && vars.PUBLISH_GHCR == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Mask the registry host
+        run: echo "::add-mask::$REGISTRY_HOST"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A single-source `imagetools create` copies the index byte for byte, so
+      # the mirror carries the same digest. A re-run finds it already there.
+      - name: Copy the version
+        env:
+          DIGEST: ${{ needs.publish.outputs.digest }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          existing=$(docker buildx imagetools inspect "$MIRROR:$VERSION" --format '{{json .Manifest}}' 2>/dev/null | jq -r .digest) || existing=""
+          if [ "$existing" = "$DIGEST" ]; then
+            echo "$MIRROR:$VERSION is already $DIGEST"
+          elif [ -n "$existing" ]; then
+            echo "::error::$MIRROR:$VERSION already exists as $existing, not $DIGEST. Versions are immutable."
+            exit 1
+          else
+            docker buildx imagetools create -t "$MIRROR:$VERSION" "$IMAGE@$DIGEST"
+          fi
+          copied=$(docker buildx imagetools inspect "$MIRROR:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
+          if [ "$copied" != "$DIGEST" ]; then
+            echo "::error::$MIRROR:$VERSION is $copied, expected $DIGEST"
+            exit 1
+          fi
+          echo "Mirrored \`$MIRROR:$VERSION\` = \`$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Move the mirror's stable
+        if: needs.promote.result == 'success'
+        env:
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          docker buildx imagetools create -t "$MIRROR:stable" "$MIRROR@$DIGEST"
+          moved=$(docker buildx imagetools inspect "$MIRROR:stable" --format '{{json .Manifest}}' | jq -r .digest)
+          if [ "$moved" != "$DIGEST" ]; then
+            echo "::error::$MIRROR:stable is $moved, expected $DIGEST"
+            exit 1
+          fi
