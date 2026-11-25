@@ -22,6 +22,24 @@
  * as a pending `requestAnimationFrame`.
  */
 
+/** A gap between frames longer than this is a stall, not time a moment should spend. */
+export const STALL_MS = 120;
+
+/**
+ * How much of the gap before a frame was a stall: the part past `STALL_MS`,
+ * which a sweep or a closing should not spend.
+ *
+ * Everything up to `STALL_MS` still counts, so a frame always moves a moment on
+ * by its gap or by `STALL_MS`, whichever is less. Counting only a nominal 60fps
+ * frame instead would let a device that is merely slow — every frame over
+ * `STALL_MS`, as a software GPU or an old phone manages — move a moment on by a
+ * sixtieth of a second a frame: a 700ms sweep would take 42 frames, ten seconds
+ * at four frames a second, and the closing after it would wait out all of that.
+ */
+export function stalledFor(gap: number): number {
+	return Math.max(0, gap - STALL_MS);
+}
+
 export interface FrameLoop {
 	/** Ask for a frame. Cheap to call often: one is scheduled at most. */
 	request(): void;

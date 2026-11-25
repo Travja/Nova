@@ -18,7 +18,7 @@ import type { UniverseTree } from '$domain/universe';
 import { motionAllowed, onMotionChange } from '$lib/motion';
 import { Kit } from './bodies';
 import { CameraRig } from './camera';
-import { createLoop } from './loop';
+import { STALL_MS, createLoop, stalledFor } from './loop';
 import { TapTracker, nearestOnScreen, projectToScreen, type Viewport } from './pick';
 import {
 	LINE,
@@ -128,9 +128,6 @@ let AMBIENT_IDLE_MS = 20_000;
 const BURST_REACH = 6;
 /** The white flash at a closing body, a glow held at this radius in pixels. */
 const FLASH_PX = 90;
-/** A gap between frames longer than this is a stall, not time a moment should spend. */
-const STALL_MS = 120;
-
 /** The least a burst's rays reach on screen, in pixels, however far out the camera is. */
 const MIN_BURST_PX = 70;
 
@@ -578,13 +575,15 @@ export function mountUniverse(
 	 * A frame that arrives long after the last — a rebuild, shaders compiling
 	 * on a slow GPU, a phone busy elsewhere — must not use up a moment nobody
 	 * saw. Sweeps and the closing are carried forward past the gap, so they
-	 * play in full once frames are coming again.
+	 * play in full once frames are coming again. A frame counts for at most
+	 * `STALL_MS`, never less, so a device that draws every frame slowly still
+	 * gets through a moment; see `stalledFor`.
 	 */
 	function bridge(time: number) {
 		const gap = lastFrame === null ? 0 : time - lastFrame;
 		lastFrame = time;
-		if (gap < STALL_MS) return;
-		const lost = gap - 1000 / 60;
+		const lost = stalledFor(gap);
+		if (lost === 0) return;
 		if (closing?.start != null) closing.start += lost;
 		for (const entry of universe.byGoal.values()) {
 			if (entry.sweep && !Number.isNaN(entry.sweep.start)) entry.sweep.start += lost;

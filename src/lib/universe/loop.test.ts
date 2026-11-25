@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLoop } from './loop';
+import { STALL_MS, createLoop, stalledFor } from './loop';
 
 /** A hand-cranked `requestAnimationFrame`, so a test says exactly when frames happen. */
 let queue: Map<number, FrameRequestCallback>;
@@ -169,5 +169,26 @@ describe('createLoop', () => {
 		expect(tick()).toBe(1);
 		expect(tick()).toBe(1);
 		expect(tick()).toBe(0);
+	});
+});
+
+describe('stalledFor', () => {
+	it('counts a gap up to the stall threshold as time a moment spends', () => {
+		expect(stalledFor(0)).toBe(0);
+		expect(stalledFor(16)).toBe(0);
+		expect(stalledFor(STALL_MS)).toBe(0);
+	});
+
+	it('drops only the part of a long gap past the threshold', () => {
+		expect(stalledFor(STALL_MS + 1)).toBe(1);
+		expect(stalledFor(5000)).toBe(5000 - STALL_MS);
+	});
+
+	it('moves a moment on by no less on a slow frame than on a fast one', () => {
+		// Every frame on a slow device is over the threshold; each must still
+		// count for at least a fast frame's worth, or a moment never ends.
+		for (const gap of [100, STALL_MS, 121, 250, 1000]) {
+			expect(gap - stalledFor(gap)).toBeGreaterThanOrEqual(Math.min(gap, STALL_MS));
+		}
 	});
 });
