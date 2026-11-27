@@ -64,7 +64,7 @@
 		"drizzle-orm": "^0.45.4",
 		"nodemailer": "^10.6.0",
 		"three": "0.187.0",
-		"web-push": "^3.6.7",
+		"web-push": "^4.0.0",
 		"zod": "^4.6.7"
 	},
 	"description": "Track your goals as orbits — a space-themed, installable goal tracker."
